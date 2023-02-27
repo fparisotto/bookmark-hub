@@ -7,6 +7,7 @@ use axum::{
     headers::{authorization::Bearer, Authorization},
 };
 use jsonwebtoken::{decode, encode, Header, Validation};
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use uuid::Uuid;
@@ -76,10 +77,10 @@ pub fn encode_token(config: &Config, claims: &Claims) -> Result<String> {
     Ok(token)
 }
 
-pub async fn hash_password(password: String) -> Result<String> {
+pub async fn hash_password(password: SecretString) -> Result<String> {
     tokio::task::spawn_blocking(move || {
         let salt = SaltString::generate(rand::thread_rng());
-        match PasswordHash::generate(Argon2::default(), password, salt.as_str()) {
+        match PasswordHash::generate(Argon2::default(), password.expose_secret(), salt.as_str()) {
             Ok(hash) => Ok(hash.to_string()),
             Err(error) => Err(Error::argon2(error.to_string())),
         }
@@ -88,13 +89,13 @@ pub async fn hash_password(password: String) -> Result<String> {
     .map_err(|error| Error::argon2(error.to_string()))?
 }
 
-pub async fn verify_password(password: String, password_hash: String) -> Result<()> {
+pub async fn verify_password(password: SecretString, password_hash: String) -> Result<()> {
     tokio::task::spawn_blocking(move || -> Result<()> {
         let hash: PasswordHash = PasswordHash::new(&password_hash).map_err(|e| Error::Argon2 {
             details: format!("invalid password hash: {e}"),
         })?;
 
-        hash.verify_password(&[&Argon2::default()], password)
+        hash.verify_password(&[&Argon2::default()], password.expose_secret())
             .map_err(|e| match e {
                 argon2::password_hash::Error::Password => Error::WrongCredentials,
                 _ => Error::argon2(format!("failed to verify password hash: {e}")),

@@ -1,5 +1,6 @@
 use axum::{routing::get, routing::post, Extension, Json, Router};
 use chrono::{DateTime, Duration, Utc};
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -12,8 +13,8 @@ use axum_macros::debug_handler;
 #[derive(Debug, Deserialize)]
 struct SignUpPayload {
     email: String,
-    password: String,
-    password_confirmation: String,
+    password: SecretString,
+    password_confirmation: SecretString,
 }
 
 impl SignUpPayload {
@@ -22,10 +23,14 @@ impl SignUpPayload {
         if self.email.trim().is_empty() {
             errors.push(("email", "email must not be empty"));
         }
-        if self.password.trim().is_empty() {
+        if self.password.expose_secret().trim().is_empty() {
             errors.push(("password", "password must not be empty"));
         }
-        if self.password.ne(&self.password_confirmation) {
+        if self
+            .password
+            .expose_secret()
+            .ne(self.password_confirmation.expose_secret())
+        {
             errors.push(("password", "password confirmation should match"));
         }
         if errors.is_empty() {
@@ -45,7 +50,7 @@ struct SignUpResponse {
 #[derive(Debug, Deserialize)]
 struct SignInPayload {
     email: String,
-    password: String,
+    password: SecretString,
 }
 
 impl SignInPayload {
@@ -54,7 +59,7 @@ impl SignInPayload {
         if self.email.trim().is_empty() {
             errors.push(("email", "email must not be empty"));
         }
-        if self.password.trim().is_empty() {
+        if self.password.expose_secret().trim().is_empty() {
             errors.push(("password", "password must not be empty"));
         }
         if errors.is_empty() {
