@@ -3,7 +3,7 @@
 Manage and store your bookmarks offline.
 
 _This is a toy project of full-stack [Rust](https://www.rust-lang.org/)
-application, built for learning proposes, not intended to be used in
+application, built for learning propuses, not intended to be used in
 production._
 
 ## Brief explanation of system design
@@ -15,7 +15,7 @@ production._
 - `readability-api` exposes the
   [readability](https://github.com/mozilla/readability) as HTTP API service,
   used by `daemon` to clean up the HTML content.
-- `web-spa` is a [yew](https://yew.rs/) frontend application.
+- `web-spa` is a [yew](https://yew.rs/) front-end application.
 - [minio](https://min.io/) used as static content storage and
   [postgresql](https://www.postgresql.org/) as the application database.
 

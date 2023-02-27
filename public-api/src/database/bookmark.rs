@@ -176,9 +176,9 @@ impl BookmarkTable {
         tx: &mut Transaction<'_, Postgres>,
         user_id: &Uuid,
         bookmark_id: &String,
-        tag_operatoin: TagOperation,
+        operation: TagOperation,
     ) -> Result<BookmarkWithUserData> {
-        let (update_tag_sql, tags) = match tag_operatoin {
+        let (update_tag_sql, tags) = match operation {
             TagOperation::Set(tags) => ("tags=$1", tags),
             TagOperation::Append(tags) => ("tags=array_cat(tags, $1)", tags),
         };

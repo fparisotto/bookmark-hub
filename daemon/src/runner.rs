@@ -125,7 +125,7 @@ pub async fn run(
                         tracing::warn!(
                             task_uuid = format!("{}", task.task_id),
                             retries = &task.retries,
-                            "Task failed, retring, error info: {}",
+                            "Task failed, retying, error info: {}",
                             error
                         )
                     } else {
@@ -158,7 +158,7 @@ async fn handle_task(
     task: &Task,
 ) -> Result<()> {
     let bookmark =
-        create_or_retreive_bookmark(pool, http, s3_client, config, &task.clean_url()?).await?;
+        crease_or_retrieve_bookmark(pool, http, s3_client, config, &task.clean_url()?).await?;
     let uuid = save_user_bookmark(pool, &bookmark, task).await?;
     tracing::info!(
         user_id = format!("{}", task.user_id),
@@ -169,7 +169,7 @@ async fn handle_task(
     Ok(())
 }
 
-async fn create_or_retreive_bookmark(
+async fn crease_or_retrieve_bookmark(
     pool: &Pool<Postgres>,
     http: &HttpClient,
     s3_client: &S3Client,
@@ -180,10 +180,15 @@ async fn create_or_retreive_bookmark(
         Some(bookmark) => Ok(bookmark),
         None => {
             tracing::info!("Processing new bookmark for url={url}");
-            let bookmark =
-                processor::process_url(http, &config.readability_endpoint, url, &config.external_s3_endpoint, &config.s3_bucket)
-                    .await
-                    .context("process_url")?;
+            let bookmark = processor::process_url(
+                http,
+                &config.readability_endpoint,
+                url,
+                &config.external_s3_endpoint,
+                &config.s3_bucket,
+            )
+            .await
+            .context("process_url")?;
             let stored_bookmark: DatabaseBookmark = (&bookmark).into();
             save_static_content(s3_client, config, &bookmark)
                 .await

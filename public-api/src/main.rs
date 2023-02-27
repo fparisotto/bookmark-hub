@@ -42,7 +42,7 @@ async fn main() -> anyhow::Result<()> {
         .layer(TraceLayer::new_for_http());
 
     let address = SocketAddr::from(([0, 0, 0, 0], 3000));
-    tracing::info!(" Server running, listening on {}", address);
+    tracing::info!("Server running, listening on {}", address);
     axum::Server::bind(&address)
         .serve(app.into_make_service())
         .with_graceful_shutdown(shutdown_signal())

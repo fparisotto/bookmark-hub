@@ -43,7 +43,7 @@ struct ImageFound {
 
 pub async fn process_url(
     http: &Client,
-    readability_endopint: &str,
+    readability_endpoint: &str,
     original_url_str: &str,
     static_image_endpoint: &str,
     static_prefix: &str,
@@ -52,7 +52,7 @@ pub async fn process_url(
     let original_url = clean_url(&original_url)?;
     let bookmark_id: String = make_id(&original_url)?;
     let raw_html = fetch_html_content(http, &original_url).await?;
-    let readability_response = readability_process(http, readability_endopint, raw_html).await?;
+    let readability_response = readability_process(http, readability_endpoint, raw_html).await?;
 
     let images_found = find_images(&original_url, &readability_response.html)?;
 
@@ -67,7 +67,7 @@ pub async fn process_url(
         processed_images.into_iter().partition(|e| e.is_ok());
 
     tracing::info!(
-        "Images with succes: {}, failure: {}",
+        "Images with success: {}, failure: {}",
         images_ok.len(),
         images_err.len()
     );
@@ -148,13 +148,16 @@ async fn rewrite_images(
         let img_src = el.get_attribute("src").expect("img[src] was required");
         let new_src = match &images_found.get(&img_src) {
             Some(image_found) => {
-                let src = format!("{}/{}/{}/{}", static_image_endpoint, static_prefix, bookmark_id, image_found.id);
+                let src = format!(
+                    "{}/{}/{}/{}",
+                    static_image_endpoint, static_prefix, bookmark_id, image_found.id
+                );
                 tracing::info!("Rewriting image from={}, to={}", &img_src, &src);
                 src
             }
             None => {
                 tracing::warn!(
-                    "Something weird happend, processed image not found, img_src={}",
+                    "Something weird happened, processed image not found, img_src={}",
                     &img_src
                 );
                 img_src
@@ -206,7 +209,7 @@ fn find_images(base_url: &Url, content: &str) -> Result<Vec<ImageFound>> {
         let parsed_img_src = match Url::parse(&img_src) {
             Ok(parsed) => Ok(parsed),
             Err(url::ParseError::RelativeUrlWithoutBase) => {
-                tracing::info!("Found relative url, img_src={}", &img_src);
+                tracing::info!("Found relative URL, img_src={}", &img_src);
                 base_url.join(&img_src)
             }
             Err(error) => Err(error),
@@ -224,7 +227,7 @@ fn find_images(base_url: &Url, content: &str) -> Result<Vec<ImageFound>> {
             Err(error) => {
                 tracing::warn!(
                     img_src = img_src,
-                    "Fail to parse url from img_src, skipin this image, error={}",
+                    "Fail to parse URL from img_src, skipping this image, error={}",
                     error
                 );
             }

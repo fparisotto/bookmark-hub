@@ -6,7 +6,6 @@ use uuid::Uuid;
 
 use crate::error::{Error, Result};
 
-
 #[derive(Deserialize)]
 pub enum TagFilterType {
     And,
@@ -72,7 +71,8 @@ impl SearchService {
     ) -> QueryBuilder<'a, Postgres> {
         let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new("");
         if tag_aggregation {
-            query_builder.push(r#"
+            query_builder.push(
+                r#"
             with tags as (
                 select
                     unnest(bu.tags) as tag
@@ -80,7 +80,8 @@ impl SearchService {
                     bookmark_user bu
                 inner join
                     bookmark b using(bookmark_id)
-            "#);
+            "#,
+            );
         } else {
             query_builder.push("select ");
             match (&request.query, &request.phrase) {
@@ -92,15 +93,18 @@ impl SearchService {
                 }
                 (None, Some(phrase)) => {
                     query_builder
-                        .push(" ts_headline('english', b.text_content, phraseto_tsquery('english', ")
+                        .push(
+                            " ts_headline('english', b.text_content, phraseto_tsquery('english', ",
+                        )
                         .push_bind(phrase)
                         .push(" ), 'StartSel=<mark>, StopSel=</mark>') as search_match, ");
                 }
                 _ => {
                     query_builder.push(" null as search_match, ");
-                },
+                }
             }
-            query_builder.push(r#"
+            query_builder.push(
+                r#"
                 b.*,
                 bu.user_id,
                 bu.tags,
@@ -110,7 +114,8 @@ impl SearchService {
                 bookmark_user bu
             inner join
                 bookmark b using(bookmark_id)
-            "#);
+            "#,
+            );
         }
         query_builder
             .push(" where bu.user_id = ")
@@ -173,8 +178,7 @@ impl SearchService {
         let mut search_query: QueryBuilder<Postgres> =
             SearchService::search_query_builder(user_id, &request, false);
         tracing::debug!("Search query {}", &search_query.sql());
-        let bookmarks: Vec<SearchResultItem> =
-            search_query.build_query_as().fetch_all(db).await?;
+        let bookmarks: Vec<SearchResultItem> = search_query.build_query_as().fetch_all(db).await?;
         Ok(bookmarks)
     }
 
@@ -195,7 +199,7 @@ impl SearchService {
         user_id: &Uuid,
         request: SearchRequest,
     ) -> Result<SearchResponse> {
-        // FIXME this mimics a meilli search query, replace me in future
+        // FIXME this mimics a meillisearch query, replace me in future
         let f_search = SearchService::run_search(db, user_id, &request);
         let f_aggregation = SearchService::run_aggregation(db, user_id, &request);
         let (bookmarks, tags) = try_join!(f_search, f_aggregation)?;

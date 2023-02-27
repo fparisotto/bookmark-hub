@@ -40,9 +40,9 @@ pub fn navigation_bar(props: &Props) -> Html {
 
     let on_query_switch_change = {
         let state = state.clone();
-        Callback::from(move |switch_toogle: ItemCheckEvent| {
+        Callback::from(move |switch_toggle: ItemCheckEvent| {
             let mut data = (*state).clone();
-            match switch_toogle {
+            match switch_toggle {
                 ItemCheckEvent::Checked(_) => data.search_type = SearchType::Query,
                 ItemCheckEvent::Unchecked(_) => data.search_type = SearchType::Phrase,
             }

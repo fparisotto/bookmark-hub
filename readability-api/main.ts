@@ -12,7 +12,7 @@ async function handler(request: Request): Promise<Response> {
       status: 405,
       headers: {
         "content-type": "application/json; charset=utf-8",
-        "Allow": "POST",
+        Allow: "POST",
       },
     });
   }
@@ -30,7 +30,7 @@ async function handler(request: Request): Promise<Response> {
     });
   }
   const document = new DOMParser().parseFromString(body, "text/html");
-  const reader = new Readability(document, { "debug": false });
+  const reader = new Readability(document, { debug: false });
   const article = reader.parse();
   const responseData = JSON.stringify(article);
   console.log(`Article processed title=${article?.title}`);

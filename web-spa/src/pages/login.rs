@@ -21,7 +21,7 @@ pub fn login() -> Html {
             spawn_local(async move {
                 match auth_api::login(event.email.clone(), event.password.clone()).await {
                     Ok(login_response) => {
-                        log::info!("User login successfull, response={:?}", &login_response);
+                        log::info!("User login successful, response={:?}", &login_response);
                         UserSession::login(dispatch.clone(), login_response);
                         history.push(&Route::Home);
                     }
