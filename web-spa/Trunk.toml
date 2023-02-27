@@ -3,6 +3,6 @@ target = "index.html"
 dist = "dist"
 
 [[hooks]]
-stage = "build"
+stage = "pre_build"
 command = "npx"
-command_arguments = ["tailwindcss", "-i", "styles.css", "-o", "static/css/styles.css", "--minify"]
+command_arguments = ["tailwindcss", "-i", "styles.css", "-o", "styles.min.css", "--minify"]

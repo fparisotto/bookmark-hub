@@ -46,6 +46,14 @@ services:
     ports:
       - 3001:3001
 
+  web-spa:
+    build:
+      context: web-spa/
+    depends_on:
+      - public-api
+    ports:
+      - 8080:80
+
   postgres:
     image: postgres:15
     ports:
