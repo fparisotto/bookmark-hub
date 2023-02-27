@@ -4,7 +4,6 @@ use lol_html::{element, rewrite_str, RewriteStrSettings};
 use murmur3::murmur3_x64_128;
 use reqwest::Client;
 use serde::Deserialize;
-use serde_json::Value;
 use std::collections::HashMap;
 use std::io::Cursor;
 use url::Url;
