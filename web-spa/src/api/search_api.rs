@@ -60,10 +60,10 @@ pub struct SearchResponse {
 }
 
 pub async fn search(token: &String, request: SearchRequest) -> Result<SearchResponse, Error> {
-    let endpoint = format!("{}/api/v1/search", PUBLIC_API_ENDPOINT);
+    let endpoint = format!("{PUBLIC_API_ENDPOINT}/api/v1/search");
     let request_body = serde_json::to_string(&request).expect("Serialize should not fail");
     let response = Request::post(&endpoint)
-        .header("Authorization", format!("Bearer {}", token).as_str())
+        .header("Authorization", &format!("Bearer {token}"))
         .header("Content-Type", "application/json")
         .body(request_body)
         .send()

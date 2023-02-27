@@ -134,22 +134,21 @@ impl BookmarkTable {
         };
         let sql = format!(
             r#"
-        with update_bookmark_user as (
-            update public.bookmark_user
-            set {0}, updated_at=now()
-            where bookmark_id=$2 and user_id=$3
-            returning *
-        )
-        select 
-            b.*,
-            bi.user_id,
-            bi.tags,
-            bi.created_at as user_created_at,
-            bi.updated_at as user_updated_at
-        from update_bookmark_user bi 
-        inner join bookmark b using(bookmark_id)
-        "#,
-            update_tag_sql
+            with update_bookmark_user as (
+                update public.bookmark_user
+                set {update_tag_sql}, updated_at=now()
+                where bookmark_id=$2 and user_id=$3
+                returning *
+            )
+            select 
+                b.*,
+                bi.user_id,
+                bi.tags,
+                bi.created_at as user_created_at,
+                bi.updated_at as user_updated_at
+            from update_bookmark_user bi 
+            inner join bookmark b using(bookmark_id)
+            "#
         );
         let result: BookmarkWithUserData = sqlx::query_as(&sql)
             .bind(tags)

@@ -23,7 +23,7 @@ pub struct Props {
 pub fn navigation_bar(props: &Props) -> Html {
     let (store, _) = use_store::<UserSession>();
 
-    let state = use_state(|| SearchInputSubmit::default());
+    let state = use_state(SearchInputSubmit::default);
 
     let email: String = store.email.clone();
 
@@ -51,7 +51,6 @@ pub fn navigation_bar(props: &Props) -> Html {
     };
 
     let on_submit = {
-        let state = state.clone();
         let on_search = props.on_submit.clone();
         Callback::from(move |event: SubmitEvent| {
             event.prevent_default();

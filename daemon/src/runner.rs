@@ -99,16 +99,16 @@ pub async fn run(
         } else {
             tracing::info!("New tasks found {}", tasks.len());
         }
-        for task in tasks.iter() {
+        for task in tasks {
             tracing::info!(
                 url = &task.url,
                 task_id = format!("{}", &task.task_id),
                 "Executing task"
             );
-            match handle_task(pool, http, s3_client, config, task).await {
+            match handle_task(pool, http, s3_client, config, &task).await {
                 Ok(_) => {
                     tracing::info!("success");
-                    update_task(pool, task, TaskStatus::Done, None, None).await?;
+                    update_task(pool, &task, TaskStatus::Done, None, None).await?;
                     tracing::info!(task_uuid = format!("{}", task.task_id), "Task executed")
                 }
                 Err(error) => {
@@ -116,7 +116,7 @@ pub async fn run(
                         tracing::info!("fail retry, reason = {:?}", &error);
                         update_task(
                             pool,
-                            task,
+                            &task,
                             TaskStatus::Pending,
                             Some(task.retries.unwrap_or(0) + 1),
                             None,
@@ -132,16 +132,15 @@ pub async fn run(
                         tracing::info!("fail");
                         update_task(
                             pool,
-                            task,
+                            &task,
                             TaskStatus::Fail,
                             None,
-                            Some(format!("{}", error)),
+                            Some(format!("{error}")),
                         )
                         .await?;
                         tracing::error!(
                             task_uuid = format!("{}", task.task_id),
-                            "Task failed, error info: {}",
-                            error
+                            "Task failed, error info: {error}"
                         )
                     }
                 }
@@ -162,7 +161,7 @@ async fn handle_task(
     let uuid = save_user_bookmark(pool, &bookmark, task).await?;
     tracing::info!(
         user_id = format!("{}", task.user_id),
-        bookmark_user_id = format!("{}", uuid),
+        bookmark_user_id = format!("{uuid}"),
         bookmark_id = &bookmark.bookmark_id,
         "Creating a new bookmark and bound with user",
     );
@@ -188,14 +187,16 @@ async fn crease_or_retrieve_bookmark(
                 &config.s3_bucket,
             )
             .await
-            .context("process_url")?;
+            .with_context(|| format!("process_url: {url}"))?;
             let stored_bookmark: DatabaseBookmark = (&bookmark).into();
             save_static_content(s3_client, config, &bookmark)
                 .await
-                .context("save_static_content")?;
+                .with_context(|| format!("save_static_content: bookmark_id={}", &bookmark.id))?;
             save_bookmark_into_database(pool, &stored_bookmark)
                 .await
-                .context("save_bookmark_into_database")?;
+                .with_context(|| {
+                    format!("save_bookmark_into_database: bookmark_id={}", &bookmark.id)
+                })?;
             tracing::info!(
                 url = url,
                 bookmark_id = format!("{}", &bookmark.id),

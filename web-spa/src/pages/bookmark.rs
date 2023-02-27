@@ -1,4 +1,7 @@
-use crate::{router::Route, user_session::UserSession, api::bookmarks_api, api::bookmarks_api::Bookmark, components::atoms::safe_html::ArticleHtml};
+use crate::{
+    api::bookmarks_api, api::bookmarks_api::Bookmark, components::atoms::safe_html::ArticleHtml,
+    router::Route, user_session::UserSession,
+};
 use chrono::{DateTime, Utc};
 use yew::prelude::*;
 use yew_router::prelude::*;
@@ -27,7 +30,6 @@ impl From<Bookmark> for State {
     }
 }
 
-
 #[derive(Debug, Clone, PartialEq, Properties)]
 pub struct Props {
     pub bookmark_id: String,
@@ -42,7 +44,7 @@ pub fn bookmark_page(props: &Props) -> Html {
         log::info!("User not logged");
     }
 
-    let state = use_state_eq(|| State::default());
+    let state = use_state_eq(State::default);
 
     let token = store.token.clone();
     let bookmark_id = props.bookmark_id.clone();
@@ -54,7 +56,7 @@ pub fn bookmark_page(props: &Props) -> Html {
             match bookmarks_api::get_by_id(&token, &bookmark_id).await {
                 Ok(Some(bookmark)) => {
                     state_cloned.set(bookmark.into());
-                },
+                }
                 _ => {
                     history.push(&Route::Home);
                 }
@@ -63,7 +65,8 @@ pub fn bookmark_page(props: &Props) -> Html {
         || {}
     });
 
-    let tags = (*state).tags
+    let tags = state
+        .tags
         .clone()
         .into_iter()
         .map(|tag| html! { <strong class="badge">{tag}</strong> })
@@ -72,12 +75,12 @@ pub fn bookmark_page(props: &Props) -> Html {
     html! {
         <div class="container mx-auto p-4">
             <article class="prose">
-                <h1>{"Title: "}{ (*state).title.clone() }</h1>
-                <h2>{"Created at: "}{ (*state).user_created_at.clone() }</h2>
+                <h1>{"Title: "}{ state.title.clone() }</h1>
+                <h2>{"Created at: "}{ state.user_created_at }</h2>
                 <h2>{"Tags: "}{tags}</h2>
-                <h3>{"Original URL: "}<a class="link" href={(*state).url.clone()}>{ (*state).url.clone() }</a></h3>
-                <h4>{"ID: "}{ (*state).id.clone() }</h4>
-                <ArticleHtml html={(*state).html_content.clone()} />
+                <h3>{"Original URL: "}<a class="link" href={ state.url.clone() }>{ state.url.clone() }</a></h3>
+                <h4>{"ID: "}{ state.id.clone() }</h4>
+                <ArticleHtml html={ state.html_content.clone() } />
             </article>
             <Link<Route> to={Route::Home}>{ "<< go back to home" }</Link<Route>>
         </div>

@@ -14,7 +14,7 @@ pub struct Props {
 
 #[function_component(LoginForm)]
 pub fn login_form(props: &Props) -> Html {
-    let state = use_state(|| LoginFormData::default());
+    let state = use_state(LoginFormData::default);
 
     let on_change_email = {
         let state = state.clone();
@@ -42,18 +42,17 @@ pub fn login_form(props: &Props) -> Html {
             event.prevent_default();
             let data = (*state).clone();
             if !data.email.is_empty() && !data.password.is_empty() {
-                on_login.emit(data.clone());
+                on_login.emit(data);
             }
         })
     };
 
     let on_click = {
-        let state = state.clone();
         let on_login = props.on_login.clone();
         Callback::from(move |_: MouseEvent| {
             let data = (*state).clone();
             if !data.email.is_empty() && !data.password.is_empty() {
-                on_login.emit(data.clone());
+                on_login.emit(data);
             }
         })
     };

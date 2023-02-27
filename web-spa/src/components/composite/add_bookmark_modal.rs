@@ -10,11 +10,11 @@ pub struct AddBookmarkData {
     pub tags: Vec<String>,
 }
 
-impl Into<NewBookmarkRequest> for AddBookmarkData {
-    fn into(self) -> NewBookmarkRequest {
+impl From<AddBookmarkData> for NewBookmarkRequest {
+    fn from(value: AddBookmarkData) -> Self {
         NewBookmarkRequest {
-            url: self.url.clone(),
-            tags: self.tags.clone(),
+            url: value.url,
+            tags: value.tags,
         }
     }
 }
@@ -27,20 +27,20 @@ pub struct Props {
 
 #[function_component(AddBookmarkModal)]
 pub fn add_bookmark_modal(props: &Props) -> Html {
-    let url_state = use_state(|| String::default());
-    let tags_state = use_state(|| String::default());
+    let url_state = use_state(String::default);
+    let tags_state = use_state(String::default);
 
     let on_change_url = {
         let url_state = url_state.clone();
         Callback::from(move |input_text: String| {
-            url_state.set(input_text.clone());
+            url_state.set(input_text);
         })
     };
 
     let on_change_tags = {
         let tags_state = tags_state.clone();
         Callback::from(move |input_text: String| {
-            tags_state.set(input_text.clone());
+            tags_state.set(input_text);
         })
     };
 
@@ -54,7 +54,7 @@ pub fn add_bookmark_modal(props: &Props) -> Html {
             on_new_bookmark.emit(AddBookmarkData {
                 url: (*url_state).clone(),
                 tags: (*tags_state)
-                    .split(",")
+                    .split(',')
                     .map(|tag| tag.trim().to_owned())
                     .collect(),
             });
@@ -65,14 +65,12 @@ pub fn add_bookmark_modal(props: &Props) -> Html {
 
     // TODO fix duplicated event handler code
     let on_save_click = {
-        let url_state = url_state.clone();
-        let tags_state = tags_state.clone();
         let on_new_bookmark = props.on_submit.clone();
         Callback::from(move |_event: MouseEvent| {
             on_new_bookmark.emit(AddBookmarkData {
                 url: (*url_state).clone(),
                 tags: (*tags_state)
-                    .split(",")
+                    .split(',')
                     .map(|tag| tag.trim().to_owned())
                     .collect(),
             });

@@ -167,7 +167,7 @@ impl SearchService {
             let limit_value = request.limit.unwrap_or(20);
             query_builder.push(" limit ").push_bind(limit_value);
         }
-        return query_builder;
+        query_builder
     }
 
     async fn run_search(
@@ -176,7 +176,7 @@ impl SearchService {
         request: &SearchRequest,
     ) -> Result<Vec<SearchResultItem>> {
         let mut search_query: QueryBuilder<Postgres> =
-            SearchService::search_query_builder(user_id, &request, false);
+            SearchService::search_query_builder(user_id, request, false);
         tracing::debug!("Search query {}", &search_query.sql());
         let bookmarks: Vec<SearchResultItem> = search_query.build_query_as().fetch_all(db).await?;
         Ok(bookmarks)
@@ -188,7 +188,7 @@ impl SearchService {
         request: &SearchRequest,
     ) -> Result<Vec<TagCount>> {
         let mut aggregation_query: QueryBuilder<Postgres> =
-            SearchService::search_query_builder(user_id, &request, true);
+            SearchService::search_query_builder(user_id, request, true);
         tracing::debug!("Aggregation query {}", &aggregation_query.sql());
         let tags: Vec<TagCount> = aggregation_query.build_query_as().fetch_all(db).await?;
         Ok(tags)

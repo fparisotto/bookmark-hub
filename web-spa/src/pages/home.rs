@@ -5,7 +5,7 @@ use yewdux::prelude::*;
 use crate::{
     api::{
         bookmarks_api,
-        search_api::{self, SearchRequest, SearchType, TagFilterType, SearchResultItem},
+        search_api::{self, SearchRequest, SearchResultItem, SearchType, TagFilterType},
         tags_api::Tag,
     },
     components::composite::{
@@ -29,22 +29,22 @@ pub struct HomeState {
     pub new_bookmark_tags: Vec<String>,
 }
 
-impl Into<SearchRequest> for HomeState {
-    fn into(self) -> SearchRequest {
+impl From<HomeState> for SearchRequest {
+    fn from(value: HomeState) -> Self {
         let mut query: Option<String> = None;
         let mut phrase: Option<String> = None;
         let mut tags: Option<Vec<String>> = None;
-        match self.search_type {
-            SearchType::Query if !self.search_input.is_empty() => {
-                query = Some(self.search_input);
+        match value.search_type {
+            SearchType::Query if !value.search_input.is_empty() => {
+                query = Some(value.search_input);
             }
-            SearchType::Phrase if !self.search_input.is_empty() => {
-                phrase = Some(self.search_input);
+            SearchType::Phrase if !value.search_input.is_empty() => {
+                phrase = Some(value.search_input);
             }
             _ => (),
         }
-        if !self.tags_filter.is_empty() {
-            tags = Some(self.tags_filter.clone());
+        if !value.tags_filter.is_empty() {
+            tags = Some(value.tags_filter);
         }
         SearchRequest {
             query,
@@ -68,7 +68,7 @@ pub fn home() -> Html {
         log::info!("User not logged");
     }
 
-    let state = use_state(|| HomeState::default());
+    let state = use_state(HomeState::default);
 
     let on_new_bookmark = {
         let token = token.clone();
@@ -88,7 +88,6 @@ pub fn home() -> Html {
     };
 
     let on_search_submit = {
-        let token = token.clone();
         let state = state.clone();
         Callback::from(move |event: SearchInputSubmit| {
             let state = state.clone();
@@ -144,4 +143,3 @@ pub fn home() -> Html {
         </>
     }
 }
-

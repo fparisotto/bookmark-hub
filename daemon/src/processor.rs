@@ -107,25 +107,25 @@ pub async fn process_url(
 pub fn clean_url(url: &Url) -> Result<Url> {
     if let Some(host) = url.host_str() {
         let path = &url.path();
-        let clean_url = format!("{}://{}{}", &url.scheme(), &host, &path);
-        tracing::info!("Clean url={}", &clean_url);
+        let clean_url = format!("{scheme}://{host}{path}", scheme = &url.scheme());
+        tracing::info!("Clean url={clean_url}");
         let clean = Url::parse(&clean_url)?;
         return Ok(clean);
     }
-    Err(anyhow!("Invalid url={}", url))
+    Err(anyhow!(format!("Invalid url={url}")))
 }
 
 fn make_id(url: &Url) -> Result<String> {
     if let Some(host) = url.host_str() {
         let path = url.path();
-        let source = format!("{}.{}", &host, &path);
+        let source = format!("{host}.{path}");
         let mut source = Cursor::new(source.as_str());
         let hash = murmur3_x64_128(&mut source, 0)?;
         let id = base64_url::encode(&hash.to_be_bytes());
-        tracing::info!(id = &id, url = format!("{}", url), "Making url id");
+        tracing::info!(id = &id, url = format!("{url}"), "Making url id");
         return Ok(id);
     }
-    Err(anyhow!("Invalid url={}", url))
+    Err(anyhow!(format!("Invalid url={url}")))
 }
 
 fn domain_from_url(url: &Url) -> Result<String> {
@@ -133,7 +133,7 @@ fn domain_from_url(url: &Url) -> Result<String> {
         .domain()
         .or_else(|| url.host_str())
         .map(|s| s.to_string())
-        .ok_or_else(|| anyhow!("Domain not found for url={:?}", url))?;
+        .ok_or_else(|| anyhow!(format!("Domain not found for url={url}")))?;
     Ok(domain_or_host)
 }
 
@@ -149,16 +149,15 @@ async fn rewrite_images(
         let new_src = match &images_found.get(&img_src) {
             Some(image_found) => {
                 let src = format!(
-                    "{}/{}/{}/{}",
-                    static_image_endpoint, static_prefix, bookmark_id, image_found.id
+                    "{static_image_endpoint}/{static_prefix}/{bookmark_id}/{image_found_id}",
+                    image_found_id = image_found.id
                 );
-                tracing::info!("Rewriting image from={}, to={}", &img_src, &src);
+                tracing::info!("Rewriting image from={img_src}, to={src}");
                 src
             }
             None => {
                 tracing::warn!(
-                    "Something weird happened, processed image not found, img_src={}",
-                    &img_src
+                    "Something weird happened, processed image not found, img_src={img_src}"
                 );
                 img_src
             }
@@ -209,7 +208,7 @@ fn find_images(base_url: &Url, content: &str) -> Result<Vec<ImageFound>> {
         let parsed_img_src = match Url::parse(&img_src) {
             Ok(parsed) => Ok(parsed),
             Err(url::ParseError::RelativeUrlWithoutBase) => {
-                tracing::info!("Found relative URL, img_src={}", &img_src);
+                tracing::info!("Found relative URL, img_src={img_src}");
                 base_url.join(&img_src)
             }
             Err(error) => Err(error),
@@ -217,7 +216,7 @@ fn find_images(base_url: &Url, content: &str) -> Result<Vec<ImageFound>> {
         match parsed_img_src {
             Ok(parsed) => {
                 let image_id: String = make_id(&parsed)?;
-                tracing::info!("Image found, original_url={}", &parsed);
+                tracing::info!("Image found, original_url={parsed}");
                 images_found.push(ImageFound {
                     id: image_id,
                     url: parsed,
@@ -227,8 +226,7 @@ fn find_images(base_url: &Url, content: &str) -> Result<Vec<ImageFound>> {
             Err(error) => {
                 tracing::warn!(
                     img_src = img_src,
-                    "Fail to parse URL from img_src, skipping this image, error={}",
-                    error
+                    "Fail to parse URL from img_src, skipping this image, error={error}"
                 );
             }
         };

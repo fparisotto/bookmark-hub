@@ -16,9 +16,9 @@ pub struct TagsResponse {
 }
 
 pub async fn get_all_tags(token: &String) -> Result<TagsResponse, Error> {
-    let endpoint = format!("{}/api/v1/tags", PUBLIC_API_ENDPOINT);
+    let endpoint = format!("{PUBLIC_API_ENDPOINT}/api/v1/tags");
     let response = Request::get(&endpoint)
-        .header("Authorization", format!("Bearer {}", token).as_str())
+        .header("Authorization", &format!("Bearer {token}"))
         .send()
         .await?
         .json::<TagsResponse>()

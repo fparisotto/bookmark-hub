@@ -21,7 +21,7 @@ pub struct UserProfileResponse {
 }
 
 pub async fn login(email: String, password: String) -> Result<LoginResponse, Error> {
-    let endpoint = format!("{}/api/v1/auth/sign-in", PUBLIC_API_ENDPOINT);
+    let endpoint = format!("{PUBLIC_API_ENDPOINT}/api/v1/auth/sign-in");
     let json_value = json!({"email": email, "password": password});
     let request_body = serde_json::to_string(&json_value).expect("Serialize should not fail");
     let response = Request::post(&endpoint)
@@ -31,14 +31,14 @@ pub async fn login(email: String, password: String) -> Result<LoginResponse, Err
         .await?
         .json::<LoginResponse>()
         .await?;
-    log::info!("Api auth login, email={}", email);
+    log::info!("Api auth login, email={email}");
     Ok(response)
 }
 
 pub async fn get_user_profile(token: String) -> Result<UserProfileResponse, Error> {
-    let endpoint = format!("{}/api/v1/auth/user-profile", PUBLIC_API_ENDPOINT);
+    let endpoint = format!("{PUBLIC_API_ENDPOINT}/api/v1/auth/user-profile");
     let response = Request::get(&endpoint)
-        .header("Authorization", format!("Bearer {}", token).as_str())
+        .header("Authorization", &format!("Bearer {token}"))
         .send()
         .await?
         .json::<UserProfileResponse>()

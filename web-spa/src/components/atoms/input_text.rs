@@ -43,7 +43,7 @@ pub fn input_text(props: &Props) -> Html {
         Callback::from(move |event: Event| {
             let target: EventTarget = event.target().expect("Fail to cast to EventTarget");
             let value: String = target.unchecked_into::<HtmlInputElement>().value();
-            callback.emit(value.clone());
+            callback.emit(value);
         })
     };
     html! {
