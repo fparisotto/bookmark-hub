@@ -3,6 +3,7 @@ use futures::future::join_all;
 use lol_html::{element, rewrite_str, RewriteStrSettings};
 use murmur3::murmur3_x64_128;
 use reqwest::Client;
+use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::io::Cursor;
@@ -248,6 +249,14 @@ async fn fetch_html_content(client: &Client, url: &Url) -> Result<String> {
     Ok(client.get(url.to_string()).send().await?.text().await?)
 }
 
+#[derive(Deserialize)]
+struct ReadabilityPayload {
+    title: String,
+    content: String,
+    #[serde(rename(deserialize = "textContent"))]
+    text_content: String,
+}
+
 async fn readability_process(
     client: &Client,
     readability_endpoint: &str,
@@ -258,22 +267,10 @@ async fn readability_process(
         .body(raw_content)
         .send()
         .await?;
-    let json_body = response.json::<HashMap<String, Value>>().await?;
-    match (
-        json_body.get("title"),
-        json_body.get("content"),
-        json_body.get("textContent"),
-    ) {
-        (Some(Value::String(title)), Some(Value::String(html)), Some(Value::String(text))) => {
-            Ok(ReadabilityResponse {
-                title: title.clone(),
-                html: html.clone(),
-                text: text.clone(),
-            })
-        }
-        _ => Err(anyhow!(
-            "Invalid response from readability, payload={:?}",
-            json_body
-        )),
-    }
+    let payload = response.json::<ReadabilityPayload>().await?;
+    Ok(ReadabilityResponse {
+        title: payload.title,
+        html: payload.content,
+        text: payload.text_content,
+    })
 }
