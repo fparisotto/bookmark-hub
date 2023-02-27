@@ -3,10 +3,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Postgres, Transaction};
 use uuid::Uuid;
 
-use crate::{
-    database::ResultExt,
-    error::{Error, Result},
-};
+use crate::error::Result;
 
 #[derive(Debug, sqlx::FromRow, Serialize, Deserialize)]
 pub struct BookmarkWithUserData {
@@ -36,16 +33,6 @@ pub enum SearchType {
 pub struct BookmarkTable;
 
 impl BookmarkTable {
-    pub async fn get_all_user_tags(db: &Pool<Postgres>, user_id: &Uuid) -> Result<Vec<String>> {
-        let result: Vec<String> = sqlx::query_scalar(
-            "select distinct unnest(tags) as tag from bookmark_user where user_id = $1 order by tag;"
-        )
-        .bind(user_id)
-        .fetch_all(db)
-        .await?;
-        Ok(result)
-    }
-
     pub async fn get_tag_count_by_user(
         db: &Pool<Postgres>,
         user_id: &Uuid,
@@ -132,43 +119,6 @@ impl BookmarkTable {
             .bind(bookmark_id)
             .fetch_optional(db)
             .await?;
-        Ok(result)
-    }
-
-    pub async fn create_user_bookmark(
-        tx: &mut Transaction<'_, Postgres>,
-        user_id: &Uuid,
-        bookmark_id: &Uuid,
-        tags: &Vec<String>,
-    ) -> Result<BookmarkWithUserData> {
-        let sql = r#"
-        with insert_bookmark as (
-            insert into bookmark_user
-            (bookmark_user_id, bookmark_id, user_id, tags, created_at, updated_at)
-            values(uuid_generate_v4(), $1, $2, $3, now(), now())
-            returning *
-        )
-        select 
-            b.*,
-            bu.user_id,
-            bu.tags,
-            bu.created_at as user_created_at,
-            bu.updated_at as user_updated_at
-        from insert_bookmark bu 
-        inner join bookmark b using(bookmark_id)
-        "#;
-        let result: BookmarkWithUserData = sqlx::query_as(sql)
-            .bind(bookmark_id)
-            .bind(user_id)
-            .bind(tags)
-            .fetch_one(tx)
-            .await
-            .on_constraint("bookmark_user_unique", |_| {
-                Error::constraint_violation(
-                    "bookmark_user_unique",
-                    "bookmark already exist for user",
-                )
-            })?;
         Ok(result)
     }
 

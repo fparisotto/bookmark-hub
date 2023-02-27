@@ -104,7 +104,18 @@ pub async fn process_url(
     Ok(bookmark)
 }
 
-pub fn make_id(url: &Url) -> Result<String> {
+pub fn clean_url(url: &Url) -> Result<Url> {
+    if let Some(host) = url.host_str() {
+        let path = &url.path();
+        let clean_url = format!("{}://{}{}", &url.scheme(), &host, &path);
+        tracing::info!("Clean url={}", &clean_url);
+        let clean = Url::parse(&clean_url)?;
+        return Ok(clean);
+    }
+    Err(anyhow!("Invalid url={}", url))
+}
+
+fn make_id(url: &Url) -> Result<String> {
     if let Some(host) = url.host_str() {
         let path = url.path();
         let source = format!("{}.{}", &host, &path);
@@ -113,17 +124,6 @@ pub fn make_id(url: &Url) -> Result<String> {
         let id = base64_url::encode(&hash.to_be_bytes());
         tracing::info!(id = &id, url = format!("{}", url), "Making url id");
         return Ok(id);
-    }
-    Err(anyhow!("Invalid url={}", url))
-}
-
-pub fn clean_url(url: &Url) -> Result<Url> {
-    if let Some(host) = url.host_str() {
-        let path = &url.path();
-        let clean_url = format!("{}://{}{}", &url.scheme(), &host, &path);
-        tracing::info!("Clean url={}", &clean_url);
-        let clean = Url::parse(&clean_url)?;
-        return Ok(clean);
     }
     Err(anyhow!("Invalid url={}", url))
 }
