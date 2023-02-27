@@ -1,20 +1,20 @@
 # builder
 FROM rust:1.66.0-bullseye as builder
 
-# create a new empty shell project
+# new empty project
 RUN USER=root cargo new --bin public-api
 WORKDIR /public-api
 
-# copy over your manifests
+# copy manifests
 COPY ./Cargo.lock ./Cargo.lock
 COPY ./Cargo.toml ./Cargo.toml
 COPY ./wait-for-it.sh ./wait-for-it.sh 
 
-# this build step will cache your dependencies
+# cache dependencies
 RUN cargo build --release
 RUN rm src/*.rs
 
-# copy your source tree
+# copy source tree
 COPY ./src ./src
 COPY ./migrations ./migrations
 

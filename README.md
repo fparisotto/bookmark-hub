@@ -3,7 +3,7 @@
 Manage and store your bookmarks offline.
 
 _This is a toy project of full-stack [Rust](https://www.rust-lang.org/)
-application, built for learning propuses, not intended to be used in
+application, built for educational purposes, not intended to be used in
 production._
 
 ## Brief explanation of system design
@@ -37,7 +37,7 @@ $ hurl --verbose test.hurl
 
 Soon, `web-spa` will be on its own docker container, but for now, you need to
 follow the setup instructions in
-[yew intruduction page](https://yew.rs/docs/getting-started/introduction).
+[yew introduction page](https://yew.rs/docs/getting-started/introduction).
 
 After that, you should run the following:
 
