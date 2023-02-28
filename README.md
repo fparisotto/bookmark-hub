@@ -32,15 +32,3 @@ With the `docker-compose.yml` running, use [hurl](https://hurl.dev/)
 ```bash
 $ hurl --verbose test.hurl
 ```
-
-## How to run the `web-spa`
-
-Soon, `web-spa` will be on its own docker container, but for now, you need to
-follow the setup instructions in
-[yew introduction page](https://yew.rs/docs/getting-started/introduction).
-
-After that, you should run the following:
-
-```bash
-$ cd web-spa; trunk serve
-```
