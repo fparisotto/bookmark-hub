@@ -49,6 +49,8 @@ services:
   web-spa:
     build:
       context: web-spa/
+      args:
+        - PUBLIC_API_ENDPOINT=http://public-api:3000
     depends_on:
       - public-api
     ports:

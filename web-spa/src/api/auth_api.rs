@@ -23,6 +23,7 @@ pub struct UserProfileResponse {
 pub async fn login(email: String, password: String) -> Result<LoginResponse, Error> {
     let endpoint = format!("{PUBLIC_API_ENDPOINT}/api/v1/auth/sign-in");
     let json_value = json!({"email": email, "password": password});
+    log::info!("Doing login, endpoint={endpoint}");
     let request_body = serde_json::to_string(&json_value).expect("Serialize should not fail");
     let response = Request::post(&endpoint)
         .header("Content-Type", "application/json")
