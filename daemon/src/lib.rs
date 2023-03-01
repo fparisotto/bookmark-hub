@@ -1,3 +1,4 @@
+use anyhow::{Context, Result};
 use std::env;
 
 pub mod processor;
@@ -17,17 +18,21 @@ pub struct Config {
 }
 
 impl Config {
+    fn env(key: &str) -> Result<String> {
+        env::var(key).context(format!("missing env {key}"))
+    }
+
     pub fn parse() -> anyhow::Result<Self> {
-        let s3_access_key = env::var("S3_ACCESS_KEY")?;
-        let s3_secret_key = env::var("S3_SECRET_KEY")?;
-        let s3_endpoint = env::var("S3_ENDPOINT")?;
-        let s3_region = env::var("S3_REGION")?;
-        let s3_bucket = env::var("S3_BUCKET")?;
-        let readability_endpoint = env::var("READABILITY_ENDPOINT")?;
-        let database_url = env::var("DATABASE_URL")?;
+        let s3_access_key = Config::env("S3_ACCESS_KEY")?;
+        let s3_secret_key = Config::env("S3_SECRET_KEY")?;
+        let s3_endpoint = Config::env("S3_ENDPOINT")?;
+        let s3_region = Config::env("S3_REGION")?;
+        let s3_bucket = Config::env("S3_BUCKET")?;
+        let readability_endpoint = Config::env("READABILITY_ENDPOINT")?;
+        let database_url = Config::env("DATABASE_URL")?;
         let database_connection_pool_size: u32 =
-            env::var("DATABASE_CONNECTION_POOL_SIZE")?.parse()?;
-        let external_s3_endpoint = env::var("EXTERNAL_S3_ENDPOINT")?;
+            Config::env("DATABASE_CONNECTION_POOL_SIZE")?.parse()?;
+        let external_s3_endpoint = Config::env("EXTERNAL_S3_ENDPOINT")?;
         Ok(Self {
             s3_access_key,
             s3_secret_key,

@@ -1,3 +1,4 @@
+use anyhow::{Context, Result};
 use std::sync::Arc;
 
 use auth::Keys;
@@ -22,10 +23,14 @@ pub struct Config {
 }
 
 impl Config {
+    fn env(key: &str) -> Result<String> {
+        std::env::var(key).context(format!("missing env {key}"))
+    }
+
     pub fn parse() -> anyhow::Result<Self> {
-        let database_url = std::env::var("DATABASE_URL")?;
-        let pool_size: u8 = std::env::var("DATABASE_CONNECTION_POOL_SIZE")?.parse()?;
-        let hmac_key = std::env::var("HMAC_KEY")?;
+        let database_url = Config::env("DATABASE_URL")?;
+        let pool_size: u8 = Config::env("DATABASE_CONNECTION_POOL_SIZE")?.parse()?;
+        let hmac_key = Config::env("HMAC_KEY")?;
         let auth_keys = Keys::new(hmac_key.as_bytes());
         Ok(Config {
             database_url,
