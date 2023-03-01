@@ -84,14 +84,47 @@ services:
     environment:
       MINIO_ROOT_USER: ROOTNAME
       MINIO_ROOT_PASSWORD: CHANGEME123
+      MINIO_ACCESS_KEY: bookmark_user
+      MINIO_SECRET_KEY: supersecret
       MINIO_BUCKET: bookmark-static
     depends_on:
       - minio
     entrypoint: >
-      /bin/sh -c "
-      /usr/bin/mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD};
-      /usr/bin/mc mb local/$${MINIO_BUCKET}/;
-      /usr/bin/mc anonymous set download local/$${MINIO_BUCKET};"
+      /bin/sh -c '
+      cat << EOF > write-policy.json
+      {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "s3:GetBucketLocation",
+              "s3:ListBucket",
+              "s3:ListBucketMultipartUploads",
+              "s3:ListBucketVersions"
+            ],
+            "Resource": ["arn:aws:s3:::<BUCKET-NAME>"]
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "s3:AbortMultipartUpload",
+              "s3:DeleteObject",
+              "s3:GetObject",
+              "s3:ListMultipartUploadParts",
+              "s3:PutObject"
+            ],
+            "Resource": ["arn:aws:s3:::<BUCKET-NAME>/*"]
+          }
+        ]
+      }
+      EOF &&
+      /usr/bin/mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD} &&
+      /usr/bin/mc mb local/$${MINIO_BUCKET} &&
+      /usr/bin/mc anonymous set download local/$${MINIO_BUCKET} &&
+      /usr/bin/mc admin user add local $${MINIO_ACCESS_KEY} $${MINIO_SECRET_KEY} &&
+      /usr/bin/mc admin policy add local write-policy ./write-policy.json &&
+      /usr/bin/mc admin policy set local write-policy user=$${MINIO_ACCESS_KEY}'
 
 volumes:
   postgres-data:
