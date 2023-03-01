@@ -1,6 +1,9 @@
 # builder
 FROM rust:1.66.0-bullseye as builder
 
+ARG PUBLIC_API_ENDPOINT
+ENV PUBLIC_API_ENDPOINT $PUBLIC_API_ENDPOINT
+
 ENV TRUNK_VERSION=v0.16.0
 
 # curl
