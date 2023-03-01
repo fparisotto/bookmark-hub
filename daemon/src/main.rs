@@ -41,11 +41,7 @@ async fn make_s3_client(config: &Config) -> Result<S3Client, Error> {
 }
 
 async fn check_bucket(client: &S3Client, bucket_name: &str) -> Result<(), Error> {
-    let _ = client
-        .get_bucket_policy()
-        .bucket(bucket_name)
-        .send()
-        .await?;
+    let _ = client.list_objects_v2().bucket(bucket_name).send().await?;
     tracing::info!("Bucket found");
     Ok(())
 }
