@@ -102,7 +102,14 @@ fn setup_tracing(config: &Config) -> anyhow::Result<()> {
                 .loki_url
                 .clone()
                 .expect("'LOKI_URL' env var need to be set in APP_ENV=PROD");
-            let (layer, task) = tracing_loki::layer(loki_url, HashMap::new(), HashMap::new())?;
+
+            let labels: HashMap<String, String> = [
+                ("application".into(), "bookmark".into()),
+                ("component".into(), "public-api".into()),
+            ]
+            .into_iter()
+            .collect();
+            let (layer, task) = tracing_loki::layer(loki_url, labels, HashMap::new())?;
             tracing_setup.with(layer).init();
             tokio::spawn(task);
         }
