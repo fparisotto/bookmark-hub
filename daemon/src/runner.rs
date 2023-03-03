@@ -6,6 +6,7 @@ use reqwest::Client as HttpClient;
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Postgres};
 use tokio::time::{sleep, Duration as TokioDuration};
+use tracing::instrument;
 use url::Url;
 use uuid::Uuid;
 
@@ -80,6 +81,7 @@ impl From<&Bookmark> for DatabaseBookmark {
     }
 }
 
+#[instrument]
 pub async fn run(
     pool: &Pool<Postgres>,
     http: &HttpClient,
@@ -149,6 +151,7 @@ pub async fn run(
     }
 }
 
+#[instrument]
 async fn handle_task(
     pool: &Pool<Postgres>,
     http: &HttpClient,
@@ -168,6 +171,7 @@ async fn handle_task(
     Ok(())
 }
 
+#[instrument]
 async fn crease_or_retrieve_bookmark(
     pool: &Pool<Postgres>,
     http: &HttpClient,
@@ -207,6 +211,7 @@ async fn crease_or_retrieve_bookmark(
     }
 }
 
+#[instrument]
 async fn peek_task(pool: &Pool<Postgres>, now: DateTime<Utc>) -> Result<Vec<Task>> {
     // https://softwaremill.com/mqperf/#postgresql
     let sql = r#"
@@ -233,6 +238,7 @@ async fn peek_task(pool: &Pool<Postgres>, now: DateTime<Utc>) -> Result<Vec<Task
     Ok(result)
 }
 
+#[instrument]
 async fn find_bookmark_by_url(
     pool: &Pool<Postgres>,
     url: &str,
@@ -268,6 +274,7 @@ async fn save_static_content(
     Ok(())
 }
 
+#[instrument]
 async fn update_task(
     pool: &Pool<Postgres>,
     task: &Task,
@@ -288,6 +295,7 @@ async fn update_task(
     Ok(())
 }
 
+#[instrument]
 async fn save_user_bookmark(
     pool: &Pool<Postgres>,
     bookmark: &DatabaseBookmark,
@@ -310,6 +318,7 @@ async fn save_user_bookmark(
     Ok(result)
 }
 
+#[instrument]
 async fn save_bookmark_into_database(
     pool: &Pool<Postgres>,
     bookmark: &DatabaseBookmark,

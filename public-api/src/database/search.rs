@@ -2,17 +2,18 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Postgres, QueryBuilder};
 use tokio::try_join;
+use tracing::instrument;
 use uuid::Uuid;
 
 use crate::error::{Error, Result};
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub enum TagFilterType {
     And,
     Or,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct SearchRequest {
     query: Option<String>,
     phrase: Option<String>,
@@ -170,6 +171,7 @@ impl SearchService {
         query_builder
     }
 
+    #[instrument]
     async fn run_search(
         db: &Pool<Postgres>,
         user_id: &Uuid,
@@ -182,6 +184,7 @@ impl SearchService {
         Ok(bookmarks)
     }
 
+    #[instrument]
     async fn run_aggregation(
         db: &Pool<Postgres>,
         user_id: &Uuid,
@@ -194,6 +197,7 @@ impl SearchService {
         Ok(tags)
     }
 
+    #[instrument]
     pub async fn search(
         db: &Pool<Postgres>,
         user_id: &Uuid,

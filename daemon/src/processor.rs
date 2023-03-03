@@ -6,6 +6,7 @@ use reqwest::Client;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::io::Cursor;
+use tracing::instrument;
 use url::Url;
 
 #[derive(Debug)]
@@ -35,12 +36,14 @@ struct ReadabilityResponse {
     text: String,
 }
 
+#[derive(Debug)]
 struct ImageFound {
     id: String,
     src: String,
     url: Url,
 }
 
+#[instrument]
 pub async fn process_url(
     http: &Client,
     readability_endpoint: &str,
@@ -137,6 +140,7 @@ fn domain_from_url(url: &Url) -> Result<String> {
     Ok(domain_or_host)
 }
 
+#[instrument]
 async fn rewrite_images(
     static_image_endpoint: &str,
     static_prefix: &str,
@@ -178,6 +182,7 @@ async fn rewrite_images(
     Ok((new_content, images))
 }
 
+#[instrument]
 async fn process_image_found(http: &Client, image_found: &ImageFound) -> Result<Image> {
     let response = http
         .get(image_found.url.to_string())
@@ -244,6 +249,7 @@ fn find_images(base_url: &Url, content: &str) -> Result<Vec<ImageFound>> {
     Ok(images_found)
 }
 
+#[instrument]
 async fn fetch_html_content(client: &Client, url: &Url) -> Result<String> {
     Ok(client.get(url.to_string()).send().await?.text().await?)
 }
@@ -256,6 +262,7 @@ struct ReadabilityPayload {
     text_content: String,
 }
 
+#[instrument]
 async fn readability_process(
     client: &Client,
     readability_endpoint: &str,

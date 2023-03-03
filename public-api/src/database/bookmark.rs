@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Postgres, Transaction};
+use tracing::instrument;
 use uuid::Uuid;
 
 use crate::error::Result;
@@ -20,11 +21,13 @@ pub struct BookmarkWithUserData {
     pub user_updated_at: Option<DateTime<Utc>>,
 }
 
+#[derive(Debug)]
 pub enum TagOperation {
     Set(Vec<String>),
     Append(Vec<String>),
 }
 
+#[derive(Debug)]
 pub enum SearchType {
     Query(String),
     Phrase(String),
@@ -33,6 +36,7 @@ pub enum SearchType {
 pub struct BookmarkTable;
 
 impl BookmarkTable {
+    #[instrument]
     pub async fn get_tag_count_by_user(
         db: &Pool<Postgres>,
         user_id: &Uuid,
@@ -49,6 +53,7 @@ impl BookmarkTable {
         Ok(result)
     }
 
+    #[instrument]
     pub async fn get_bookmarks_by_user(
         db: &Pool<Postgres>,
         user_id: &Uuid,
@@ -70,6 +75,7 @@ impl BookmarkTable {
         Ok(result)
     }
 
+    #[instrument]
     pub async fn get_bookmarks_by_tag(
         db: &Pool<Postgres>,
         user_id: &Uuid,
@@ -97,6 +103,7 @@ impl BookmarkTable {
         Ok(result)
     }
 
+    #[instrument]
     pub async fn get_bookmark_with_user_data(
         db: &Pool<Postgres>,
         user_id: &Uuid,
@@ -122,6 +129,7 @@ impl BookmarkTable {
         Ok(result)
     }
 
+    #[instrument]
     pub async fn update_tags(
         tx: &mut Transaction<'_, Postgres>,
         user_id: &Uuid,

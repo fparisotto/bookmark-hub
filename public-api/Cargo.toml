@@ -40,3 +40,6 @@ argon2 = "0.3.1"
 strum = "0.24"
 strum_macros = "0.24"
 secrecy = { version = "0.8.0", features = ["serde"] }
+tracing-loki = "0.2.1"
+metrics = "0.20.1"
+metrics-exporter-prometheus = "0.11.0"

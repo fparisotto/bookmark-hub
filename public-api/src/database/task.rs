@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{Postgres, Transaction};
+use tracing::instrument;
 use url::Url;
 use uuid::Uuid;
 
@@ -39,6 +40,7 @@ pub struct BookmarkUserTask {
 pub struct BookmarkTaskTable;
 
 impl BookmarkTaskTable {
+    #[instrument]
     pub async fn create(
         tx: &mut Transaction<'_, Postgres>,
         user_id: &Uuid,
