@@ -60,7 +60,13 @@ fn setup_tracing(config: &Config) -> anyhow::Result<()> {
                 .loki_url
                 .clone()
                 .expect("'LOKI_URL' env var need to be set in APP_ENV=PROD");
-            let (layer, task) = tracing_loki::layer(loki_url, HashMap::new(), HashMap::new())?;
+            // TODO expose in k8s deployment the desired information
+            // https://kubernetes.io/docs/tasks/inject-data-application/environment-variable-expose-pod-information/
+            let labels: HashMap<String, String> = std::env::vars()
+                .filter(|(key, _)| key.starts_with("LOKI_LABEL_"))
+                .map(|(key, value)| (key.replace("LOKI_LABEL_", "").to_lowercase(), value))
+                .collect();
+            let (layer, task) = tracing_loki::layer(loki_url, labels, HashMap::new())?;
             tracing_setup.with(layer).init();
             tokio::spawn(task);
         }

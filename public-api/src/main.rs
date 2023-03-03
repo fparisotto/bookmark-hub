@@ -93,28 +93,26 @@ async fn setup_app(config: Config, db: Pool<Postgres>) -> anyhow::Result<()> {
 
 fn setup_tracing(config: &Config) -> anyhow::Result<()> {
     let tracing_setup = tracing_subscriber::registry().with(EnvFilter::from_default_env());
-    tracing_setup.with(tracing_subscriber::fmt::layer()).init();
-    // match config.app_env {
-    //     Env::DEV => {
-    //         tracing_setup.with(tracing_subscriber::fmt::layer()).init();
-    //     }
-    //     Env::PROD => {
-    //         let loki_url = config
-    //             .loki_url
-    //             .clone()
-    //             .expect("'LOKI_URL' env var need to be set in APP_ENV=PROD");
-    //
-    //         let labels: HashMap<String, String> = [
-    //             ("application".into(), "bookmark".into()),
-    //             ("component".into(), "public-api".into()),
-    //         ]
-    //         .into_iter()
-    //         .collect();
-    //         let (layer, task) = tracing_loki::layer(loki_url, labels, HashMap::new())?;
-    //         tracing_setup.with(layer).init();
-    //         tokio::spawn(task);
-    //     }
-    // }
+    match config.app_env {
+        Env::DEV => {
+            tracing_setup.with(tracing_subscriber::fmt::layer()).init();
+        }
+        Env::PROD => {
+            let loki_url = config
+                .loki_url
+                .clone()
+                .expect("'LOKI_URL' env var need to be set in APP_ENV=PROD");
+            // TODO expose in k8s deployment the desired information
+            // https://kubernetes.io/docs/tasks/inject-data-application/environment-variable-expose-pod-information/
+            let labels: HashMap<String, String> = std::env::vars()
+                .filter(|(key, _)| key.starts_with("LOKI_LABEL_"))
+                .map(|(key, value)| (key.replace("LOKI_LABEL_", "").to_lowercase(), value))
+                .collect();
+            let (layer, task) = tracing_loki::layer(loki_url, labels, HashMap::new())?;
+            tracing_setup.with(layer).init();
+            tokio::spawn(task);
+        }
+    }
     Ok(())
 }
 
