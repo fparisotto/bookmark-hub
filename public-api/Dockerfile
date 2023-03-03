@@ -33,6 +33,6 @@ COPY --from=builder /public-api/wait-for-it.sh .
 RUN chmod +x wait-for-it.sh
 
 EXPOSE 3000
-EXPOSE 3001
+EXPOSE 9090
 
 CMD ["./public-api"]

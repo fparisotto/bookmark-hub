@@ -125,7 +125,7 @@ async fn setup_metrics_server() -> anyhow::Result<()> {
 
     let router = Router::new().route("/metrics", get(move || ready(handle.render())));
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3001));
+    let addr = SocketAddr::from(([127, 0, 0, 1], 9090));
     tracing::debug!("Metrics server listening on {}", addr);
     axum::Server::bind(&addr)
         .serve(router.into_make_service())
