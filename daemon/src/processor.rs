@@ -43,7 +43,7 @@ struct ImageFound {
     url: Url,
 }
 
-#[instrument]
+#[instrument(skip(http, readability_endpoint, static_image_endpoint, static_prefix))]
 pub async fn process_url(
     http: &Client,
     readability_endpoint: &str,
@@ -140,7 +140,7 @@ fn domain_from_url(url: &Url) -> Result<String> {
     Ok(domain_or_host)
 }
 
-#[instrument]
+#[instrument(skip(static_image_endpoint, static_prefix, content, images_found))]
 async fn rewrite_images(
     static_image_endpoint: &str,
     static_prefix: &str,
@@ -182,7 +182,7 @@ async fn rewrite_images(
     Ok((new_content, images))
 }
 
-#[instrument]
+#[instrument(skip(http))]
 async fn process_image_found(http: &Client, image_found: &ImageFound) -> Result<Image> {
     let response = http
         .get(image_found.url.to_string())
@@ -249,7 +249,7 @@ fn find_images(base_url: &Url, content: &str) -> Result<Vec<ImageFound>> {
     Ok(images_found)
 }
 
-#[instrument]
+#[instrument(skip(client))]
 async fn fetch_html_content(client: &Client, url: &Url) -> Result<String> {
     Ok(client.get(url.to_string()).send().await?.text().await?)
 }
@@ -262,7 +262,7 @@ struct ReadabilityPayload {
     text_content: String,
 }
 
-#[instrument]
+#[instrument(skip_all)]
 async fn readability_process(
     client: &Client,
     readability_endpoint: &str,

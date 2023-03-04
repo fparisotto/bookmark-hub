@@ -171,7 +171,7 @@ impl SearchService {
         query_builder
     }
 
-    #[instrument]
+    #[instrument(skip(db))]
     async fn run_search(
         db: &Pool<Postgres>,
         user_id: &Uuid,
@@ -184,7 +184,7 @@ impl SearchService {
         Ok(bookmarks)
     }
 
-    #[instrument]
+    #[instrument(skip(db))]
     async fn run_aggregation(
         db: &Pool<Postgres>,
         user_id: &Uuid,
@@ -197,7 +197,7 @@ impl SearchService {
         Ok(tags)
     }
 
-    #[instrument]
+    #[instrument(skip(db))]
     pub async fn search(
         db: &Pool<Postgres>,
         user_id: &Uuid,

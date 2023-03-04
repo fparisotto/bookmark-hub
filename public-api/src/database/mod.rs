@@ -1,3 +1,4 @@
+use secrecy::ExposeSecret;
 use sqlx::postgres::PgPoolOptions;
 
 use crate::error::{Error, Result};
@@ -11,7 +12,7 @@ pub mod user;
 pub async fn connect(config: &Config) -> Result<sqlx::Pool<sqlx::Postgres>> {
     let db: sqlx::Pool<sqlx::Postgres> = PgPoolOptions::new()
         .max_connections(config.database_connection_pool_size as u32)
-        .connect(&config.database_url)
+        .connect(&config.database_url.expose_secret())
         .await?;
     Ok(db)
 }

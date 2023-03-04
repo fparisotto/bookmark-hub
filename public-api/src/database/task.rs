@@ -40,7 +40,7 @@ pub struct BookmarkUserTask {
 pub struct BookmarkTaskTable;
 
 impl BookmarkTaskTable {
-    #[instrument]
+    #[instrument(skip(tx))]
     pub async fn create(
         tx: &mut Transaction<'_, Postgres>,
         user_id: &Uuid,

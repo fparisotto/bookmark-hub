@@ -36,7 +36,7 @@ pub enum SearchType {
 pub struct BookmarkTable;
 
 impl BookmarkTable {
-    #[instrument]
+    #[instrument(skip(db))]
     pub async fn get_tag_count_by_user(
         db: &Pool<Postgres>,
         user_id: &Uuid,
@@ -53,7 +53,7 @@ impl BookmarkTable {
         Ok(result)
     }
 
-    #[instrument]
+    #[instrument(skip(db))]
     pub async fn get_bookmarks_by_user(
         db: &Pool<Postgres>,
         user_id: &Uuid,
@@ -75,7 +75,7 @@ impl BookmarkTable {
         Ok(result)
     }
 
-    #[instrument]
+    #[instrument(skip(db))]
     pub async fn get_bookmarks_by_tag(
         db: &Pool<Postgres>,
         user_id: &Uuid,
@@ -103,7 +103,7 @@ impl BookmarkTable {
         Ok(result)
     }
 
-    #[instrument]
+    #[instrument(skip(db))]
     pub async fn get_bookmark_with_user_data(
         db: &Pool<Postgres>,
         user_id: &Uuid,
@@ -129,7 +129,7 @@ impl BookmarkTable {
         Ok(result)
     }
 
-    #[instrument]
+    #[instrument(skip(tx))]
     pub async fn update_tags(
         tx: &mut Transaction<'_, Postgres>,
         user_id: &Uuid,

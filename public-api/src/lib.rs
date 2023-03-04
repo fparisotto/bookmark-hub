@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use secrecy::SecretString;
 use std::str::FromStr;
 use std::sync::Arc;
 use strum_macros::EnumString;
@@ -26,9 +27,8 @@ pub enum Env {
 
 pub struct Config {
     pub app_env: Env,
-    pub database_url: String,
+    pub database_url: SecretString,
     pub database_connection_pool_size: u8,
-    pub hmac_key: String,
     pub auth_keys: Keys,
     pub loki_url: Option<Url>,
 }
@@ -49,9 +49,8 @@ impl Config {
             .and_then(|url| Url::parse(&url).ok());
         Ok(Config {
             app_env,
-            database_url,
+            database_url: database_url.into(),
             database_connection_pool_size: pool_size,
-            hmac_key,
             auth_keys,
             loki_url,
         })
