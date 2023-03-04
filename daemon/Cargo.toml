@@ -12,22 +12,22 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 anyhow = "1.0"
-base64-url = "1.4.13"
+base64-url = "1.4"
 chrono = { version = "0.4", features = ["serde"] }
-lol_html = "0.3.1"
-murmur3 = "0.5.1"
-url = { version = "2.3.1", features = ["serde"] }
-uuid = {version = "1.1.2", features = ["v4", "serde"]}
+lol_html = "0.3"
+murmur3 = "0.5"
+url = { version = "2.3", features = ["serde"] }
+uuid = {version = "1.1", features = ["v4", "serde"]}
 
-reqwest = {version = "0.11.11", features = ["json"] }
+reqwest = {version = "0.11", features = ["json"] }
 
 tokio = { version = "1", features =["full"] }
 futures = "0.3"
 
 sqlx = { version = "0.6", features = ["postgres", "runtime-tokio-rustls", "uuid", "chrono", "json"] }
 
-aws-config = "0.52.0"
-aws-sdk-s3 = "0.22.0"
-tracing-loki = "0.2.1"
-strum = "0.24.1"
-strum_macros = "0.24.3"
+aws-config = "0.52"
+aws-sdk-s3 = "0.22"
+tracing-loki = "0.2"
+strum = "0.24"
+strum_macros = "0.24"
