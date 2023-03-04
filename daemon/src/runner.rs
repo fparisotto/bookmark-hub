@@ -81,7 +81,7 @@ impl From<&Bookmark> for DatabaseBookmark {
     }
 }
 
-#[instrument]
+#[instrument(skip_all)]
 pub async fn run(
     pool: &Pool<Postgres>,
     http: &HttpClient,
@@ -151,7 +151,7 @@ pub async fn run(
     }
 }
 
-#[instrument]
+#[instrument(skip(pool, http, s3_client, config))]
 async fn handle_task(
     pool: &Pool<Postgres>,
     http: &HttpClient,
@@ -171,7 +171,7 @@ async fn handle_task(
     Ok(())
 }
 
-#[instrument]
+#[instrument(skip(pool, http, s3_client, config))]
 async fn crease_or_retrieve_bookmark(
     pool: &Pool<Postgres>,
     http: &HttpClient,
@@ -211,7 +211,7 @@ async fn crease_or_retrieve_bookmark(
     }
 }
 
-#[instrument]
+#[instrument(skip(pool))]
 async fn peek_task(pool: &Pool<Postgres>, now: DateTime<Utc>) -> Result<Vec<Task>> {
     // https://softwaremill.com/mqperf/#postgresql
     let sql = r#"
@@ -238,7 +238,7 @@ async fn peek_task(pool: &Pool<Postgres>, now: DateTime<Utc>) -> Result<Vec<Task
     Ok(result)
 }
 
-#[instrument]
+#[instrument(skip(pool))]
 async fn find_bookmark_by_url(
     pool: &Pool<Postgres>,
     url: &str,
@@ -274,7 +274,7 @@ async fn save_static_content(
     Ok(())
 }
 
-#[instrument]
+#[instrument(skip(pool))]
 async fn update_task(
     pool: &Pool<Postgres>,
     task: &Task,
@@ -295,7 +295,7 @@ async fn update_task(
     Ok(())
 }
 
-#[instrument]
+#[instrument(skip(pool))]
 async fn save_user_bookmark(
     pool: &Pool<Postgres>,
     bookmark: &DatabaseBookmark,
@@ -318,7 +318,7 @@ async fn save_user_bookmark(
     Ok(result)
 }
 
-#[instrument]
+#[instrument(skip(pool))]
 async fn save_bookmark_into_database(
     pool: &Pool<Postgres>,
     bookmark: &DatabaseBookmark,
