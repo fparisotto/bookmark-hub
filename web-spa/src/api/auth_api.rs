@@ -14,7 +14,7 @@ pub struct LoginResponse {
     pub token_type: String,
 }
 
-#[derive(PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct UserProfileResponse {
     pub user_id: Uuid,
     pub email: String,

@@ -1,16 +1,15 @@
 use yew::prelude::*;
-use yew_router::prelude::{use_navigator, Navigator};
 
-use crate::{
-    api::search_api::SearchResultItem, components::atoms::safe_html::BlockquoteHtml, router::Route,
-};
+use crate::{api::search_api::SearchResultItem, components::atoms::safe_html::BlockquoteHtml};
 
 #[derive(Debug, Clone, PartialEq, Properties)]
 pub struct Props {
     pub results: Vec<SearchResultItem>,
+    pub on_item_selected: Callback<SearchResultItem>,
 }
 
-fn article(history: Navigator, item: SearchResultItem) -> Html {
+fn article(callback: Callback<SearchResultItem>, item: SearchResultItem) -> Html {
+    let item_for_event = item.clone();
     let tags = item
         .tags
         .unwrap_or_default()
@@ -22,9 +21,7 @@ fn article(history: Navigator, item: SearchResultItem) -> Html {
         None => html! { <></>},
     };
     let on_click = Callback::from(move |_| {
-        history.push(&Route::Bookmark {
-            id: item.bookmark_id.clone(),
-        })
+        callback.emit(item_for_event.clone());
     });
     html! {
     <article class="prose">
@@ -41,20 +38,19 @@ fn article(history: Navigator, item: SearchResultItem) -> Html {
 
 #[function_component(MainSearchResult)]
 pub fn main_search_result(props: &Props) -> Html {
-    let history = use_navigator().expect("navigator");
     let results = props.results.clone();
     html! {
-    <main class="container col-span-5 p-4">
-        {
-            results.into_iter().map(|bookmark| {
-                html! {
-                    <>
-                        {article(history.clone(), bookmark)}
-                        <div class="divider"></div>
-                    </>
-                }
-            }).collect::<Html>()
-        }
-    </main>
+        <main class="container col-span-5 p-4">
+            {
+                results.into_iter().map(|bookmark| {
+                    html! {
+                        <>
+                            {article(props.on_item_selected.clone(), bookmark)}
+                            <div class="divider"></div>
+                        </>
+                    }
+                }).collect::<Html>()
+            }
+        </main>
     }
 }

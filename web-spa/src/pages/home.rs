@@ -1,25 +1,24 @@
-use yew::prelude::*;
-use yew_router::prelude::use_navigator;
-use yewdux::prelude::*;
+use yew::{platform::spawn_local, prelude::*};
 
 use crate::{
     api::{
-        bookmarks_api,
+        bookmarks_api::{self, Bookmark},
         search_api::{self, SearchRequest, SearchResultItem, SearchType, TagFilterType},
         tags_api::Tag,
     },
     components::composite::{
         add_bookmark_modal::{AddBookmarkData, AddBookmarkModal},
         aside_tags::{AsideTags, TagCheckedEvent},
+        bookmark_reader::BookmarkReader,
         main_search_result::MainSearchResult,
         navigation_bar::{NavigationBar, SearchInputSubmit},
     },
-    router::Route,
     user_session::UserSession,
 };
 
 #[derive(Clone, PartialEq, Default, Debug)]
 pub struct HomeState {
+    pub user_session: UserSession,
     pub bookmarks: Vec<SearchResultItem>,
     pub tags: Vec<Tag>,
     pub tags_filter: Vec<String>,
@@ -27,6 +26,7 @@ pub struct HomeState {
     pub search_type: SearchType,
     pub new_bookmark_url: String,
     pub new_bookmark_tags: Vec<String>,
+    pub bookmark_read: Option<Bookmark>,
 }
 
 impl From<HomeState> for SearchRequest {
@@ -56,17 +56,14 @@ impl From<HomeState> for SearchRequest {
     }
 }
 
-#[function_component(Home)]
-pub fn home() -> Html {
-    let (store, _) = use_store::<UserSession>();
-    let token = store.token.clone();
+#[derive(Debug, Clone, PartialEq, Properties)]
+pub struct Props {
+    pub user_session: UserSession,
+}
 
-    // FIXME
-    let history = use_navigator().expect("navigator");
-    if !store.logged() {
-        history.push(&Route::Login);
-        log::info!("User not logged");
-    }
+#[function_component(Home)]
+pub fn home(props: &Props) -> Html {
+    let token = props.user_session.token.clone();
 
     let state = use_state(HomeState::default);
 
@@ -74,7 +71,7 @@ pub fn home() -> Html {
         let token = token.clone();
         Callback::from(move |event: AddBookmarkData| {
             let token = token.clone();
-            wasm_bindgen_futures::spawn_local(async move {
+            spawn_local(async move {
                 // FIXME notify the user about the outcome
                 match bookmarks_api::add_bookmark(&token, event.into()).await {
                     Ok(result) => log::info!(
@@ -89,10 +86,11 @@ pub fn home() -> Html {
 
     let on_search_submit = {
         let state = state.clone();
+        let token = token.clone();
         Callback::from(move |event: SearchInputSubmit| {
             let state = state.clone();
             let token = token.clone();
-            wasm_bindgen_futures::spawn_local(async move {
+            spawn_local(async move {
                 let mut home = (*state).clone();
                 home.search_input = event.input.clone();
                 home.search_type = event.search_type.clone();
@@ -132,14 +130,55 @@ pub fn home() -> Html {
         })
     };
 
+    let on_item_selected = {
+        let state = state.clone();
+        Callback::from(move |event: SearchResultItem| {
+            let state = state.clone();
+            let token = token.clone();
+            spawn_local(async move {
+                match bookmarks_api::get_by_id(&token, &event.bookmark_id).await {
+                    Ok(Some(bookmark)) => {
+                        let mut home = (*state).clone();
+                        home.bookmark_read = Some(bookmark);
+                        state.set(home);
+                    }
+                    Ok(None) => {
+                        log::warn!("Weird, bookmark not found in backend, item={:?}", event);
+                    }
+                    Err(error) => {
+                        log::error!("Fail to fetch bookmark, item={:?}, error={error}", event);
+                    }
+                }
+            });
+        })
+    };
+
+    let on_goback = {
+        let state = state.clone();
+        Callback::from(move |_| {
+            let mut home = (*state).clone();
+            home.bookmark_read = None;
+            state.set(home);
+        })
+    };
+
+    let bookmark_read = state.bookmark_read.clone();
+
     html! {
-        <>
-            <div class="container mx-auto grid grid-cols-6">
-                <NavigationBar add_new_bookmark_modal_id="add-new-bookmark-modal" on_submit={on_search_submit} />
-                <AsideTags tags={state.tags.clone()} on_tag_checked={on_tag_checked} />
-                <MainSearchResult results={state.bookmarks.clone()} />
-            </div>
-            <AddBookmarkModal id="add-new-bookmark-modal" on_submit={on_new_bookmark} />
-        </>
+        if let Some(bookmark) = bookmark_read {
+            <BookmarkReader bookmark={bookmark} on_goback={on_goback} />
+        } else {
+            <>
+                <div class="container mx-auto grid grid-cols-6">
+                    <NavigationBar
+                        email={props.user_session.email.clone()}
+                        add_new_bookmark_modal_id="add-new-bookmark-modal"
+                        on_submit={on_search_submit} />
+                    <AsideTags tags={state.tags.clone()} on_tag_checked={on_tag_checked} />
+                    <MainSearchResult on_item_selected={on_item_selected} results={state.bookmarks.clone()} />
+                </div>
+                <AddBookmarkModal id="add-new-bookmark-modal" on_submit={on_new_bookmark} />
+            </>
+        }
     }
 }
