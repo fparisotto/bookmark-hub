@@ -68,7 +68,7 @@ async fn setup_app(config: Config, db: Pool<Postgres>) -> anyhow::Result<()> {
     let cors_layer = CorsLayer::new()
         .allow_origin(Origin::list(vec![
             "https://bookmark.k8s.home".parse().unwrap(),
-            "http://localhost:*".parse().unwrap(),
+            "http://localhost:8080".parse().unwrap(),
         ]))
         .allow_methods(Any)
         .allow_headers(Any);
