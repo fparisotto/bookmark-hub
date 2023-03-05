@@ -35,7 +35,7 @@ services:
       S3_ACCESS_KEY: ROOTNAME
       S3_SECRET_KEY: CHANGEME123
       S3_ENDPOINT: http://minio:9000
-      S3_BUCKET: bookmark-static
+      S3_BUCKET: bookmark
       S3_REGION: ""
       READABILITY_ENDPOINT: http://readability-api:3001
       DATABASE_URL: postgres://main:main@postgres/main
@@ -52,7 +52,7 @@ services:
     build:
       context: web-spa/
       args:
-        - PUBLIC_API_ENDPOINT=http://public-api:3000
+        - PUBLIC_API_ENDPOINT=http://localhost:3000
     depends_on:
       - public-api
     ports:
@@ -93,42 +93,14 @@ services:
       MINIO_BUCKET: bookmark
     depends_on:
       - minio
-    entrypoint: >
-      /bin/sh -c '
-      cat << EOF > write-policy.json
-      {
-        "Version": "2012-10-17",
-        "Statement": [
-          {
-            "Effect": "Allow",
-            "Action": [
-              "s3:GetBucketLocation",
-              "s3:ListBucket",
-              "s3:ListBucketMultipartUploads",
-              "s3:ListBucketVersions"
-            ],
-            "Resource": ["arn:aws:s3:::<BUCKET-NAME>"]
-          },
-          {
-            "Effect": "Allow",
-            "Action": [
-              "s3:AbortMultipartUpload",
-              "s3:DeleteObject",
-              "s3:GetObject",
-              "s3:ListMultipartUploadParts",
-              "s3:PutObject"
-            ],
-            "Resource": ["arn:aws:s3:::<BUCKET-NAME>/*"]
-          }
-        ]
-      }
-      EOF &&
+    entrypoint: bash -c "
+      echo '{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"s3:GetBucketLocation\",\"s3:ListBucket\",\"s3:ListBucketMultipartUploads\",\"s3:ListBucketVersions\"],\"Resource\":[\"arn:aws:s3:::<BUCKET-NAME>\"]},{\"Effect\":\"Allow\",\"Action\":[\"s3:AbortMultipartUpload\",\"s3:DeleteObject\",\"s3:GetObject\",\"s3:ListMultipartUploadParts\",\"s3:PutObject\"],\"Resource\":[\"arn:aws:s3:::<BUCKET-NAME>/*\"]}]}' > write-policy.json &&
       /usr/bin/mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD} &&
       /usr/bin/mc mb local/$${MINIO_BUCKET} &&
       /usr/bin/mc anonymous set download local/$${MINIO_BUCKET} &&
       /usr/bin/mc admin user add local $${MINIO_ACCESS_KEY} $${MINIO_SECRET_KEY} &&
       /usr/bin/mc admin policy add local write-policy ./write-policy.json &&
-      /usr/bin/mc admin policy set local write-policy user=$${MINIO_ACCESS_KEY}'
+      /usr/bin/mc admin policy set local write-policy user=$${MINIO_ACCESS_KEY}"
 
 volumes:
   postgres-data:
