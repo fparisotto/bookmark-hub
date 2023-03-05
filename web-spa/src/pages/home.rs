@@ -132,6 +132,7 @@ pub fn home(props: &Props) -> Html {
 
     let on_item_selected = {
         let state = state.clone();
+        let token = token.clone();
         Callback::from(move |event: SearchResultItem| {
             let state = state.clone();
             let token = token.clone();
@@ -162,11 +163,37 @@ pub fn home(props: &Props) -> Html {
         })
     };
 
+    let on_new_tags = {
+        let state = state.clone();
+        let token = token.clone();
+        Callback::from(move |event: Vec<String>| {
+            let token = token.clone();
+            let state = state.clone();
+            let bookmark_id = (*state)
+                .bookmark_read
+                .clone()
+                .expect("not none")
+                .bookmark_id;
+            spawn_local(async move {
+                match bookmarks_api::set_tags(&token, &bookmark_id, event).await {
+                    Ok(bookmark) => {
+                        let mut home = (*state).clone();
+                        home.bookmark_read = Some(bookmark);
+                        state.set(home);
+                    }
+                    Err(error) => {
+                        log::error!("Fail to set tags to bookmark={bookmark_id}, error={error}",);
+                    }
+                }
+            });
+        })
+    };
+
     let bookmark_read = state.bookmark_read.clone();
 
     html! {
         if let Some(bookmark) = bookmark_read {
-            <BookmarkReader bookmark={bookmark} on_goback={on_goback} />
+            <BookmarkReader bookmark={bookmark} on_goback={on_goback} on_new_tags={on_new_tags} />
         } else {
             <>
                 <div class="container mx-auto grid grid-cols-6">
