@@ -103,14 +103,11 @@ async fn new_bookmark(
     Extension(app_context): Extension<AppContext>,
     Json(input): Json<NewBookmark>,
 ) -> Result<(StatusCode, Json<BookmarkTask>)> {
+    // FIXME put this validation in a better place
+    let mut tags = input.tags.clone().unwrap_or_default();
+    tags.retain(|t| !t.trim().is_empty());
     let mut tx = app_context.db.begin().await?;
-    let response = BookmarkTaskTable::create(
-        &mut tx,
-        &claims.user_id,
-        &input.url,
-        &input.tags.unwrap_or_default(),
-    )
-    .await?;
+    let response = BookmarkTaskTable::create(&mut tx, &claims.user_id, &input.url, &tags).await?;
     tx.commit().await?;
     Ok((StatusCode::CREATED, Json(response)))
 }

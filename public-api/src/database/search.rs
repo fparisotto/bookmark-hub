@@ -5,36 +5,7 @@ use tokio::try_join;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::error::{Error, Result};
-
-#[derive(Debug, Deserialize)]
-pub enum TagFilterType {
-    And,
-    Or,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SearchRequest {
-    query: Option<String>,
-    phrase: Option<String>,
-    tags: Option<Vec<String>>,
-    tags_filter_type: Option<TagFilterType>,
-    limit: Option<i32>,
-}
-
-impl SearchRequest {
-    pub fn validate(&self) -> Result<()> {
-        let mut errors: Vec<(&'static str, &'static str)> = Vec::new();
-        if self.query.is_some() && self.phrase.is_some() {
-            errors.push(("query", "query and phrase are mutually exclusive"));
-        }
-        if errors.is_empty() {
-            Ok(())
-        } else {
-            Err(Error::unprocessable_entity(errors))
-        }
-    }
-}
+use crate::error::Result;
 
 #[derive(Debug, sqlx::FromRow, Serialize)]
 struct TagCount {
@@ -46,6 +17,7 @@ struct TagCount {
 pub struct SearchResponse {
     bookmarks: Vec<SearchResultItem>,
     tags: Vec<TagCount>,
+    total: u64,
 }
 
 #[derive(Debug, sqlx::FromRow, Serialize, Deserialize)]
@@ -62,50 +34,127 @@ pub struct SearchResultItem {
     pub user_updated_at: Option<DateTime<Utc>>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub enum TagFilter {
+    And(Vec<String>),
+    Or(Vec<String>),
+    Any,
+    Untagged,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SearchRequest {
+    query: Option<String>,
+    tags_filter: Option<TagFilter>,
+    limit: Option<i32>,
+}
+
 pub struct SearchService;
 
 impl SearchService {
-    fn search_query_builder<'a>(
-        user_id: &'a Uuid,
-        request: &'a SearchRequest,
-        tag_aggregation: bool,
-    ) -> QueryBuilder<'a, Postgres> {
+    #[instrument(skip(db))]
+    pub async fn search(
+        db: &Pool<Postgres>,
+        user_id: &Uuid,
+        request: SearchRequest,
+    ) -> Result<SearchResponse> {
+        // FIXME this mimics a meillisearch query, replace me in future
+        let f_search = SearchService::run_search(db, user_id, &request);
+        let f_aggregation = SearchService::run_aggregation(db, user_id, &request);
+        let f_total = SearchService::run_total(db, user_id, &request);
+        let (bookmarks, tags, total) = try_join!(f_search, f_aggregation, f_total)?;
+        Ok(SearchResponse {
+            bookmarks,
+            tags,
+            total,
+        })
+    }
+
+    #[instrument(skip(db))]
+    async fn run_total(
+        db: &Pool<Postgres>,
+        user_id: &Uuid,
+        request: &SearchRequest,
+    ) -> Result<u64> {
         let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new("");
-        if tag_aggregation {
-            query_builder.push(
-                r#"
-            with tags as (
-                select
-                    unnest(bu.tags) as tag
-                from
-                    bookmark_user bu
-                inner join
-                    bookmark b using(bookmark_id)
+        query_builder.push(
+            r#"
+            select
+                count(1)
+            from
+                bookmark_user bu
+            inner join
+                bookmark b using(bookmark_id)
             "#,
-            );
-        } else {
-            query_builder.push("select ");
-            match (&request.query, &request.phrase) {
-                (Some(query), None) => {
-                    query_builder
-                        .push(" ts_headline('english', b.text_content, to_tsquery('english', ")
-                        .push_bind(query)
-                        .push(" ), 'StartSel=<mark>, StopSel=</mark>') as search_match, ");
-                }
-                (None, Some(phrase)) => {
-                    query_builder
-                        .push(
-                            " ts_headline('english', b.text_content, phraseto_tsquery('english', ",
-                        )
-                        .push_bind(phrase)
-                        .push(" ), 'StartSel=<mark>, StopSel=</mark>') as search_match, ");
-                }
-                _ => {
-                    query_builder.push(" null as search_match, ");
-                }
+        );
+        query_builder
+            .push(" where bu.user_id = ")
+            .push_bind(user_id);
+        match request.tags_filter.clone().unwrap_or(TagFilter::Any) {
+            TagFilter::And(tags) => {
+                query_builder.push(" and bu.tags @> ").push_bind(tags);
             }
-            query_builder.push(
-                r#"
+            TagFilter::Or(tags) => {
+                query_builder.push(" and bu.tags && ").push_bind(tags);
+            }
+            TagFilter::Untagged => {
+                query_builder.push(" and cardinality(bu.tags) = 0 ");
+            }
+            TagFilter::Any => (),
+        }
+        if let Some(query) = &request.query {
+            if query.trim().starts_with('"') && query.trim().ends_with('"') {
+                query_builder
+                    .push(" and b.search_tokens @@ phraseto_tsquery('english', ")
+                    .push_bind(query)
+                    .push(" )");
+            } else {
+                let query = if query.contains('&') {
+                    query.to_owned()
+                } else {
+                    query.split(' ').collect::<Vec<_>>().join(" | ")
+                };
+                query_builder
+                    .push(" and b.search_tokens @@ to_tsquery('english', ")
+                    .push_bind(query.clone())
+                    .push(" )");
+            }
+        }
+        tracing::debug!("Total query {}", &query_builder.sql());
+        let (total,): (i64,) = query_builder.build_query_as().fetch_one(db).await?;
+        Ok(total as u64)
+    }
+
+    #[instrument(skip(db))]
+    async fn run_search(
+        db: &Pool<Postgres>,
+        user_id: &Uuid,
+        request: &SearchRequest,
+    ) -> Result<Vec<SearchResultItem>> {
+        let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new("");
+        query_builder.push("select ");
+        if let Some(query) = &request.query {
+            if query.trim().starts_with('"') && query.trim().ends_with('"') {
+                query_builder
+                    .push(" ts_headline('english', b.text_content, phraseto_tsquery('english', ")
+                    .push_bind(query)
+                    .push(" ), 'StartSel=<mark>, StopSel=</mark>') as search_match, ");
+            } else {
+                let query = if query.contains('&') {
+                    query.to_owned()
+                } else {
+                    query.split(' ').collect::<Vec<_>>().join(" | ")
+                };
+                query_builder
+                    .push(" ts_headline('english', b.text_content, to_tsquery('english', ")
+                    .push_bind(query)
+                    .push(" ), 'StartSel=<mark>, StopSel=</mark>') as search_match, ");
+            }
+        } else {
+            query_builder.push(" null as search_match, ");
+        }
+        query_builder.push(
+            r#"
                 b.*,
                 bu.user_id,
                 bu.tags,
@@ -116,71 +165,48 @@ impl SearchService {
             inner join
                 bookmark b using(bookmark_id)
             "#,
-            );
-        }
+        );
         query_builder
             .push(" where bu.user_id = ")
             .push_bind(user_id);
-
-        match (&request.tags_filter_type, &request.tags) {
-            (Some(TagFilterType::And), Some(tags)) if !tags.is_empty() => {
+        match request.tags_filter.clone().unwrap_or(TagFilter::Any) {
+            TagFilter::And(tags) => {
                 query_builder.push(" and bu.tags @> ").push_bind(tags);
             }
-            (Some(TagFilterType::Or), Some(tags)) if !tags.is_empty() => {
+            TagFilter::Or(tags) => {
                 query_builder.push(" and bu.tags && ").push_bind(tags);
             }
-            _ => (),
-        }
-
-        match (&request.query, &request.phrase) {
-            (Some(query), None) => {
-                query_builder
-                    .push(" and b.search_tokens @@ to_tsquery('english', ")
-                    .push_bind(query)
-                    .push(" ) order by ts_rank(b.search_tokens, to_tsquery('english', ")
-                    .push_bind(query)
-                    .push(" )) ");
+            TagFilter::Untagged => {
+                query_builder.push(" and cardinality(bu.tags) = 0 ");
             }
-            (None, Some(phrase)) => {
+            TagFilter::Any => (),
+        }
+        if let Some(query) = &request.query {
+            if query.trim().starts_with('"') && query.trim().ends_with('"') {
                 query_builder
                     .push(" and b.search_tokens @@ phraseto_tsquery('english', ")
-                    .push_bind(phrase)
+                    .push_bind(query)
                     .push(" ) order by ts_rank(b.search_tokens, phraseto_tsquery('english', ")
-                    .push_bind(phrase)
+                    .push_bind(query)
+                    .push(" )) ");
+            } else {
+                let query = if query.contains('&') {
+                    query.to_owned()
+                } else {
+                    query.split(' ').collect::<Vec<_>>().join(" | ")
+                };
+                query_builder
+                    .push(" and b.search_tokens @@ to_tsquery('english', ")
+                    .push_bind(query.clone())
+                    .push(" ) order by ts_rank(b.search_tokens, to_tsquery('english', ")
+                    .push_bind(query.clone())
                     .push(" )) ");
             }
-            _ => (),
         }
-
-        if tag_aggregation {
-            let sql = r#"
-            )
-            select
-                tag,
-                count(1) as count
-            from
-                tags t
-            group by
-                tag
-            "#;
-            query_builder.push(sql);
-        } else {
-            let limit_value = request.limit.unwrap_or(20);
-            query_builder.push(" limit ").push_bind(limit_value);
-        }
-        query_builder
-    }
-
-    #[instrument(skip(db))]
-    async fn run_search(
-        db: &Pool<Postgres>,
-        user_id: &Uuid,
-        request: &SearchRequest,
-    ) -> Result<Vec<SearchResultItem>> {
-        let mut search_query: QueryBuilder<Postgres> =
-            SearchService::search_query_builder(user_id, request, false);
-        tracing::debug!("Search query {}", &search_query.sql());
-        let bookmarks: Vec<SearchResultItem> = search_query.build_query_as().fetch_all(db).await?;
+        let limit_value = request.limit.unwrap_or(20);
+        query_builder.push(" limit ").push_bind(limit_value);
+        tracing::debug!("Search query {}", &query_builder.sql());
+        let bookmarks: Vec<SearchResultItem> = query_builder.build_query_as().fetch_all(db).await?;
         Ok(bookmarks)
     }
 
@@ -190,23 +216,68 @@ impl SearchService {
         user_id: &Uuid,
         request: &SearchRequest,
     ) -> Result<Vec<TagCount>> {
-        let mut aggregation_query: QueryBuilder<Postgres> =
-            SearchService::search_query_builder(user_id, request, true);
-        tracing::debug!("Aggregation query {}", &aggregation_query.sql());
-        let tags: Vec<TagCount> = aggregation_query.build_query_as().fetch_all(db).await?;
+        let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new("");
+        query_builder.push(
+            r#"
+            with tags as (
+                select
+                    unnest(bu.tags) as tag
+                from
+                    bookmark_user bu
+                inner join
+                    bookmark b using(bookmark_id)
+            "#,
+        );
+        query_builder
+            .push(" where bu.user_id = ")
+            .push_bind(user_id);
+        match request.tags_filter.clone().unwrap_or(TagFilter::Any) {
+            TagFilter::And(tags) => {
+                query_builder.push(" and bu.tags @> ").push_bind(tags);
+            }
+            TagFilter::Or(tags) => {
+                query_builder.push(" and bu.tags && ").push_bind(tags);
+            }
+            TagFilter::Untagged => {
+                query_builder.push(" and cardinality(bu.tags) = 0 ");
+            }
+            TagFilter::Any => (),
+        }
+        if let Some(query) = &request.query {
+            if query.trim().starts_with('"') && query.trim().ends_with('"') {
+                query_builder
+                    .push(" and b.search_tokens @@ phraseto_tsquery('english', ")
+                    .push_bind(query)
+                    .push(" ) order by ts_rank(b.search_tokens, phraseto_tsquery('english', ")
+                    .push_bind(query)
+                    .push(" )) ");
+            } else {
+                let query = if query.contains('&') {
+                    query.to_owned()
+                } else {
+                    query.split(' ').collect::<Vec<_>>().join(" | ")
+                };
+                query_builder
+                    .push(" and b.search_tokens @@ to_tsquery('english', ")
+                    .push_bind(query.clone())
+                    .push(" ) order by ts_rank(b.search_tokens, to_tsquery('english', ")
+                    .push_bind(query.clone())
+                    .push(" )) ");
+            }
+        }
+        let sql = r#"
+            )
+            select
+                tag,
+                count(1) as count
+            from
+                tags t
+            group by
+                tag
+        "#;
+        query_builder.push(sql);
+        tracing::debug!("Aggregation query {}", &query_builder.sql());
+        let tags: Vec<TagCount> = query_builder.build_query_as().fetch_all(db).await?;
         Ok(tags)
-    }
-
-    #[instrument(skip(db))]
-    pub async fn search(
-        db: &Pool<Postgres>,
-        user_id: &Uuid,
-        request: SearchRequest,
-    ) -> Result<SearchResponse> {
-        // FIXME this mimics a meillisearch query, replace me in future
-        let f_search = SearchService::run_search(db, user_id, &request);
-        let f_aggregation = SearchService::run_aggregation(db, user_id, &request);
-        let (bookmarks, tags) = try_join!(f_search, f_aggregation)?;
-        Ok(SearchResponse { bookmarks, tags })
     }
 }

@@ -17,7 +17,6 @@ async fn search_bookmark(
     Extension(app_context): Extension<AppContext>,
     Json(input): Json<SearchRequest>,
 ) -> Result<Json<SearchResponse>> {
-    input.validate()?;
     let result = SearchService::search(&app_context.db, &claims.user_id, input).await?;
     Ok(Json(result))
 }
