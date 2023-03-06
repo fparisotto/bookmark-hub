@@ -165,11 +165,26 @@ jsonpath "$.bookmarks[0].url" == "https://tokio.rs/tokio/topics/tracing"
 jsonpath "$.bookmarks[0].search_match" contains "tracing"
 
 
+# search by query with and
+POST http://localhost:3000/api/v1/search
+Authorization: Bearer {{token}}
+{
+  "query": "tracing & tokio"
+}
+
+HTTP/1.1 200
+[Asserts]
+jsonpath "$.bookmarks" count == 1
+jsonpath "$.bookmarks[0].url" == "https://tokio.rs/tokio/topics/tracing"
+jsonpath "$.bookmarks[0].search_match" contains "tracing"
+jsonpath "$.bookmarks[0].search_match" contains "Tokio"
+
+
 # search by phrase
 POST http://localhost:3000/api/v1/search
 Authorization: Bearer {{token}}
 {
-  "phrase": "we are happy to announce the initial release of tokio-metrics"
+  "query": "\"we are happy to announce the initial release of tokio-metrics\""
 }
 
 HTTP/1.1 200
