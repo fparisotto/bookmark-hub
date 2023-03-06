@@ -3,7 +3,7 @@ use yew::{platform::spawn_local, prelude::*};
 use crate::{
     api::{
         bookmarks_api::{self, Bookmark},
-        search_api::{self, SearchRequest, SearchResultItem, SearchType, TagFilterType},
+        search_api::{self, SearchRequest, SearchResultItem, TagFilter},
         tags_api::Tag,
     },
     components::composite::{
@@ -23,7 +23,6 @@ pub struct HomeState {
     pub tags: Vec<Tag>,
     pub tags_filter: Vec<String>,
     pub search_input: String,
-    pub search_type: SearchType,
     pub new_bookmark_url: String,
     pub new_bookmark_tags: Vec<String>,
     pub bookmark_read: Option<Bookmark>,
@@ -31,27 +30,20 @@ pub struct HomeState {
 
 impl From<HomeState> for SearchRequest {
     fn from(value: HomeState) -> Self {
-        let mut query: Option<String> = None;
-        let mut phrase: Option<String> = None;
-        let mut tags: Option<Vec<String>> = None;
-        match value.search_type {
-            SearchType::Query if !value.search_input.is_empty() => {
-                query = Some(value.search_input);
-            }
-            SearchType::Phrase if !value.search_input.is_empty() => {
-                phrase = Some(value.search_input);
-            }
-            _ => (),
-        }
-        if !value.tags_filter.is_empty() {
-            tags = Some(value.tags_filter);
-        }
+        let query: Option<String> = if value.search_input.is_empty() {
+            None
+        } else {
+            Some(value.search_input)
+        };
+        let tags_filter: Option<TagFilter> = if value.tags_filter.is_empty() {
+            None
+        } else {
+            Some(TagFilter::Or(value.tags_filter))
+        };
         SearchRequest {
             query,
-            phrase,
-            tags,
-            tags_filter_type: Some(TagFilterType::Or), // FIXME missing UI for this
-            limit: None,
+            tags_filter,
+            limit: Some(20),
         }
     }
 }
@@ -93,7 +85,6 @@ pub fn home(props: &Props) -> Html {
             spawn_local(async move {
                 let mut home = (*state).clone();
                 home.search_input = event.input.clone();
-                home.search_type = event.search_type.clone();
                 match search_api::search(&token, home.clone().into()).await {
                     Ok(result) => {
                         log::info!("result={:?}", result);

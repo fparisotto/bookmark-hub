@@ -29,17 +29,17 @@ fn render_tag(on_tag_checked: Callback<TagCheckedEvent>, tag: Tag) -> Html {
     };
     let tag_label = format!("{} ({})", &tag.tag, &tag.count);
     html! {
-    <li>
-        <label class="label cursor-pointer justify-start gap-2">
-            <InputCheckbox
-                id={tag.tag.clone()}
-                name={tag.tag.clone()}
-                value={tag.tag.clone()}
-                class={classes!("checkbox")}
-                on_change={on_change} />
-            <span class="label-text">{tag_label}</span>
-        </label>
-    </li>
+        <li>
+            <label class="label cursor-pointer justify-start gap-2">
+                <InputCheckbox
+                    id={tag.tag.clone()}
+                    name={tag.tag.clone()}
+                    value={tag.tag.clone()}
+                    class={classes!("checkbox")}
+                    on_change={on_change} />
+                <span class="label-text">{tag_label}</span>
+            </label>
+        </li>
     }
 }
 
@@ -52,10 +52,10 @@ pub fn aside_tags(props: &Props) -> Html {
         .map(|tag| render_tag(props.on_tag_checked.clone(), tag))
         .collect::<Html>();
     html! {
-    <aside class="col-span-1 p-4">
-        <ul>
-            {tags}
-        </ul>
-    </aside>
+        <aside class="col-span-1 p-4">
+            <ul>
+                {tags}
+            </ul>
+        </aside>
     }
 }

@@ -45,11 +45,17 @@ pub struct SearchResultItem {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub enum TagFilter {
+    And(Vec<String>),
+    Or(Vec<String>),
+    Any,
+    Untagged,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SearchRequest {
     pub query: Option<String>,
-    pub phrase: Option<String>,
-    pub tags: Option<Vec<String>>,
-    pub tags_filter_type: Option<TagFilterType>,
+    pub tags_filter: Option<TagFilter>,
     pub limit: Option<i32>,
 }
 
