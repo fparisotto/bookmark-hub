@@ -106,9 +106,8 @@ async fn new_bookmark(
     // FIXME put this validation in a better place
     let mut tags = input.tags.clone().unwrap_or_default();
     tags.retain(|t| !t.trim().is_empty());
-    let mut tx = app_context.db.begin().await?;
-    let response = BookmarkTaskTable::create(&mut tx, &claims.user_id, &input.url, &tags).await?;
-    tx.commit().await?;
+    let response =
+        BookmarkTaskTable::create(&app_context.db, &claims.user_id, &input.url, &tags).await?;
     Ok((StatusCode::CREATED, Json(response)))
 }
 
@@ -119,15 +118,13 @@ async fn set_tags(
     Path(bookmark_id): Path<String>,
     Json(tags): Json<Tags>,
 ) -> Result<Json<BookmarkWithUserData>> {
-    let mut tx = app_context.db.begin().await?;
     let updated = BookmarkTable::update_tags(
-        &mut tx,
+        &app_context.db,
         &claims.user_id,
         &bookmark_id,
         TagOperation::Set(tags.tags),
     )
     .await?;
-    tx.commit().await?;
     Ok(Json(updated))
 }
 
@@ -138,14 +135,12 @@ async fn append_tags(
     Path(bookmark_id): Path<String>,
     Json(tags): Json<Tags>,
 ) -> Result<Json<BookmarkWithUserData>> {
-    let mut tx = app_context.db.begin().await?;
     let updated = BookmarkTable::update_tags(
-        &mut tx,
+        &app_context.db,
         &claims.user_id,
         &bookmark_id,
         TagOperation::Append(tags.tags),
     )
     .await?;
-    tx.commit().await?;
     Ok(Json(updated))
 }

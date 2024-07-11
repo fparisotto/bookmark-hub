@@ -1,29 +1,26 @@
-use axum::extract::MatchedPath;
-use axum::http::Request;
-use axum::middleware;
-use axum::middleware::Next;
-use axum::response::IntoResponse;
-use axum::routing::get;
-use axum::Extension;
-use axum::Router;
-
-use metrics_exporter_prometheus::Matcher;
-use metrics_exporter_prometheus::PrometheusBuilder;
+use axum::{
+    extract::{MatchedPath, Request},
+    middleware::{self, Next},
+    response::IntoResponse,
+    routing::get,
+    Extension, Router,
+};
+use metrics_exporter_prometheus::{Matcher, PrometheusBuilder};
+use std::{future::ready, time::Instant};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use sqlx::{Pool, Postgres};
 
 use std::collections::HashMap;
-use std::future::ready;
 use std::io;
-use std::time::Instant;
-use std::{net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 
 use tokio::signal::unix::SignalKind;
 
-use tower_http::cors::{Any, CorsLayer, Origin};
+use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 
-use tracing_subscriber::{prelude::*, EnvFilter};
+use tracing_subscriber::EnvFilter;
 
 use public_api::{database, endpoints, AppContext, Config, Env};
 
@@ -66,10 +63,10 @@ async fn setup_app(config: Config, db: Pool<Postgres>) -> anyhow::Result<()> {
     };
 
     let cors_layer = CorsLayer::new()
-        .allow_origin(Origin::list(vec![
-            "https://bookmark.k8s.home".parse().unwrap(),
-            "http://localhost:8080".parse().unwrap(),
-        ]))
+        .allow_origin([
+            "https://bookmark.k8s.home".parse()?,
+            "http://localhost:8080".parse()?,
+        ])
         .allow_methods(Any)
         .allow_headers(Any);
 
@@ -81,10 +78,9 @@ async fn setup_app(config: Config, db: Pool<Postgres>) -> anyhow::Result<()> {
         .layer(cors_layer)
         .layer(TraceLayer::new_for_http());
 
-    let address = SocketAddr::from(([0, 0, 0, 0], 3000));
-    tracing::info!("Server running, listening on {}", address);
-    axum::Server::bind(&address)
-        .serve(app.into_make_service())
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
+    tracing::info!("Server running, listening on {:?}", &listener);
+    axum::serve(listener, app.into_make_service())
         .with_graceful_shutdown(shutdown_signal())
         .await?;
 
@@ -125,22 +121,19 @@ async fn setup_metrics_server() -> anyhow::Result<()> {
         .set_buckets_for_metric(
             Matcher::Full("http_requests_duration_seconds".to_string()),
             EXPONENTIAL_SECONDS,
-        )
-        .unwrap()
+        )?
         .install_recorder()?;
 
     let router = Router::new().route("/metrics", get(move || ready(handle.render())));
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], 9090));
-    tracing::debug!("Metrics server listening on {}", addr);
-    axum::Server::bind(&addr)
-        .serve(router.into_make_service())
-        .await?;
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:9090").await?;
+    tracing::debug!("Metrics server listening on {:?}", &listener);
+    axum::serve(listener, router.into_make_service()).await?;
 
     Ok(())
 }
 
-async fn track_metrics<B>(req: Request<B>, next: Next<B>) -> impl IntoResponse {
+async fn track_metrics(req: Request, next: Next) -> impl IntoResponse {
     let start = Instant::now();
     let path = if let Some(matched_path) = req.extensions().get::<MatchedPath>() {
         matched_path.as_str().to_owned()
@@ -160,8 +153,8 @@ async fn track_metrics<B>(req: Request<B>, next: Next<B>) -> impl IntoResponse {
         ("status", status),
     ];
 
-    metrics::increment_counter!("http_requests_total", &labels);
-    metrics::histogram!("http_requests_duration_seconds", latency, &labels);
+    metrics::counter!("http_requests_total", &labels).increment(1);
+    metrics::histogram!("http_requests_duration_seconds", &labels).record(latency);
 
     response
 }

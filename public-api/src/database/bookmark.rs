@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::{Pool, Postgres, Transaction};
+use sqlx::{Pool, Postgres};
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -82,14 +82,14 @@ impl BookmarkTable {
         tag: &str,
     ) -> Result<Vec<BookmarkWithUserData>> {
         let sql = r#"
-        select 
-            b.*, 
-            bu.user_id, 
-            bu.tags, 
+        select
+            b.*,
+            bu.user_id,
+            bu.tags,
             bu.created_at as user_created_at,
             bu.updated_at as user_updated_at
-        from bookmark_user bu 
-        inner join bookmark b using(bookmark_id) 
+        from bookmark_user bu
+        inner join bookmark b using(bookmark_id)
         where bu.user_id = $1
         and bu.tags @> $2
         order by bu.created_at asc;
@@ -110,14 +110,14 @@ impl BookmarkTable {
         bookmark_id: &String,
     ) -> Result<Option<BookmarkWithUserData>> {
         let sql = r#"
-        select 
-            b.*, 
-            bu.user_id, 
-            bu.tags, 
+        select
+            b.*,
+            bu.user_id,
+            bu.tags,
             bu.created_at as user_created_at,
             bu.updated_at as user_updated_at
-        from bookmark_user bu 
-        inner join bookmark b using(bookmark_id) 
+        from bookmark_user bu
+        inner join bookmark b using(bookmark_id)
         where bu.user_id = $1
         and bookmark_id = $2;
         "#;
@@ -129,9 +129,9 @@ impl BookmarkTable {
         Ok(result)
     }
 
-    #[instrument(skip(tx))]
+    #[instrument(skip(db))]
     pub async fn update_tags(
-        tx: &mut Transaction<'_, Postgres>,
+        db: &Pool<Postgres>,
         user_id: &Uuid,
         bookmark_id: &String,
         operation: TagOperation,
@@ -148,13 +148,13 @@ impl BookmarkTable {
                 where bookmark_id=$2 and user_id=$3
                 returning *
             )
-            select 
+            select
                 b.*,
                 bi.user_id,
                 bi.tags,
                 bi.created_at as user_created_at,
                 bi.updated_at as user_updated_at
-            from update_bookmark_user bi 
+            from update_bookmark_user bi
             inner join bookmark b using(bookmark_id)
             "#
         );
@@ -162,7 +162,7 @@ impl BookmarkTable {
             .bind(tags)
             .bind(bookmark_id)
             .bind(user_id)
-            .fetch_one(tx)
+            .fetch_one(db)
             .await?;
         Ok(result)
     }

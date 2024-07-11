@@ -130,8 +130,8 @@ async fn get_user_profile(
 
 #[debug_handler()]
 async fn sign_up(
-    Json(payload): Json<SignUpPayload>,
     Extension(app_context): Extension<AppContext>,
+    Json(payload): Json<SignUpPayload>,
 ) -> Result<Json<SignUpResponse>> {
     payload.validate()?;
     let hashed_password = auth::hash_password(payload.password).await?;
@@ -153,8 +153,8 @@ async fn sign_up(
 
 #[debug_handler()]
 async fn sign_in(
-    Json(payload): Json<SignInPayload>,
     Extension(app_context): Extension<AppContext>,
+    Json(payload): Json<SignInPayload>,
 ) -> Result<Json<AuthBody>> {
     payload.validate()?;
     let maybe_user = UserTable::get_by_email(&app_context.db, &payload.email).await?;

@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::{Postgres, Transaction};
+use sqlx::{Pool, Postgres};
 use tracing::instrument;
 use url::Url;
 use uuid::Uuid;
@@ -40,15 +40,15 @@ pub struct BookmarkUserTask {
 pub struct BookmarkTaskTable;
 
 impl BookmarkTaskTable {
-    #[instrument(skip(tx))]
+    #[instrument(skip(db))]
     pub async fn create(
-        tx: &mut Transaction<'_, Postgres>,
+        db: &Pool<Postgres>,
         user_id: &Uuid,
         url: &Url,
         tags: &Vec<String>,
     ) -> Result<BookmarkTask> {
         let sql = r#"
-            insert into "bookmark_task" (user_id, url, status, tags) 
+            insert into "bookmark_task" (user_id, url, status, tags)
             values ($1, $2, $3, $4) returning "bookmark_task".*;
         "#;
         let task: BookmarkTask = sqlx::query_as(sql)
@@ -56,7 +56,7 @@ impl BookmarkTaskTable {
             .bind(url.to_string())
             .bind(TaskStatus::Pending)
             .bind(tags)
-            .fetch_one(tx)
+            .fetch_one(db)
             .await?;
         Ok(task)
     }

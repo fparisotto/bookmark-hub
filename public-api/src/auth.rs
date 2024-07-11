@@ -1,10 +1,10 @@
 use argon2::password_hash::SaltString;
 use argon2::{Argon2, PasswordHash};
-use async_trait::async_trait;
 use axum::Extension;
-use axum::{
-    extract::{FromRequest, RequestParts, TypedHeader},
+use axum::{async_trait, extract::FromRequestParts, http::request::Parts, RequestPartsExt};
+use axum_extra::{
     headers::{authorization::Bearer, Authorization},
+    TypedHeader,
 };
 use jsonwebtoken::{decode, encode, Header, Validation};
 use secrecy::{ExposeSecret, SecretString};
@@ -45,21 +45,22 @@ impl Keys {
 }
 
 #[async_trait]
-impl<B> FromRequest<B> for Claims
+impl<S> FromRequestParts<S> for Claims
 where
-    B: Send,
+    S: Send + Sync,
 {
     type Rejection = Error;
 
-    async fn from_request(req: &mut RequestParts<B>) -> std::result::Result<Self, Self::Rejection> {
-        let app_context: Extension<AppContext> = Extension::from_request(req)
-            .await
-            .expect("Bug: AppState should be added as an Extension");
-
-        let TypedHeader(Authorization(bearer)) =
-            TypedHeader::<Authorization<Bearer>>::from_request(req)
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let Extension(app_context): Extension<AppContext> =
+            Extension::from_request_parts(parts, state)
                 .await
-                .map_err(|_| Error::InvalidToken)?;
+                .expect("Bug: AppContext should be added as an Extension");
+
+        let TypedHeader(Authorization(bearer)) = parts
+            .extract::<TypedHeader<Authorization<Bearer>>>()
+            .await
+            .map_err(|_| Error::InvalidToken)?;
 
         let token_data = decode::<Claims>(
             bearer.token(),
@@ -80,7 +81,7 @@ pub fn encode_token(config: &Config, claims: &Claims) -> Result<String> {
 pub async fn hash_password(password: SecretString) -> Result<String> {
     tokio::task::spawn_blocking(move || {
         let salt = SaltString::generate(rand::thread_rng());
-        match PasswordHash::generate(Argon2::default(), password.expose_secret(), salt.as_str()) {
+        match PasswordHash::generate(Argon2::default(), password.expose_secret(), salt.as_salt()) {
             Ok(hash) => Ok(hash.to_string()),
             Err(error) => Err(Error::argon2(error.to_string())),
         }
