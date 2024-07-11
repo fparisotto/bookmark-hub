@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   public-api:
     build:
@@ -20,7 +18,6 @@ services:
       interval: 10s
       start_period: 10s
       retries: 5
-
   daemon:
     build:
       context: daemon/
@@ -28,7 +25,7 @@ services:
       - postgres
       - minio
       - readability-api
-    command: ["./wait-for-it.sh", "public-api:3000", "--", "./daemon"]
+    command: ["wait-for-it.sh", "public-api:3000", "--", "./daemon"]
     environment:
       APP_ENV: DEV
       RUST_LOG: info
@@ -41,13 +38,10 @@ services:
       DATABASE_URL: postgres://main:main@postgres/main
       DATABASE_CONNECTION_POOL_SIZE: 5
       EXTERNAL_S3_ENDPOINT: http://minio.localhost:9000
-
   readability-api:
-    build:
-      context: readability-api/
+    image: ghcr.io/fparisotto/readability-api:v0.0.1
     ports:
       - 3001:3001
-
   web-spa:
     build:
       context: web-spa/
@@ -57,9 +51,8 @@ services:
       - public-api
     ports:
       - 8080:80
-
   postgres:
-    image: postgres:15
+    image: postgres:16
     ports:
       - 5432:5432
     environment:
@@ -69,7 +62,6 @@ services:
     restart: unless-stopped
     volumes:
       - postgres-data:/data/postgres
-
   minio:
     image: quay.io/minio/minio
     ports:
@@ -82,7 +74,6 @@ services:
     volumes:
       - minio-data:/data
     command: ["server", "/data", "--console-address", ":9090"]
-
   mc:
     image: minio/mc
     environment:
@@ -93,15 +84,42 @@ services:
       MINIO_BUCKET: bookmark
     depends_on:
       - minio
-    entrypoint: bash -c "
-      echo '{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"s3:GetBucketLocation\",\"s3:ListBucket\",\"s3:ListBucketMultipartUploads\",\"s3:ListBucketVersions\"],\"Resource\":[\"arn:aws:s3:::<BUCKET-NAME>\"]},{\"Effect\":\"Allow\",\"Action\":[\"s3:AbortMultipartUpload\",\"s3:DeleteObject\",\"s3:GetObject\",\"s3:ListMultipartUploadParts\",\"s3:PutObject\"],\"Resource\":[\"arn:aws:s3:::<BUCKET-NAME>/*\"]}]}' > write-policy.json &&
+    entrypoint: |
+      bash -c "
+      cat <<EOF > write-policy.json
+      {
+        \"Version\": \"2012-10-17\",
+        \"Statement\": [
+          {
+            \"Effect\": \"Allow\",
+            \"Action\": [
+              \"s3:GetBucketLocation\",
+              \"s3:ListBucket\",
+              \"s3:ListBucketMultipartUploads\",
+              \"s3:ListBucketVersions\"
+            ],
+            \"Resource\": [\"arn:aws:s3:::<BUCKET-NAME>\"]
+          },
+          {
+            \"Effect\": \"Allow\",
+            \"Action\": [
+              \"s3:AbortMultipartUpload\",
+              \"s3:DeleteObject\",
+              \"s3:GetObject\",
+              \"s3:ListMultipartUploadParts\",
+              \"s3:PutObject\"
+            ],
+            \"Resource\": [\"arn:aws:s3:::<BUCKET-NAME>/*\"]
+          }
+        ]
+      }
+      EOF
       /usr/bin/mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD} &&
       /usr/bin/mc mb local/$${MINIO_BUCKET} &&
       /usr/bin/mc anonymous set download local/$${MINIO_BUCKET} &&
       /usr/bin/mc admin user add local $${MINIO_ACCESS_KEY} $${MINIO_SECRET_KEY} &&
       /usr/bin/mc admin policy add local write-policy ./write-policy.json &&
       /usr/bin/mc admin policy set local write-policy user=$${MINIO_ACCESS_KEY}"
-
 volumes:
   postgres-data:
   minio-data:
