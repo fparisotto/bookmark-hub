@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use aws_sdk_s3::types::ByteStream;
+use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::Client as S3Client;
 use chrono::{DateTime, Duration, Utc};
 use reqwest::Client as HttpClient;
@@ -219,14 +219,14 @@ async fn peek_task(pool: &Pool<Postgres>, now: DateTime<Utc>) -> Result<Vec<Task
     FOR UPDATE SKIP LOCKED LIMIT 10
     "#;
     let mut tx = pool.begin().await?;
-    let result: Vec<Task> = sqlx::query_as(sql).bind(now).fetch_all(&mut tx).await?;
+    let result: Vec<Task> = sqlx::query_as(sql).bind(now).fetch_all(&mut *tx).await?;
     let ids: Vec<Uuid> = result.iter().map(|t| t.task_id).collect();
     let sql = "UPDATE bookmark_task SET next_delivery = $1 WHERE task_id = ANY ($2)";
     let next_delivery = now + Duration::minutes(5);
     let update_result = sqlx::query(sql)
         .bind(next_delivery)
         .bind(&ids)
-        .execute(&mut tx)
+        .execute(&mut *tx)
         .await?;
     tx.commit().await?;
     tracing::debug!(

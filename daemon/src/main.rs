@@ -2,11 +2,15 @@ use std::collections::HashMap;
 
 use anyhow::{Error, Result};
 use aws_config::meta::region::RegionProviderChain;
-use aws_sdk_s3::{Client as S3Client, Credentials, Endpoint, Region};
+use aws_config::BehaviorVersion;
 use daemon::{runner, Config, Env};
 use reqwest::Client as HttpClient;
 use sqlx::postgres::PgPoolOptions;
 use tracing_subscriber::{prelude::*, EnvFilter};
+
+use aws_sdk_s3::config::Credentials;
+use aws_sdk_s3::config::Region;
+use aws_sdk_s3::Client as S3Client;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -32,10 +36,9 @@ async fn make_s3_client(config: &Config) -> Result<S3Client, Error> {
         "daemon",
     );
     let region = RegionProviderChain::first_try(Region::new(config.s3_region.clone()));
-    let endpoint = Endpoint::immutable(&config.s3_endpoint)?;
-    let config = aws_config::from_env()
+    let config = aws_config::defaults(BehaviorVersion::v2024_03_28())
         .region(region)
-        .endpoint_resolver(endpoint)
+        .endpoint_url(&config.s3_endpoint)
         .credentials_provider(credentials)
         .load()
         .await;
