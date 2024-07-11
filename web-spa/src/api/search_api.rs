@@ -71,7 +71,7 @@ pub async fn search(token: &String, request: SearchRequest) -> Result<SearchResp
     let response = Request::post(&endpoint)
         .header("Authorization", &format!("Bearer {token}"))
         .header("Content-Type", "application/json")
-        .body(request_body)
+        .body(request_body)?
         .send()
         .await?
         .json::<SearchResponse>()

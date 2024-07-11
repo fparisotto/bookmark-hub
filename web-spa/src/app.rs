@@ -11,10 +11,11 @@ use crate::{
 
 #[function_component(App)]
 pub fn app() -> Html {
-    let storage = use_local_storage::<UserSession>("user-session".into());
+    let storage = use_local_storage::<UserSession>("user-session".to_string());
     let logged = use_state(|| false);
+    let is_first = use_is_first_mount();
 
-    if use_is_first_mount() {
+    if is_first {
         let logged = logged.clone();
         let storage = storage.clone();
         match storage.as_ref() {

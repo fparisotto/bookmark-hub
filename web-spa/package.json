@@ -1,15 +1,15 @@
 {
-  "devDependencies": {
-    "@tailwindcss/forms": "^0.5.3",
-    "@tailwindcss/typography": "^0.5.9",
-    "daisyui": "^2.47.0",
-    "tailwindcss": "^3.2.4"
-  },
-  "name": "web-spa",
-  "version": "1.0.0",
-  "main": "tailwind.config.js",
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": ""
+	"devDependencies": {
+		"@tailwindcss/forms": "^0.5.7",
+		"@tailwindcss/typography": "^0.5.13",
+		"daisyui": "^4.12.10",
+		"tailwindcss": "^3.4.4"
+	},
+	"name": "web-spa",
+	"version": "1.0.0",
+	"main": "tailwind.config.js",
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"description": ""
 }

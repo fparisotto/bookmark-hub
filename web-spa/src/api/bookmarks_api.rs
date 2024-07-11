@@ -49,7 +49,7 @@ pub async fn add_bookmark(
     let response = Request::post(&endpoint)
         .header("Authorization", &format!("Bearer {token}"))
         .header("Content-Type", "application/json")
-        .body(request_body)
+        .body(request_body)?
         .send()
         .await?
         .json::<NewBookmarkResponse>()
@@ -93,7 +93,7 @@ pub async fn set_tags(token: &str, id: &str, tags: Vec<String>) -> Result<Bookma
     let response = Request::post(&endpoint)
         .header("Authorization", &format!("Bearer {token}"))
         .header("Content-Type", "application/json")
-        .body(request_body)
+        .body(request_body)?
         .send()
         .await?
         .json::<Bookmark>()

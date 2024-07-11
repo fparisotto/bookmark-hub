@@ -1,5 +1,5 @@
 # builder
-FROM rust:1.66.0-bullseye as builder
+FROM rust:1.79-bookworm as builder
 
 ARG PUBLIC_API_ENDPOINT
 ENV PUBLIC_API_ENDPOINT=$PUBLIC_API_ENDPOINT

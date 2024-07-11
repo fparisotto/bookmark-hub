@@ -27,7 +27,7 @@ pub async fn login(email: String, password: String) -> Result<LoginResponse, Err
     let request_body = serde_json::to_string(&json_value).expect("Serialize should not fail");
     let response = Request::post(&endpoint)
         .header("Content-Type", "application/json")
-        .body(request_body)
+        .body(request_body)?
         .send()
         .await?
         .json::<LoginResponse>()
