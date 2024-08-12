@@ -37,27 +37,22 @@ pub struct BookmarkUserTask {
     pub updated_at: DateTime<Utc>,
 }
 
-pub struct BookmarkTaskTable;
-
-impl BookmarkTaskTable {
-    #[instrument(skip(db))]
-    pub async fn create(
-        db: &Pool<Postgres>,
-        user_id: &Uuid,
-        url: &Url,
-        tags: &Vec<String>,
-    ) -> Result<BookmarkTask> {
-        let sql = r#"
-            insert into "bookmark_task" (user_id, url, status, tags)
-            values ($1, $2, $3, $4) returning "bookmark_task".*;
-        "#;
-        let task: BookmarkTask = sqlx::query_as(sql)
-            .bind(user_id)
-            .bind(url.to_string())
-            .bind(TaskStatus::Pending)
-            .bind(tags)
-            .fetch_one(db)
-            .await?;
-        Ok(task)
-    }
+#[instrument(skip(db))]
+pub async fn create(
+    db: &Pool<Postgres>,
+    user_id: &Uuid,
+    url: &Url,
+    tags: &Vec<String>,
+) -> Result<BookmarkTask> {
+    const SQL: &str = r#"
+    insert into "bookmark_task" (user_id, url, status, tags)
+    values ($1, $2, $3, $4) returning "bookmark_task".*;"#;
+    let task: BookmarkTask = sqlx::query_as(SQL)
+        .bind(user_id)
+        .bind(url.to_string())
+        .bind(TaskStatus::Pending)
+        .bind(tags)
+        .fetch_one(db)
+        .await?;
+    Ok(task)
 }

@@ -3,7 +3,7 @@ use axum::{routing::post, Extension, Router};
 use axum_macros::debug_handler;
 
 use crate::auth::Claims;
-use crate::database::search::{SearchRequest, SearchResponse, SearchService};
+use crate::database::search::{search, SearchRequest, SearchResponse};
 use crate::error::Result;
 use crate::AppContext;
 
@@ -17,6 +17,6 @@ async fn search_bookmark(
     Extension(app_context): Extension<AppContext>,
     Json(input): Json<SearchRequest>,
 ) -> Result<Json<SearchResponse>> {
-    let result = SearchService::search(&app_context.db, &claims.user_id, input).await?;
+    let result = search(&app_context.db, &claims.user_id, input).await?;
     Ok(Json(result))
 }

@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::auth::Claims;
-use crate::database::bookmark::{BookmarkTable, BookmarkWithUserData, TagOperation};
-use crate::database::task::{BookmarkTask, BookmarkTaskTable};
+use crate::database::bookmark::{self, BookmarkWithUserData, TagOperation};
+use crate::database::task::{self, BookmarkTask};
 use crate::error::Result;
 use crate::AppContext;
 
@@ -55,7 +55,7 @@ async fn get_bookmarks(
     claims: Claims,
     Extension(app_context): Extension<AppContext>,
 ) -> Result<Json<Bookmarks>> {
-    let bookmarks = BookmarkTable::get_bookmarks_by_user(&app_context.db, &claims.user_id).await?;
+    let bookmarks = bookmark::get_by_user(&app_context.db, &claims.user_id).await?;
     Ok(Json(Bookmarks { bookmarks }))
 }
 
@@ -64,7 +64,7 @@ async fn get_all_tags(
     claims: Claims,
     Extension(app_context): Extension<AppContext>,
 ) -> Result<Json<TagsWithCounters>> {
-    let tags = BookmarkTable::get_tag_count_by_user(&app_context.db, &claims.user_id).await?;
+    let tags = bookmark::get_tag_count_by_user(&app_context.db, &claims.user_id).await?;
     let tags = tags
         .into_iter()
         .map(|(tag, count)| TagCount { tag, count })
@@ -78,8 +78,7 @@ async fn get_bookmarks_by_tag(
     Extension(app_context): Extension<AppContext>,
     Path(tag): Path<String>,
 ) -> Result<Json<Bookmarks>> {
-    let bookmarks =
-        BookmarkTable::get_bookmarks_by_tag(&app_context.db, &claims.user_id, &tag).await?;
+    let bookmarks = bookmark::get_by_tag(&app_context.db, &claims.user_id, &tag).await?;
     Ok(Json(Bookmarks { bookmarks }))
 }
 
@@ -90,7 +89,7 @@ async fn get_bookmark(
     Path(id): Path<String>,
 ) -> Result<Json<BookmarkWithUserData>> {
     let maybe_bookmark =
-        BookmarkTable::get_bookmark_with_user_data(&app_context.db, &claims.user_id, &id).await?;
+        bookmark::get_with_user_data(&app_context.db, &claims.user_id, &id).await?;
     match maybe_bookmark {
         Some(bookmark) => Ok(Json(bookmark)),
         None => Err(Error::NotFound),
@@ -106,8 +105,7 @@ async fn new_bookmark(
     // FIXME put this validation in a better place
     let mut tags = input.tags.clone().unwrap_or_default();
     tags.retain(|t| !t.trim().is_empty());
-    let response =
-        BookmarkTaskTable::create(&app_context.db, &claims.user_id, &input.url, &tags).await?;
+    let response = task::create(&app_context.db, &claims.user_id, &input.url, &tags).await?;
     Ok((StatusCode::CREATED, Json(response)))
 }
 
@@ -118,7 +116,7 @@ async fn set_tags(
     Path(bookmark_id): Path<String>,
     Json(tags): Json<Tags>,
 ) -> Result<Json<BookmarkWithUserData>> {
-    let updated = BookmarkTable::update_tags(
+    let updated = bookmark::update_tags(
         &app_context.db,
         &claims.user_id,
         &bookmark_id,
@@ -135,7 +133,7 @@ async fn append_tags(
     Path(bookmark_id): Path<String>,
     Json(tags): Json<Tags>,
 ) -> Result<Json<BookmarkWithUserData>> {
-    let updated = BookmarkTable::update_tags(
+    let updated = bookmark::update_tags(
         &app_context.db,
         &claims.user_id,
         &bookmark_id,

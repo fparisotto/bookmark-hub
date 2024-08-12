@@ -49,36 +49,29 @@ pub struct SearchRequest {
     limit: Option<i32>,
 }
 
-pub struct SearchService;
+#[instrument(skip(db))]
+pub async fn search(
+    db: &Pool<Postgres>,
+    user_id: &Uuid,
+    request: SearchRequest,
+) -> Result<SearchResponse> {
+    // FIXME this mimics a meillisearch query, replace me in future
+    let f_search = run_search(db, user_id, &request);
+    let f_aggregation = run_aggregation(db, user_id, &request);
+    let f_total = run_total(db, user_id, &request);
+    let (bookmarks, tags, total) = try_join!(f_search, f_aggregation, f_total)?;
+    Ok(SearchResponse {
+        bookmarks,
+        tags,
+        total,
+    })
+}
 
-impl SearchService {
-    #[instrument(skip(db))]
-    pub async fn search(
-        db: &Pool<Postgres>,
-        user_id: &Uuid,
-        request: SearchRequest,
-    ) -> Result<SearchResponse> {
-        // FIXME this mimics a meillisearch query, replace me in future
-        let f_search = SearchService::run_search(db, user_id, &request);
-        let f_aggregation = SearchService::run_aggregation(db, user_id, &request);
-        let f_total = SearchService::run_total(db, user_id, &request);
-        let (bookmarks, tags, total) = try_join!(f_search, f_aggregation, f_total)?;
-        Ok(SearchResponse {
-            bookmarks,
-            tags,
-            total,
-        })
-    }
-
-    #[instrument(skip(db))]
-    async fn run_total(
-        db: &Pool<Postgres>,
-        user_id: &Uuid,
-        request: &SearchRequest,
-    ) -> Result<u64> {
-        let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new("");
-        query_builder.push(
-            r#"
+#[instrument(skip(db))]
+async fn run_total(db: &Pool<Postgres>, user_id: &Uuid, request: &SearchRequest) -> Result<u64> {
+    let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new("");
+    query_builder.push(
+        r#"
             select
                 count(1)
             from
@@ -86,75 +79,75 @@ impl SearchService {
             inner join
                 bookmark b using(bookmark_id)
             "#,
-        );
-        query_builder
-            .push(" where bu.user_id = ")
-            .push_bind(user_id);
-        match request.tags_filter.clone().unwrap_or(TagFilter::Any) {
-            TagFilter::And(tags) => {
-                query_builder.push(" and bu.tags @> ").push_bind(tags);
-            }
-            TagFilter::Or(tags) => {
-                query_builder.push(" and bu.tags && ").push_bind(tags);
-            }
-            TagFilter::Untagged => {
-                query_builder.push(" and cardinality(bu.tags) = 0 ");
-            }
-            TagFilter::Any => (),
+    );
+    query_builder
+        .push(" where bu.user_id = ")
+        .push_bind(user_id);
+    match request.tags_filter.clone().unwrap_or(TagFilter::Any) {
+        TagFilter::And(tags) => {
+            query_builder.push(" and bu.tags @> ").push_bind(tags);
         }
-        if let Some(query) = &request.query {
-            if query.trim().starts_with('"') && query.trim().ends_with('"') {
-                query_builder
-                    .push(" and b.search_tokens @@ phraseto_tsquery('english', ")
-                    .push_bind(query)
-                    .push(" )");
-            } else {
-                let query = if query.contains('&') {
-                    query.to_owned()
-                } else {
-                    query.split(' ').collect::<Vec<_>>().join(" | ")
-                };
-                query_builder
-                    .push(" and b.search_tokens @@ to_tsquery('english', ")
-                    .push_bind(query.clone())
-                    .push(" )");
-            }
+        TagFilter::Or(tags) => {
+            query_builder.push(" and bu.tags && ").push_bind(tags);
         }
-        tracing::debug!("Total query {}", &query_builder.sql());
-        let (total,): (i64,) = query_builder.build_query_as().fetch_one(db).await?;
-        Ok(total as u64)
+        TagFilter::Untagged => {
+            query_builder.push(" and cardinality(bu.tags) = 0 ");
+        }
+        TagFilter::Any => (),
     }
-
-    #[instrument(skip(db))]
-    async fn run_search(
-        db: &Pool<Postgres>,
-        user_id: &Uuid,
-        request: &SearchRequest,
-    ) -> Result<Vec<SearchResultItem>> {
-        let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new("");
-        query_builder.push("select ");
-        if let Some(query) = &request.query {
-            if query.trim().starts_with('"') && query.trim().ends_with('"') {
-                query_builder
-                    .push(" ts_headline('english', b.text_content, phraseto_tsquery('english', ")
-                    .push_bind(query)
-                    .push(" ), 'StartSel=<mark>, StopSel=</mark>') as search_match, ");
-            } else {
-                let query = if query.contains('&') {
-                    query.to_owned()
-                } else {
-                    query.split(' ').collect::<Vec<_>>().join(" | ")
-                };
-                query_builder
-                    .push(" ts_headline('english', b.text_content, to_tsquery('english', ")
-                    .push_bind(query)
-                    .push(" ), 'StartSel=<mark>, StopSel=</mark>') as search_match, ");
-            }
+    if let Some(query) = &request.query {
+        if query.trim().starts_with('"') && query.trim().ends_with('"') {
+            query_builder
+                .push(" and b.search_tokens @@ phraseto_tsquery('english', ")
+                .push_bind(query)
+                .push(" )");
         } else {
-            query_builder.push(" null as search_match, ");
+            let query = if query.contains('&') {
+                query.to_owned()
+            } else {
+                query.split(' ').collect::<Vec<_>>().join(" | ")
+            };
+            query_builder
+                .push(" and b.search_tokens @@ to_tsquery('english', ")
+                .push_bind(query.clone())
+                .push(" )");
         }
-        query_builder.push(
-            r#"
+    }
+    tracing::debug!("Total query {}", &query_builder.sql());
+    let (total,): (i64,) = query_builder.build_query_as().fetch_one(db).await?;
+    Ok(total as u64)
+}
+
+#[instrument(skip(db))]
+async fn run_search(
+    db: &Pool<Postgres>,
+    user_id: &Uuid,
+    request: &SearchRequest,
+) -> Result<Vec<SearchResultItem>> {
+    let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new("");
+    query_builder.push("select ");
+    if let Some(query) = &request.query {
+        if query.trim().starts_with('"') && query.trim().ends_with('"') {
+            query_builder
+                .push(" ts_headline('english', b.text_content, phraseto_tsquery('english', ")
+                .push_bind(query)
+                .push(" ), 'StartSel=<mark>, StopSel=</mark>') as search_match, ");
+        } else {
+            let query = if query.contains('&') {
+                query.to_owned()
+            } else {
+                query.split(' ').collect::<Vec<_>>().join(" | ")
+            };
+            query_builder
+                .push(" ts_headline('english', b.text_content, to_tsquery('english', ")
+                .push_bind(query)
+                .push(" ), 'StartSel=<mark>, StopSel=</mark>') as search_match, ");
+        }
+    } else {
+        query_builder.push(" null as search_match, ");
+    }
+    query_builder.push(
+        r#"
                 b.*,
                 bu.user_id,
                 bu.tags,
@@ -165,60 +158,60 @@ impl SearchService {
             inner join
                 bookmark b using(bookmark_id)
             "#,
-        );
-        query_builder
-            .push(" where bu.user_id = ")
-            .push_bind(user_id);
-        match request.tags_filter.clone().unwrap_or(TagFilter::Any) {
-            TagFilter::And(tags) => {
-                query_builder.push(" and bu.tags @> ").push_bind(tags);
-            }
-            TagFilter::Or(tags) => {
-                query_builder.push(" and bu.tags && ").push_bind(tags);
-            }
-            TagFilter::Untagged => {
-                query_builder.push(" and cardinality(bu.tags) = 0 ");
-            }
-            TagFilter::Any => (),
+    );
+    query_builder
+        .push(" where bu.user_id = ")
+        .push_bind(user_id);
+    match request.tags_filter.clone().unwrap_or(TagFilter::Any) {
+        TagFilter::And(tags) => {
+            query_builder.push(" and bu.tags @> ").push_bind(tags);
         }
-        if let Some(query) = &request.query {
-            if query.trim().starts_with('"') && query.trim().ends_with('"') {
-                query_builder
-                    .push(" and b.search_tokens @@ phraseto_tsquery('english', ")
-                    .push_bind(query)
-                    .push(" ) order by ts_rank(b.search_tokens, phraseto_tsquery('english', ")
-                    .push_bind(query)
-                    .push(" )) ");
-            } else {
-                let query = if query.contains('&') {
-                    query.to_owned()
-                } else {
-                    query.split(' ').collect::<Vec<_>>().join(" | ")
-                };
-                query_builder
-                    .push(" and b.search_tokens @@ to_tsquery('english', ")
-                    .push_bind(query.clone())
-                    .push(" ) order by ts_rank(b.search_tokens, to_tsquery('english', ")
-                    .push_bind(query.clone())
-                    .push(" )) ");
-            }
+        TagFilter::Or(tags) => {
+            query_builder.push(" and bu.tags && ").push_bind(tags);
         }
-        let limit_value = request.limit.unwrap_or(20);
-        query_builder.push(" limit ").push_bind(limit_value);
-        tracing::debug!("Search query {}", &query_builder.sql());
-        let bookmarks: Vec<SearchResultItem> = query_builder.build_query_as().fetch_all(db).await?;
-        Ok(bookmarks)
+        TagFilter::Untagged => {
+            query_builder.push(" and cardinality(bu.tags) = 0 ");
+        }
+        TagFilter::Any => (),
     }
+    if let Some(query) = &request.query {
+        if query.trim().starts_with('"') && query.trim().ends_with('"') {
+            query_builder
+                .push(" and b.search_tokens @@ phraseto_tsquery('english', ")
+                .push_bind(query)
+                .push(" ) order by ts_rank(b.search_tokens, phraseto_tsquery('english', ")
+                .push_bind(query)
+                .push(" )) ");
+        } else {
+            let query = if query.contains('&') {
+                query.to_owned()
+            } else {
+                query.split(' ').collect::<Vec<_>>().join(" | ")
+            };
+            query_builder
+                .push(" and b.search_tokens @@ to_tsquery('english', ")
+                .push_bind(query.clone())
+                .push(" ) order by ts_rank(b.search_tokens, to_tsquery('english', ")
+                .push_bind(query.clone())
+                .push(" )) ");
+        }
+    }
+    let limit_value = request.limit.unwrap_or(20);
+    query_builder.push(" limit ").push_bind(limit_value);
+    tracing::debug!("Search query {}", &query_builder.sql());
+    let bookmarks: Vec<SearchResultItem> = query_builder.build_query_as().fetch_all(db).await?;
+    Ok(bookmarks)
+}
 
-    #[instrument(skip(db))]
-    async fn run_aggregation(
-        db: &Pool<Postgres>,
-        user_id: &Uuid,
-        request: &SearchRequest,
-    ) -> Result<Vec<TagCount>> {
-        let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new("");
-        query_builder.push(
-            r#"
+#[instrument(skip(db))]
+async fn run_aggregation(
+    db: &Pool<Postgres>,
+    user_id: &Uuid,
+    request: &SearchRequest,
+) -> Result<Vec<TagCount>> {
+    let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new("");
+    query_builder.push(
+        r#"
             with tags as (
                 select
                     unnest(bu.tags) as tag
@@ -227,45 +220,45 @@ impl SearchService {
                 inner join
                     bookmark b using(bookmark_id)
             "#,
-        );
-        query_builder
-            .push(" where bu.user_id = ")
-            .push_bind(user_id);
-        match request.tags_filter.clone().unwrap_or(TagFilter::Any) {
-            TagFilter::And(tags) => {
-                query_builder.push(" and bu.tags @> ").push_bind(tags);
-            }
-            TagFilter::Or(tags) => {
-                query_builder.push(" and bu.tags && ").push_bind(tags);
-            }
-            TagFilter::Untagged => {
-                query_builder.push(" and cardinality(bu.tags) = 0 ");
-            }
-            TagFilter::Any => (),
+    );
+    query_builder
+        .push(" where bu.user_id = ")
+        .push_bind(user_id);
+    match request.tags_filter.clone().unwrap_or(TagFilter::Any) {
+        TagFilter::And(tags) => {
+            query_builder.push(" and bu.tags @> ").push_bind(tags);
         }
-        if let Some(query) = &request.query {
-            if query.trim().starts_with('"') && query.trim().ends_with('"') {
-                query_builder
-                    .push(" and b.search_tokens @@ phraseto_tsquery('english', ")
-                    .push_bind(query)
-                    .push(" ) order by ts_rank(b.search_tokens, phraseto_tsquery('english', ")
-                    .push_bind(query)
-                    .push(" )) ");
+        TagFilter::Or(tags) => {
+            query_builder.push(" and bu.tags && ").push_bind(tags);
+        }
+        TagFilter::Untagged => {
+            query_builder.push(" and cardinality(bu.tags) = 0 ");
+        }
+        TagFilter::Any => (),
+    }
+    if let Some(query) = &request.query {
+        if query.trim().starts_with('"') && query.trim().ends_with('"') {
+            query_builder
+                .push(" and b.search_tokens @@ phraseto_tsquery('english', ")
+                .push_bind(query)
+                .push(" ) order by ts_rank(b.search_tokens, phraseto_tsquery('english', ")
+                .push_bind(query)
+                .push(" )) ");
+        } else {
+            let query = if query.contains('&') {
+                query.to_owned()
             } else {
-                let query = if query.contains('&') {
-                    query.to_owned()
-                } else {
-                    query.split(' ').collect::<Vec<_>>().join(" | ")
-                };
-                query_builder
-                    .push(" and b.search_tokens @@ to_tsquery('english', ")
-                    .push_bind(query.clone())
-                    .push(" ) order by ts_rank(b.search_tokens, to_tsquery('english', ")
-                    .push_bind(query.clone())
-                    .push(" )) ");
-            }
+                query.split(' ').collect::<Vec<_>>().join(" | ")
+            };
+            query_builder
+                .push(" and b.search_tokens @@ to_tsquery('english', ")
+                .push_bind(query.clone())
+                .push(" ) order by ts_rank(b.search_tokens, to_tsquery('english', ")
+                .push_bind(query.clone())
+                .push(" )) ");
         }
-        let sql = r#"
+    }
+    let sql = r#"
             )
             select
                 tag,
@@ -275,9 +268,8 @@ impl SearchService {
             group by
                 tag
         "#;
-        query_builder.push(sql);
-        tracing::debug!("Aggregation query {}", &query_builder.sql());
-        let tags: Vec<TagCount> = query_builder.build_query_as().fetch_all(db).await?;
-        Ok(tags)
-    }
+    query_builder.push(sql);
+    tracing::debug!("Aggregation query {}", &query_builder.sql());
+    let tags: Vec<TagCount> = query_builder.build_query_as().fetch_all(db).await?;
+    Ok(tags)
 }

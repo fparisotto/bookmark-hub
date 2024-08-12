@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::auth::{self, Claims};
-use crate::database::user::{User, UserTable};
+use crate::database::user;
 use crate::error::{Error, Result};
 use crate::AppContext;
 use axum_macros::debug_handler;
@@ -79,7 +79,7 @@ struct AuthBody {
 }
 
 impl AuthBody {
-    fn new(user: &User, access_token: String) -> Self {
+    fn new(user: &user::User, access_token: String) -> Self {
         Self {
             user_id: user.user_id,
             email: user.email.clone(),
@@ -108,7 +108,7 @@ async fn get_user_profile(
     claims: Claims,
     Extension(app_context): Extension<AppContext>,
 ) -> Result<Json<UserProfile>> {
-    match UserTable::get_by_id(&app_context.db, &claims.user_id).await {
+    match user::get_by_id(&app_context.db, &claims.user_id).await {
         Ok(Some(user)) => Ok(Json(UserProfile {
             user_id: user.user_id,
             email: user.email,
@@ -135,7 +135,7 @@ async fn sign_up(
 ) -> Result<Json<SignUpResponse>> {
     payload.validate()?;
     let hashed_password = auth::hash_password(payload.password).await?;
-    let try_user = UserTable::create(&app_context.db, payload.email, hashed_password).await;
+    let try_user = user::create(&app_context.db, payload.email, hashed_password).await;
     match try_user {
         Ok(user) => Ok(Json(SignUpResponse {
             id: user.user_id,
@@ -157,7 +157,7 @@ async fn sign_in(
     Json(payload): Json<SignInPayload>,
 ) -> Result<Json<AuthBody>> {
     payload.validate()?;
-    let maybe_user = UserTable::get_by_email(&app_context.db, &payload.email).await?;
+    let maybe_user = user::get_by_email(&app_context.db, &payload.email).await?;
     if let Some(user) = maybe_user {
         auth::verify_password(payload.password, user.password_hash.clone()).await?;
         let expiration = Utc::now()
