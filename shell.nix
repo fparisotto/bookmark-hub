@@ -7,6 +7,10 @@ pkgs.mkShell {
     pkgs.rust-analyzer
     pkgs.openssl
     pkgs.pkg-config
+    pkgs.hurl
+    pkgs.trunk
+    pkgs.tailwindcss
+    pkgs.nodejs_22
   ];
 
   shellHook = ''

@@ -5,4 +5,13 @@ dist = "dist"
 [[hooks]]
 stage = "pre_build"
 command = "npx"
-command_arguments = ["tailwindcss", "-i", "styles.css", "-o", "styles.min.css", "--minify"]
+command_arguments = [
+  "tailwindcss",
+  "-c",
+  "tailwind.config.js",
+  "-i",
+  "styles.css",
+  "-o",
+  "styles.min.css",
+  "--minify",
+]
