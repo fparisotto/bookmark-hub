@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::auth::Claims;
-use crate::database::bookmark::{self, BookmarkWithUserData, TagOperation};
-use crate::database::task::{self, BookmarkTask};
+use crate::database::bookmark::{self, BookmarkWithUser, TagOperation};
+use crate::database::task::{self, Task};
 use crate::error::Result;
 use crate::AppContext;
 
@@ -41,7 +41,7 @@ struct Tags {
 
 #[derive(Debug, Serialize)]
 struct Bookmarks {
-    bookmarks: Vec<BookmarkWithUserData>,
+    bookmarks: Vec<BookmarkWithUser>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -87,7 +87,7 @@ async fn get_bookmark(
     claims: Claims,
     Extension(app_context): Extension<AppContext>,
     Path(id): Path<String>,
-) -> Result<Json<BookmarkWithUserData>> {
+) -> Result<Json<BookmarkWithUser>> {
     let maybe_bookmark =
         bookmark::get_with_user_data(&app_context.db, &claims.user_id, &id).await?;
     match maybe_bookmark {
@@ -101,7 +101,7 @@ async fn new_bookmark(
     claims: Claims,
     Extension(app_context): Extension<AppContext>,
     Json(input): Json<NewBookmark>,
-) -> Result<(StatusCode, Json<BookmarkTask>)> {
+) -> Result<(StatusCode, Json<Task>)> {
     // FIXME put this validation in a better place
     let mut tags = input.tags.clone().unwrap_or_default();
     tags.retain(|t| !t.trim().is_empty());
@@ -115,7 +115,7 @@ async fn set_tags(
     Extension(app_context): Extension<AppContext>,
     Path(bookmark_id): Path<String>,
     Json(tags): Json<Tags>,
-) -> Result<Json<BookmarkWithUserData>> {
+) -> Result<Json<BookmarkWithUser>> {
     let updated = bookmark::update_tags(
         &app_context.db,
         &claims.user_id,
@@ -132,7 +132,7 @@ async fn append_tags(
     Extension(app_context): Extension<AppContext>,
     Path(bookmark_id): Path<String>,
     Json(tags): Json<Tags>,
-) -> Result<Json<BookmarkWithUserData>> {
+) -> Result<Json<BookmarkWithUser>> {
     let updated = bookmark::update_tags(
         &app_context.db,
         &claims.user_id,
