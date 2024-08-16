@@ -6,6 +6,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::error::Result;
+const TASK_MAX_RETRIES: i16 = 5;
 
 #[derive(Deserialize, Serialize, Debug, Copy, Clone, sqlx::Type)]
 #[sqlx(type_name = "task_status")]
@@ -30,6 +31,12 @@ pub struct Task {
     pub fail_reason: Option<String>,
 }
 
+impl Task {
+    pub fn should_retry(&self) -> bool {
+        self.retries.unwrap_or(0) < TASK_MAX_RETRIES
+    }
+}
+
 #[derive(Debug, sqlx::FromRow, Serialize)]
 pub struct BookmarkUserTask {
     pub task_id: Uuid,
@@ -49,8 +56,8 @@ pub async fn create(
     tags: &Vec<String>,
 ) -> Result<Task> {
     const SQL: &str = r#"
-    insert into "bookmark_task" (user_id, url, status, tags)
-    values ($1, $2, $3, $4) returning "bookmark_task".*;"#;
+    INSERT INTO "bookmark_task" (user_id, url, status, tags)
+    VALUES ($1, $2, $3, $4) RETURNING "bookmark_task".*;"#;
     let task: Task = sqlx::query_as(SQL)
         .bind(user_id)
         .bind(url.to_string())
@@ -62,18 +69,17 @@ pub async fn create(
 }
 
 #[instrument(skip(pool))]
-async fn peek(pool: &Pool<Postgres>, now: DateTime<Utc>) -> Result<Vec<Task>> {
+pub async fn peek(pool: &Pool<Postgres>, now: DateTime<Utc>) -> Result<Vec<Task>> {
     // https://softwaremill.com/mqperf/#postgresql
-    let sql = r#"
+    const QUERY: &str = r#"
     SELECT * FROM bookmark_task WHERE next_delivery <= $1 AND status = 'pending'
-    FOR UPDATE SKIP LOCKED LIMIT 10
-    "#;
+    FOR UPDATE SKIP LOCKED LIMIT 10;"#;
     let mut tx = pool.begin().await?;
-    let result: Vec<Task> = sqlx::query_as(sql).bind(now).fetch_all(&mut *tx).await?;
+    let result: Vec<Task> = sqlx::query_as(QUERY).bind(now).fetch_all(&mut *tx).await?;
     let ids: Vec<Uuid> = result.iter().map(|t| t.task_id).collect();
-    let sql = "UPDATE bookmark_task SET next_delivery = $1 WHERE task_id = ANY ($2)";
+    const UPDATE: &str = "UPDATE bookmark_task SET next_delivery = $1 WHERE task_id = ANY ($2);";
     let next_delivery = now + Duration::minutes(5);
-    let update_result = sqlx::query(sql)
+    let update_result = sqlx::query(UPDATE)
         .bind(next_delivery)
         .bind(&ids)
         .execute(&mut *tx)
@@ -89,7 +95,7 @@ async fn peek(pool: &Pool<Postgres>, now: DateTime<Utc>) -> Result<Vec<Task>> {
 }
 
 #[instrument(skip(pool))]
-async fn update(
+pub async fn update(
     pool: &Pool<Postgres>,
     task: &Task,
     status: TaskStatus,

@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::error::Result;
 
 #[derive(Debug, sqlx::FromRow, Serialize, Deserialize)]
-struct Bookmark {
+pub struct Bookmark {
     pub bookmark_id: String,
     pub url: String,
     pub domain: String,
@@ -45,12 +45,12 @@ pub async fn get_tag_count_by_user(
     user_id: &Uuid,
 ) -> Result<Vec<(String, i64)>> {
     const SQL: &str = r#"
-    with tags as (
-        select unnest(tags) as tag
-        from bookmark_user
-        where user_id = $1
+    WITH tags AS (
+        SELECT unnest(tags) AS tag
+        FROM bookmark_user
+        WHERE user_id = $1
     )
-    select tag, count(1) as counter from tags group by tag;"#;
+    SELECT tag, count(1) AS counter FROM tags GROUP BY tag;"#;
     let result: Vec<(String, i64)> = sqlx::query_as(SQL).bind(user_id).fetch_all(db).await?;
     Ok(result)
 }
@@ -58,16 +58,16 @@ pub async fn get_tag_count_by_user(
 #[instrument(skip(db))]
 pub async fn get_by_user(db: &Pool<Postgres>, user_id: &Uuid) -> Result<Vec<BookmarkWithUser>> {
     const SQL: &str = r#"
-    select
+    SELECT
         b.*,
         bu.user_id,
         bu.tags,
         bu.created_at as user_created_at,
         bu.updated_at as user_updated_at
-    from bookmark_user bu
-    inner join bookmark b using(bookmark_id)
-    where bu.user_id = $1
-    order by bu.created_at asc;"#;
+    FROM bookmark_user bu
+    INNER JOIN bookmark b USING(bookmark_id)
+    WHERE bu.user_id = $1
+    ORDER BY bu.created_at ASC;"#;
     let result: Vec<BookmarkWithUser> = sqlx::query_as(SQL).bind(user_id).fetch_all(db).await?;
     Ok(result)
 }
@@ -79,17 +79,17 @@ pub async fn get_by_tag(
     tag: &str,
 ) -> Result<Vec<BookmarkWithUser>> {
     const SQL: &str = r#"
-    select
+    SELECT
         b.*,
         bu.user_id,
         bu.tags,
         bu.created_at as user_created_at,
         bu.updated_at as user_updated_at
-    from bookmark_user bu
-    inner join bookmark b using(bookmark_id)
-    where bu.user_id = $1
-    and bu.tags @> $2
-    order by bu.created_at asc;"#;
+    FROM bookmark_user bu
+    INNER JOIN bookmark b USING(bookmark_id)
+    WHERE bu.user_id = $1
+    AND bu.tags @> $2
+    ORDER BY bu.created_at ASC;"#;
     let tags: Vec<String> = vec![tag.to_string()];
     let result: Vec<BookmarkWithUser> = sqlx::query_as(SQL)
         .bind(user_id)
@@ -100,8 +100,8 @@ pub async fn get_by_tag(
 }
 
 #[instrument(skip(pool))]
-async fn get_by_url(pool: &Pool<Postgres>, url: &str) -> Result<Option<Bookmark>> {
-    const SQL: &str = "SELECT * from bookmark WHERE url = $1";
+pub async fn get_by_url(pool: &Pool<Postgres>, url: &str) -> Result<Option<Bookmark>> {
+    const SQL: &str = "SELECT * FROM bookmark WHERE url = $1;";
     let result: Option<Bookmark> = sqlx::query_as(SQL).bind(url).fetch_optional(pool).await?;
     Ok(result)
 }
@@ -113,16 +113,16 @@ pub async fn get_with_user_data(
     bookmark_id: &String,
 ) -> Result<Option<BookmarkWithUser>> {
     const SQL: &str = r#"
-    select
+    SELECT
         b.*,
         bu.user_id,
         bu.tags,
         bu.created_at as user_created_at,
         bu.updated_at as user_updated_at
-    from bookmark_user bu
-    inner join bookmark b using(bookmark_id)
-    where bu.user_id = $1
-    and bookmark_id = $2;"#;
+    FROM bookmark_user bu
+    INNER JOIN bookmark b USING(bookmark_id)
+    WHERE bu.user_id = $1
+    AND bookmark_id = $2;"#;
     let result: Option<BookmarkWithUser> = sqlx::query_as(SQL)
         .bind(user_id)
         .bind(bookmark_id)
@@ -144,20 +144,20 @@ pub async fn update_tags(
     };
     let sql = format!(
         r#"
-        with update_bookmark_user as (
-            update public.bookmark_user
-            set {update_tag_sql}, updated_at=now()
-            where bookmark_id=$2 and user_id=$3
-            returning *
+        WITH update_bookmark_user AS (
+            UPDATE public.bookmark_user
+            SET {update_tag_sql}, updated_at=now()
+            WHERE bookmark_id=$2 AND user_id=$3
+            RETURNING *
         )
-        select
+        SELECT
             b.*,
             bi.user_id,
             bi.tags,
             bi.created_at as user_created_at,
             bi.updated_at as user_updated_at
-        from update_bookmark_user bi
-        inner join bookmark b using(bookmark_id);"#
+        FROM update_bookmark_user bi
+        INNER JOIN bookmark b using(bookmark_id);"#
     );
     let result: BookmarkWithUser = sqlx::query_as(&sql)
         .bind(tags)
@@ -169,9 +169,9 @@ pub async fn update_tags(
 }
 
 #[instrument(skip(pool))]
-async fn upsert_user_bookmark(
+pub async fn upsert_user_bookmark(
     pool: &Pool<Postgres>,
-    bookmark_id: String,
+    bookmark_id: &str,
     user_id: Uuid,
     tags: Vec<String>,
 ) -> Result<Uuid> {
@@ -192,7 +192,7 @@ async fn upsert_user_bookmark(
 }
 
 #[instrument(skip(pool))]
-async fn save(pool: &Pool<Postgres>, bookmark: &Bookmark) -> Result<()> {
+pub async fn save(pool: &Pool<Postgres>, bookmark: &Bookmark) -> Result<()> {
     const SQL: &str = r#"
     INSERT INTO bookmark
     (bookmark_id, url, domain, title, text_content, html_content, images, created_at)

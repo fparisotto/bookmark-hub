@@ -7,7 +7,7 @@ use axum_extra::{
     TypedHeader,
 };
 use jsonwebtoken::{decode, encode, Header, Validation};
-use secrecy::{ExposeSecret, SecretString};
+use secrecy::{DebugSecret, ExposeSecret, SecretString, Zeroize};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use uuid::Uuid;
@@ -31,16 +31,29 @@ impl Display for Claims {
 }
 
 pub struct Keys {
-    pub encoding: EncodingKey,
-    pub decoding: DecodingKey,
+    secret: Vec<u8>,
 }
+
+impl Zeroize for Keys {
+    fn zeroize(&mut self) {
+        self.secret = Vec::default();
+    }
+}
+
+impl DebugSecret for Keys {}
 
 impl Keys {
     pub fn new(secret: &[u8]) -> Self {
         Self {
-            encoding: EncodingKey::from_secret(secret),
-            decoding: DecodingKey::from_secret(secret),
+            secret: secret.to_vec(),
         }
+    }
+
+    fn encoder(&self) -> EncodingKey {
+        EncodingKey::from_secret(&self.secret)
+    }
+    fn decoder(&self) -> DecodingKey {
+        DecodingKey::from_secret(&self.secret)
     }
 }
 
@@ -62,19 +75,18 @@ where
             .await
             .map_err(|_| Error::InvalidToken)?;
 
-        let token_data = decode::<Claims>(
-            bearer.token(),
-            &app_context.config.auth_keys.decoding,
-            &Validation::default(),
-        )
-        .map_err(|_| Error::InvalidToken)?;
+        let keys = app_context.config.auth_keys.expose_secret();
+
+        let token_data = decode::<Claims>(bearer.token(), &keys.decoder(), &Validation::default())
+            .map_err(|_| Error::InvalidToken)?;
 
         Ok(token_data.claims)
     }
 }
 
 pub fn encode_token(config: &Config, claims: &Claims) -> Result<String> {
-    let token = encode(&Header::default(), claims, &config.auth_keys.encoding)?;
+    let keys = config.auth_keys.expose_secret();
+    let token = encode(&Header::default(), claims, &keys.encoder())?;
     Ok(token)
 }
 
