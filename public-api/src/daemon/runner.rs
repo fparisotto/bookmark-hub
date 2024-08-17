@@ -51,14 +51,9 @@ pub async fn run(
                 Err(error) => {
                     if task.should_retry() {
                         tracing::info!("fail retry, reason = {:?}", &error);
-                        db::task::update(
-                            pool,
-                            &task,
-                            TaskStatus::Pending,
-                            Some(task.retries.unwrap_or(0) + 1),
-                            None,
-                        )
-                        .await?;
+                        let retry_value = task.retries.unwrap_or(0) + 1;
+                        db::task::update(pool, &task, TaskStatus::Pending, Some(retry_value), None)
+                            .await?;
                         tracing::warn!(
                             task_uuid = format!("{}", task.task_id),
                             retries = &task.retries,

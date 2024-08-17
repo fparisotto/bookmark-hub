@@ -61,9 +61,6 @@ pub struct Config {
     #[arg(long, env = "S3_ACCESS_KEY")]
     pub s3_access_key: SecretString,
 
-    #[arg(long, env = "METRICS_BIND")]
-    pub metrics_bind: SocketAddr,
-
     #[arg(long, env = "APP_BIND")]
-    pub app_bind: SocketAddr,
+    pub bind: SocketAddr,
 }

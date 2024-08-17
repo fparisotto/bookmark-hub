@@ -20,7 +20,7 @@ pub struct Image {
 }
 
 #[derive(Debug)]
-pub struct ImageFound {
+struct ImageFound {
     id: String,
     src: String,
     url: Url,

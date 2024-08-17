@@ -8,7 +8,7 @@ mod runner;
 
 pub use self::runner::run;
 
-pub fn clean_url(url: Url) -> Result<Url> {
+fn clean_url(url: Url) -> Result<Url> {
     if let Some(host) = url.host_str() {
         let path = &url.path();
         let clean_url = format!("{scheme}://{host}{path}", scheme = &url.scheme());
@@ -19,7 +19,7 @@ pub fn clean_url(url: Url) -> Result<Url> {
     bail!("Invalid url={url}")
 }
 
-pub fn make_bookmark_id(url: &Url) -> Result<String> {
+fn make_bookmark_id(url: &Url) -> Result<String> {
     if let Some(host) = url.host_str() {
         let path = url.path();
         let source = format!("{host}.{path}");
@@ -32,7 +32,7 @@ pub fn make_bookmark_id(url: &Url) -> Result<String> {
     bail!("Invalid url={url}")
 }
 
-pub fn domain_from_url(url: &Url) -> Result<String> {
+fn domain_from_url(url: &Url) -> Result<String> {
     let domain_or_host = url
         .domain()
         .or_else(|| url.host_str())
