@@ -3,8 +3,10 @@ use murmur3::murmur3_x64_128;
 use std::io::Cursor;
 use url::Url;
 
-pub mod processor;
-pub mod runner;
+mod processor;
+mod runner;
+
+pub use self::runner::run;
 
 pub fn clean_url(url: Url) -> Result<Url> {
     if let Some(host) = url.host_str() {

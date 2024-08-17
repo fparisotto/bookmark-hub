@@ -6,13 +6,12 @@ use axum_macros::debug_handler;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::auth::Claims;
+use crate::auth::Claim;
 use crate::database::bookmark::{self, BookmarkWithUser, TagOperation};
 use crate::database::task::{self, Task};
+use crate::endpoints::Error;
 use crate::error::Result;
 use crate::AppContext;
-
-use crate::endpoints::Error;
 
 pub fn routes() -> Router {
     Router::new()
@@ -52,7 +51,7 @@ struct NewBookmark {
 
 #[debug_handler()]
 async fn get_bookmarks(
-    claims: Claims,
+    claims: Claim,
     Extension(app_context): Extension<AppContext>,
 ) -> Result<Json<Bookmarks>> {
     let bookmarks = bookmark::get_by_user(&app_context.db, &claims.user_id).await?;
@@ -61,7 +60,7 @@ async fn get_bookmarks(
 
 #[debug_handler()]
 async fn get_all_tags(
-    claims: Claims,
+    claims: Claim,
     Extension(app_context): Extension<AppContext>,
 ) -> Result<Json<TagsWithCounters>> {
     let tags = bookmark::get_tag_count_by_user(&app_context.db, &claims.user_id).await?;
@@ -74,7 +73,7 @@ async fn get_all_tags(
 
 #[debug_handler()]
 async fn get_bookmarks_by_tag(
-    claims: Claims,
+    claims: Claim,
     Extension(app_context): Extension<AppContext>,
     Path(tag): Path<String>,
 ) -> Result<Json<Bookmarks>> {
@@ -84,7 +83,7 @@ async fn get_bookmarks_by_tag(
 
 #[debug_handler()]
 async fn get_bookmark(
-    claims: Claims,
+    claims: Claim,
     Extension(app_context): Extension<AppContext>,
     Path(id): Path<String>,
 ) -> Result<Json<BookmarkWithUser>> {
@@ -98,7 +97,7 @@ async fn get_bookmark(
 
 #[debug_handler()]
 async fn new_bookmark(
-    claims: Claims,
+    claims: Claim,
     Extension(app_context): Extension<AppContext>,
     Json(input): Json<NewBookmark>,
 ) -> Result<(StatusCode, Json<Task>)> {
@@ -111,7 +110,7 @@ async fn new_bookmark(
 
 #[debug_handler()]
 async fn set_tags(
-    claims: Claims,
+    claims: Claim,
     Extension(app_context): Extension<AppContext>,
     Path(bookmark_id): Path<String>,
     Json(tags): Json<Tags>,
@@ -128,7 +127,7 @@ async fn set_tags(
 
 #[debug_handler()]
 async fn append_tags(
-    claims: Claims,
+    claims: Claim,
     Extension(app_context): Extension<AppContext>,
     Path(bookmark_id): Path<String>,
     Json(tags): Json<Tags>,

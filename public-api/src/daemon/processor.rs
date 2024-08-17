@@ -26,19 +26,19 @@ pub struct ImageFound {
     url: Url,
 }
 
-#[instrument(skip(http, readability_endpoint, static_image_endpoint, static_prefix))]
+#[instrument(skip(http))]
 pub async fn process_url(
     http: &Client,
-    readability_endpoint: &str,
+    readability_url: Url,
     original_url_str: &str,
-    static_image_endpoint: &str,
-    static_prefix: &str,
+    s3_endpoint: Url,
+    s3_bucket: &str,
 ) -> Result<(Bookmark, Vec<Image>)> {
     let original_url = Url::parse(original_url_str)?;
     let original_url = super::clean_url(original_url)?;
     let bookmark_id: String = super::make_bookmark_id(&original_url)?;
     let raw_html = fetch_html_content(http, &original_url).await?;
-    let readability_response = readability::process(http, readability_endpoint, raw_html).await?;
+    let readability_response = readability::process(http, readability_url, raw_html).await?;
 
     let images_found = find_images(&original_url, &readability_response.content)?;
 
@@ -69,8 +69,8 @@ pub async fn process_url(
         .collect();
 
     let (new_content, images) = rewrite_images(
-        static_image_endpoint,
-        static_prefix,
+        s3_endpoint,
+        s3_bucket,
         &bookmark_id,
         &readability_response.content,
         images_index,
@@ -91,10 +91,10 @@ pub async fn process_url(
     Ok((bookmark, images))
 }
 
-#[instrument(skip(static_image_endpoint, static_prefix, content, images_found))]
+#[instrument(skip(content, images_found))]
 async fn rewrite_images(
-    static_image_endpoint: &str,
-    static_prefix: &str,
+    s3_endpoint: Url,
+    s3_bucket: &str,
     bookmark_id: &str,
     content: &str,
     images_found: HashMap<String, Image>,
@@ -104,7 +104,7 @@ async fn rewrite_images(
         let new_src = match &images_found.get(&img_src) {
             Some(image_found) => {
                 let src = format!(
-                    "{static_image_endpoint}/{static_prefix}/{bookmark_id}/{image_found_id}",
+                    "{s3_endpoint}/{s3_bucket}/{bookmark_id}/{image_found_id}",
                     image_found_id = image_found.id
                 );
                 tracing::info!("Rewriting image from={img_src}, to={src}");

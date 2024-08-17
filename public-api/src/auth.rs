@@ -7,7 +7,8 @@ use axum_extra::{
     TypedHeader,
 };
 use jsonwebtoken::{decode, encode, Header, Validation};
-use secrecy::{DebugSecret, ExposeSecret, SecretString, Zeroize};
+use jsonwebtoken::{DecodingKey, EncodingKey};
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use uuid::Uuid;
@@ -15,50 +16,21 @@ use uuid::Uuid;
 use crate::error::{Error, Result};
 use crate::{AppContext, Config};
 
-use jsonwebtoken::{DecodingKey, EncodingKey};
-
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Claims {
+pub struct Claim {
     pub sub: String,
     pub exp: i64,
     pub user_id: Uuid,
 }
 
-impl Display for Claims {
+impl Display for Claim {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Email: {}", self.sub)
-    }
-}
-
-pub struct Keys {
-    secret: Vec<u8>,
-}
-
-impl Zeroize for Keys {
-    fn zeroize(&mut self) {
-        self.secret = Vec::default();
-    }
-}
-
-impl DebugSecret for Keys {}
-
-impl Keys {
-    pub fn new(secret: &[u8]) -> Self {
-        Self {
-            secret: secret.to_vec(),
-        }
-    }
-
-    fn encoder(&self) -> EncodingKey {
-        EncodingKey::from_secret(&self.secret)
-    }
-    fn decoder(&self) -> DecodingKey {
-        DecodingKey::from_secret(&self.secret)
+        write!(f, "Claims[email: {}]", self.sub)
     }
 }
 
 #[async_trait]
-impl<S> FromRequestParts<S> for Claims
+impl<S> FromRequestParts<S> for Claim
 where
     S: Send + Sync,
 {
@@ -75,18 +47,21 @@ where
             .await
             .map_err(|_| Error::InvalidToken)?;
 
-        let keys = app_context.config.auth_keys.expose_secret();
+        let hmac_key = app_context.config.hmac_key.expose_secret();
+        let decoder = DecodingKey::from_secret(hmac_key.as_bytes());
 
-        let token_data = decode::<Claims>(bearer.token(), &keys.decoder(), &Validation::default())
+        let token_data = decode::<Claim>(bearer.token(), &decoder, &Validation::default())
             .map_err(|_| Error::InvalidToken)?;
 
         Ok(token_data.claims)
     }
 }
 
-pub fn encode_token(config: &Config, claims: &Claims) -> Result<String> {
-    let keys = config.auth_keys.expose_secret();
-    let token = encode(&Header::default(), claims, &keys.encoder())?;
+pub fn encode_token(config: &Config, claims: &Claim) -> Result<String> {
+    let hmac_key = config.hmac_key.expose_secret();
+    let encoder = EncodingKey::from_secret(hmac_key.as_bytes());
+    let header = Header::default();
+    let token = encode(&header, claims, &encoder)?;
     Ok(token)
 }
 

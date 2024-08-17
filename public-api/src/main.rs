@@ -5,38 +5,54 @@ use axum::{
     routing::get,
     Extension, Router,
 };
+use clap::Parser;
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder};
-use std::{future::ready, time::Instant};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-
+use public_api::{daemon, database, endpoints, s3, AppContext, Config, Env};
+use reqwest::Client as HttpClient;
 use sqlx::{Pool, Postgres};
-
 use std::collections::HashMap;
 use std::io;
 use std::sync::Arc;
-
+use std::{future::ready, time::Instant};
 use tokio::signal::unix::SignalKind;
-
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
-
 use tracing_subscriber::EnvFilter;
-
-use public_api::{database, endpoints, AppContext, Config, Env};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let config = Config::parse()?;
+    let config = Config::parse();
     setup_tracing(&config)?;
 
     let db: Pool<Postgres> = database::connect(&config).await?;
     database::run_migrations(&db).await?;
 
-    let app_server = setup_app(config, db);
-    let metrics_server = setup_metrics_server();
+    let app_server = setup_app(&config, db.clone());
+    let metrics_server = setup_metrics_server(&config);
+    let daemon = tokio::spawn(setup_daemon(config.clone(), db));
     tokio::select! {
-        _ = app_server => {}
-        _ = metrics_server => {}
+        result = app_server => {
+            if let Err(error) = result {
+                tracing::error!(?error, "App server error");
+            }
+        },
+        result = metrics_server => {
+            if let Err(error) = result {
+                tracing::error!(?error, "Metrics server error");
+            }
+        },
+        result = daemon => {
+            match result {
+                Ok(Err(error)) => {
+                    tracing::error!(?error, "Daemon task error");
+                },
+                Err(error) => {
+                    tracing::error!(?error, "Join error in daemon task");
+                },
+                _ => {}
+            }
+        },
     }
     Ok(())
 }
@@ -48,7 +64,6 @@ async fn shutdown_signal() {
             .await;
         Ok(())
     }
-
     tokio::select! {
         _ = terminate() => {},
         _ = tokio::signal::ctrl_c() => {},
@@ -56,35 +71,34 @@ async fn shutdown_signal() {
     tracing::debug!("signal received, starting graceful shutdown")
 }
 
-async fn setup_app(config: Config, db: Pool<Postgres>) -> anyhow::Result<()> {
+async fn setup_app(config: &Config, db: Pool<Postgres>) -> anyhow::Result<()> {
     let app_state = AppContext {
-        config: Arc::new(config),
+        config: Arc::new(config.clone()),
         db,
     };
-
-    let cors_layer = CorsLayer::new()
-        .allow_origin([
-            "https://bookmark.k8s.home".parse()?,
-            "http://localhost:8080".parse()?,
-        ])
-        .allow_methods(Any)
-        .allow_headers(Any);
 
     let routes = endpoints::routers_v1().route_layer(middleware::from_fn(track_metrics));
 
     let app = Router::new()
         .nest("/api/v1", routes)
         .layer(Extension(app_state))
-        .layer(cors_layer)
+        .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http());
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
+    let listener = tokio::net::TcpListener::bind(&config.app_bind).await?;
     tracing::info!("Server running, listening on {:?}", &listener);
     axum::serve(listener, app.into_make_service())
         .with_graceful_shutdown(shutdown_signal())
         .await?;
 
     Ok(())
+}
+
+async fn setup_daemon(config: Config, db: Pool<Postgres>) -> anyhow::Result<()> {
+    let s3_client = s3::make_s3_client(&config).await?;
+    let http: HttpClient = HttpClient::new();
+    s3::check_bucket(&s3_client, &config.s3_bucket).await?;
+    daemon::run(&db, &http, &s3_client, &config).await
 }
 
 fn setup_tracing(config: &Config) -> anyhow::Result<()> {
@@ -112,7 +126,8 @@ fn setup_tracing(config: &Config) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn setup_metrics_server() -> anyhow::Result<()> {
+// FIXME use the otel metrics crate
+async fn setup_metrics_server(config: &Config) -> anyhow::Result<()> {
     const EXPONENTIAL_SECONDS: &[f64] = &[
         0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
     ];
@@ -126,7 +141,7 @@ async fn setup_metrics_server() -> anyhow::Result<()> {
 
     let router = Router::new().route("/metrics", get(move || ready(handle.render())));
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:9090").await?;
+    let listener = tokio::net::TcpListener::bind(config.metrics_bind).await?;
     tracing::debug!("Metrics server listening on {:?}", &listener);
     axum::serve(listener, router.into_make_service()).await?;
 

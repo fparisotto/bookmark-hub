@@ -7,16 +7,14 @@ use sqlx::{Pool, Postgres};
 use tokio::time::{sleep, Duration as TokioDuration};
 use tracing::instrument;
 
+use super::processor::Image;
 use crate::daemon::processor;
+use crate::database as db;
 use crate::database::bookmark::Bookmark;
 use crate::{
     database::task::{Task, TaskStatus},
     Config,
 };
-
-use crate::database as db;
-
-use super::processor::Image;
 
 #[instrument(skip_all)]
 pub async fn run(
@@ -127,9 +125,9 @@ async fn crease_or_retrieve_bookmark(
             tracing::info!("Processing new bookmark for url={url}");
             let (bookmark, images) = processor::process_url(
                 http,
-                &config.readability_endpoint,
+                config.readability_url.clone(),
                 url,
-                &config.external_s3_endpoint,
+                config.s3_endpoint.clone(),
                 &config.s3_bucket,
             )
             .await

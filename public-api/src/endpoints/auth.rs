@@ -1,14 +1,14 @@
 use axum::{routing::get, routing::post, Extension, Json, Router};
+use axum_macros::debug_handler;
 use chrono::{DateTime, Duration, Utc};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::auth::{self, Claims};
+use crate::auth::{self, Claim};
 use crate::database::user;
 use crate::error::{Error, Result};
 use crate::AppContext;
-use axum_macros::debug_handler;
 
 #[derive(Debug, Deserialize)]
 struct SignUpPayload {
@@ -105,7 +105,7 @@ pub fn router() -> Router {
 
 #[debug_handler()]
 async fn get_user_profile(
-    claims: Claims,
+    claims: Claim,
     Extension(app_context): Extension<AppContext>,
 ) -> Result<Json<UserProfile>> {
     match user::get_by_id(&app_context.db, &claims.user_id).await {
@@ -164,7 +164,7 @@ async fn sign_in(
             .checked_add_signed(Duration::weeks(2))
             .expect("Not overflow")
             .timestamp();
-        let claims = Claims {
+        let claims = Claim {
             user_id: user.user_id,
             sub: user.email.clone(),
             exp: expiration,

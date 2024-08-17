@@ -2,6 +2,7 @@ use anyhow::Result;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
+use url::Url;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ReadabilityResponse {
@@ -14,11 +15,11 @@ pub struct ReadabilityResponse {
 #[instrument(skip_all)]
 pub async fn process(
     client: &Client,
-    readability_endpoint: &str,
+    readability_url: Url,
     raw_content: String,
 ) -> Result<ReadabilityResponse> {
     let response = client
-        .post(readability_endpoint)
+        .post(readability_url)
         .body(raw_content)
         .send()
         .await?;
