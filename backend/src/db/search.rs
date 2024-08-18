@@ -55,7 +55,6 @@ pub async fn search(
     user_id: &Uuid,
     request: SearchRequest,
 ) -> Result<SearchResponse> {
-    // this mimics a elasticsearch / meillisearch query
     // TODO use a tx
     let f_search = run_search(db, user_id, &request);
     let f_aggregation = run_aggregation(db, user_id, &request);

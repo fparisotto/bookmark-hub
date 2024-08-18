@@ -1,5 +1,6 @@
 use secrecy::ExposeSecret;
 use sqlx::postgres::PgPoolOptions;
+use sqlx::{Pool, Postgres};
 
 use crate::error::{Error, Result};
 use crate::Config;
@@ -19,6 +20,11 @@ pub async fn connect(config: &Config) -> Result<sqlx::Pool<sqlx::Postgres>> {
 
 pub async fn run_migrations(db: &sqlx::Pool<sqlx::Postgres>) -> Result<()> {
     sqlx::migrate!().run(db).await?;
+    Ok(())
+}
+
+pub async fn run_health_check(db: &Pool<Postgres>) -> Result<()> {
+    let _: i32 = sqlx::query_scalar("SELECT 1").fetch_one(db).await?;
     Ok(())
 }
 

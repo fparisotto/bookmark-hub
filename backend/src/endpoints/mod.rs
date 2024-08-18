@@ -1,19 +1,24 @@
-use axum::{routing, Router};
-
-use crate::error::{Error, Result};
+use crate::{
+    db,
+    error::{Error, Result},
+    AppContext,
+};
+use axum::{routing, Extension, Json, Router};
 
 mod auth;
 mod bookmark;
 mod search;
 mod static_content;
 
-async fn test_db() -> Result<String> {
-    // TODO test db connection
-    Ok("OK".to_string())
+async fn health_check_handler(
+    Extension(app_context): Extension<AppContext>,
+) -> Result<Json<String>> {
+    db::run_health_check(&app_context.db).await?;
+    Ok(Json("OK".to_string()))
 }
 
 pub fn health_check() -> Router {
-    Router::new().route("/health", routing::get(test_db))
+    Router::new().route("/health", routing::get(health_check_handler))
 }
 
 pub fn routers_v1() -> Router {
