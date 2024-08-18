@@ -1,6 +1,4 @@
 use anyhow::{Error, Result};
-use aws_config::meta::region::RegionProviderChain;
-use aws_config::BehaviorVersion;
 use aws_sdk_s3::config::Credentials;
 use aws_sdk_s3::config::Region;
 use aws_sdk_s3::Client as S3Client;
@@ -16,14 +14,13 @@ pub async fn s3_client(config: &Config) -> Result<S3Client, Error> {
         None,
         "backend",
     );
-    let region = RegionProviderChain::first_try(Region::new(config.s3_region.clone()));
-    let config = aws_config::defaults(BehaviorVersion::v2024_03_28())
-        .region(region)
+    let s3_config = aws_sdk_s3::config::Builder::new()
         .endpoint_url(config.s3_endpoint.as_str())
         .credentials_provider(credentials)
-        .load()
-        .await;
-    let client = S3Client::new(&config);
+        .region(Region::new(config.s3_region.clone()))
+        .force_path_style(true) // apply bucketname as path param instead of pre-domain
+        .build();
+    let client = S3Client::from_conf(s3_config);
     Ok(client)
 }
 

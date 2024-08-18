@@ -7,12 +7,17 @@ edition = "2021"
 name = "backend"
 path = "src/main.rs"
 
+[profile.release]
+codegen-units = 1
+debug = "line-tables-only"
+strip = false
+
 [dependencies]
 anyhow = "1"
 argon2 = "0.5"
 async-trait = "0.1"
 aws-config = "1.5"
-aws-sdk-s3 = "1.40"
+aws-sdk-s3 = { version = "1.40", features = ["behavior-version-latest"] }
 axum = { version = "0.7" }
 axum-extra = { version = "0.9", features = ["typed-header"] }
 axum-macros = "0.4"

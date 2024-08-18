@@ -7,16 +7,18 @@ services:
     depends_on:
       - postgres
     environment:
-      APP_ENV: DEV
-      DATABASE_CONNECTION_POOL_SIZE: 5
-      DATABASE_URL: postgres://main:main@postgres/main
-      S3_ENDPOINT: http://minio:9000
-      HMAC_KEY: secret
-      READABILITY_ENDPOINT: http://readability-api:3001
+      RUST_BACKTRACE: 1
       RUST_LOG: info
+      APP_ENV: DEV
+      APP_BIND: "[::]:3000"
+      HMAC_KEY: secret
+      DB_POOL_SIZE: 5
+      DB_URL: postgres://main:main@postgres/main
+      READABILITY_URL: http://readability-api:3001
+      S3_ENDPOINT: http://minio:9000
       S3_ACCESS_KEY: ROOTNAME
       S3_BUCKET: bookmark
-      S3_REGION: ""
+      S3_REGION: us-east-1
       S3_SECRET_KEY: CHANGEME123
     healthcheck:
       test: curl --fail http://localhost:3000/health-check || exit 1
@@ -26,6 +28,8 @@ services:
       retries: 5
   readability-api:
     image: ghcr.io/fparisotto/readability-api:v0.0.1
+    environment:
+      PORT: 3001
     ports:
       - 3001:3001
   web-spa:
@@ -100,12 +104,12 @@ services:
         ]
       }
       EOF
-      /usr/bin/mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD} &&
-      /usr/bin/mc mb local/$${MINIO_BUCKET} &&
-      /usr/bin/mc anonymous set download local/$${MINIO_BUCKET} &&
-      /usr/bin/mc admin user add local $${MINIO_ACCESS_KEY} $${MINIO_SECRET_KEY} &&
-      /usr/bin/mc admin policy add local write-policy ./write-policy.json &&
-      /usr/bin/mc admin policy set local write-policy user=$${MINIO_ACCESS_KEY}"
+      mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD} &&
+      mc mb local/$${MINIO_BUCKET} &&
+      mc anonymous set download local/$${MINIO_BUCKET} &&
+      mc admin user add local $${MINIO_ACCESS_KEY} $${MINIO_SECRET_KEY} &&
+      mc admin policy create local write-policy ./write-policy.json &&
+      mc admin policy attach local write-policy --user $${MINIO_ACCESS_KEY}"
 volumes:
   postgres-data:
   minio-data:

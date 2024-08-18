@@ -51,7 +51,7 @@ pub async fn run(
                 Err(error) => {
                     if task.should_retry() {
                         tracing::info!("fail retry, reason = {:?}", &error);
-                        let retry_value = task.retries.unwrap_or(0) + 1;
+                        let retry_value: i16 = task.retries.unwrap_or(0) + 1;
                         db::task::update(pool, &task, TaskStatus::Pending, Some(retry_value), None)
                             .await?;
                         tracing::warn!(

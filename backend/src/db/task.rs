@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::error::Result;
 
-const TASK_MAX_RETRIES: u8 = 5;
+const TASK_MAX_RETRIES: i16 = 5;
 
 #[derive(Deserialize, Serialize, Debug, Copy, Clone, sqlx::Type)]
 #[sqlx(type_name = "task_status")]
@@ -28,13 +28,13 @@ pub struct Task {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub next_delivery: DateTime<Utc>,
-    pub retries: Option<i8>,
+    pub retries: Option<i16>,
     pub fail_reason: Option<String>,
 }
 
 impl Task {
     pub fn should_retry(&self) -> bool {
-        self.retries.unwrap_or(0) < TASK_MAX_RETRIES as i8
+        self.retries.unwrap_or(0) < TASK_MAX_RETRIES
     }
 }
 
@@ -100,7 +100,7 @@ pub async fn update(
     pool: &Pool<Postgres>,
     task: &Task,
     status: TaskStatus,
-    retries: Option<i8>,
+    retries: Option<i16>,
     fail_reason: Option<String>,
 ) -> Result<()> {
     let sql =
