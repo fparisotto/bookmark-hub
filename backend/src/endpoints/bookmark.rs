@@ -6,12 +6,13 @@ use axum_macros::debug_handler;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::auth::Claim;
 use crate::db::bookmark::{self, BookmarkWithUser, TagOperation};
 use crate::db::task::{self, Task};
 use crate::endpoints::Error;
 use crate::error::Result;
 use crate::AppContext;
+
+use super::Claim;
 
 pub fn routes() -> Router {
     Router::new()

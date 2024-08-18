@@ -5,7 +5,6 @@ use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use strum_macros::EnumString;
 use url::Url;
 
-pub mod auth;
 pub mod daemon;
 pub mod db;
 pub mod endpoints;

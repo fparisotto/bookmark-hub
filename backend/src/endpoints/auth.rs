@@ -5,10 +5,11 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::auth::{self, Claim};
 use crate::db::user;
 use crate::error::{Error, Result};
 use crate::AppContext;
+
+use super::Claim;
 
 #[derive(Debug, Deserialize)]
 struct SignUpPayload {
@@ -134,7 +135,7 @@ async fn sign_up(
     Json(payload): Json<SignUpPayload>,
 ) -> Result<Json<SignUpResponse>> {
     payload.validate()?;
-    let hashed_password = auth::hash_password(payload.password).await?;
+    let hashed_password = super::hash_password(payload.password).await?;
     let try_user = user::create(&app_context.db, payload.email, hashed_password).await;
     match try_user {
         Ok(user) => Ok(Json(SignUpResponse {
@@ -159,7 +160,7 @@ async fn sign_in(
     payload.validate()?;
     let maybe_user = user::get_by_email(&app_context.db, &payload.email).await?;
     if let Some(user) = maybe_user {
-        auth::verify_password(payload.password, user.password_hash.clone()).await?;
+        super::verify_password(payload.password, user.password_hash.clone()).await?;
         let expiration = Utc::now()
             .checked_add_signed(Duration::weeks(2))
             .expect("Not overflow")
@@ -169,7 +170,7 @@ async fn sign_in(
             sub: user.email.clone(),
             exp: expiration,
         };
-        let token = auth::encode_token(&app_context.config, &claims)?;
+        let token = super::encode_token(&app_context.config, &claims)?;
         tracing::info!("User authenticated, email={}", &claims.sub);
         return Ok(Json(AuthBody::new(&user, token)));
     }

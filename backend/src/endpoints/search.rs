@@ -2,10 +2,11 @@ use axum::Json;
 use axum::{routing::post, Extension, Router};
 use axum_macros::debug_handler;
 
-use crate::auth::Claim;
 use crate::db::search::{search, SearchRequest, SearchResponse};
 use crate::error::Result;
 use crate::AppContext;
+
+use super::Claim;
 
 pub fn routes() -> Router {
     Router::new().route("/search", post(search_bookmark))
