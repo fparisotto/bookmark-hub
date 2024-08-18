@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use strum_macros::EnumString;
 use uuid::Uuid;
 
-use crate::api::PUBLIC_API_ENDPOINT;
+use crate::api::BACKEND_URL;
 
 use super::tags_api::Tag;
 
@@ -66,7 +66,7 @@ pub struct SearchResponse {
 }
 
 pub async fn search(token: &String, request: SearchRequest) -> Result<SearchResponse, Error> {
-    let endpoint = format!("{PUBLIC_API_ENDPOINT}/api/v1/search");
+    let endpoint = format!("{BACKEND_URL}/api/v1/search");
     let request_body = serde_json::to_string(&request).expect("Serialize should not fail");
     let response = Request::post(&endpoint)
         .header("Authorization", &format!("Bearer {token}"))

@@ -82,7 +82,7 @@ async fn setup_app(config: &Config, db: Pool<Postgres>) -> anyhow::Result<()> {
 }
 
 async fn setup_daemon(config: Config, db: Pool<Postgres>) -> anyhow::Result<()> {
-    let s3_client = s3::make_s3_client(&config).await?;
+    let s3_client = s3::s3_client(&config).await?;
     let http: HttpClient = HttpClient::new();
     s3::check_bucket(&s3_client, &config.s3_bucket).await?;
     daemon::run(&db, &http, &s3_client, &config).await

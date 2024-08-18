@@ -4,7 +4,7 @@ use gloo_net::Error;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::api::PUBLIC_API_ENDPOINT;
+use crate::api::BACKEND_URL;
 
 #[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct Bookmark {
@@ -44,7 +44,7 @@ pub async fn add_bookmark(
     token: &String,
     request: NewBookmarkRequest,
 ) -> Result<NewBookmarkResponse, Error> {
-    let endpoint = format!("{PUBLIC_API_ENDPOINT}/api/v1/bookmarks");
+    let endpoint = format!("{BACKEND_URL}/api/v1/bookmarks");
     let request_body = serde_json::to_string(&request).expect("Serialize should not fail");
     let response = Request::post(&endpoint)
         .header("Authorization", &format!("Bearer {token}"))
@@ -62,7 +62,7 @@ pub async fn add_bookmark(
 }
 
 pub async fn get_by_id(token: &str, id: &str) -> Result<Option<Bookmark>, Error> {
-    let endpoint = format!("{PUBLIC_API_ENDPOINT}/api/v1/bookmarks/{id}");
+    let endpoint = format!("{BACKEND_URL}/api/v1/bookmarks/{id}");
     let response = Request::get(&endpoint)
         .header("Authorization", &format!("Bearer {token}"))
         .header("Content-Type", "application/json")
@@ -87,7 +87,7 @@ pub async fn get_by_id(token: &str, id: &str) -> Result<Option<Bookmark>, Error>
 }
 
 pub async fn set_tags(token: &str, id: &str, tags: Vec<String>) -> Result<Bookmark, Error> {
-    let endpoint = format!("{PUBLIC_API_ENDPOINT}/api/v1/bookmarks/{id}/tags");
+    let endpoint = format!("{BACKEND_URL}/api/v1/bookmarks/{id}/tags");
     let payload = Tags { tags };
     let request_body = serde_json::to_string(&payload).expect("Serialize should not fail");
     let response = Request::post(&endpoint)

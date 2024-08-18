@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::api::PUBLIC_API_ENDPOINT;
+use crate::api::BACKEND_URL;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct LoginResponse {
@@ -21,7 +21,7 @@ pub struct UserProfileResponse {
 }
 
 pub async fn login(email: String, password: String) -> Result<LoginResponse, Error> {
-    let endpoint = format!("{PUBLIC_API_ENDPOINT}/api/v1/auth/sign-in");
+    let endpoint = format!("{BACKEND_URL}/api/v1/auth/sign-in");
     let json_value = json!({"email": email, "password": password});
     log::info!("Doing login, endpoint={endpoint}");
     let request_body = serde_json::to_string(&json_value).expect("Serialize should not fail");
@@ -37,7 +37,7 @@ pub async fn login(email: String, password: String) -> Result<LoginResponse, Err
 }
 
 pub async fn get_user_profile(token: String) -> Result<UserProfileResponse, Error> {
-    let endpoint = format!("{PUBLIC_API_ENDPOINT}/api/v1/auth/user-profile");
+    let endpoint = format!("{BACKEND_URL}/api/v1/auth/user-profile");
     let response = Request::get(&endpoint)
         .header("Authorization", &format!("Bearer {token}"))
         .send()

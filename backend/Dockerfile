@@ -1,9 +1,9 @@
 # builder
-FROM rust:1.79-bookworm as builder
+FROM rust:1.80-bookworm as builder
 
 # new empty project
 RUN USER=root cargo new --bin backend
-WORKDIR /app
+WORKDIR /backend
 
 # copy manifests
 COPY ./Cargo.lock ./Cargo.lock

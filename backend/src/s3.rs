@@ -8,13 +8,13 @@ use secrecy::ExposeSecret;
 
 use crate::Config;
 
-pub async fn make_s3_client(config: &Config) -> Result<S3Client, Error> {
+pub async fn s3_client(config: &Config) -> Result<S3Client, Error> {
     let credentials = Credentials::new(
         config.s3_access_key.expose_secret(),
         config.s3_secret_key.expose_secret(),
         None,
         None,
-        "daemon",
+        "backend",
     );
     let region = RegionProviderChain::first_try(Region::new(config.s3_region.clone()));
     let config = aws_config::defaults(BehaviorVersion::v2024_03_28())
