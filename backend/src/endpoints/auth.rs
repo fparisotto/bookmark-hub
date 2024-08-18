@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::auth::{self, Claim};
-use crate::database::user;
+use crate::db::user;
 use crate::error::{Error, Result};
 use crate::AppContext;
 

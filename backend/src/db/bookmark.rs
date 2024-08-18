@@ -145,7 +145,7 @@ pub async fn update_tags(
     let sql = format!(
         r#"
         WITH update_bookmark_user AS (
-            UPDATE public.bookmark_user
+            UPDATE bookmark_user
             SET {update_tag_sql}, updated_at=now()
             WHERE bookmark_id=$2 AND user_id=$3
             RETURNING *

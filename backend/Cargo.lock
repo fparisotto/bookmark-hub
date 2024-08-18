@@ -670,6 +670,50 @@ dependencies = [
 ]
 
 [[package]]
+name = "backend"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "argon2",
+ "async-trait",
+ "aws-config",
+ "aws-sdk-s3",
+ "axum",
+ "axum-extra",
+ "axum-macros",
+ "axum-otel-metrics",
+ "base64-url",
+ "chrono",
+ "clap",
+ "futures",
+ "hex",
+ "hmac",
+ "jsonwebtoken",
+ "lol_html",
+ "metrics",
+ "metrics-exporter-prometheus",
+ "murmur3",
+ "rand 0.8.5",
+ "reqwest",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "strum",
+ "strum_macros",
+ "thiserror",
+ "tokio",
+ "tower",
+ "tower-http",
+ "tracing",
+ "tracing-loki",
+ "tracing-subscriber",
+ "url",
+ "uuid",
+]
+
+[[package]]
 name = "backtrace"
 version = "0.3.73"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2698,50 +2742,6 @@ name = "protobuf"
 version = "2.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "106dd99e98437432fed6519dedecfade6a06a73bb7b2a1e019fdd2bee5778d94"
-
-[[package]]
-name = "public-api"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "argon2",
- "async-trait",
- "aws-config",
- "aws-sdk-s3",
- "axum",
- "axum-extra",
- "axum-macros",
- "axum-otel-metrics",
- "base64-url",
- "chrono",
- "clap",
- "futures",
- "hex",
- "hmac",
- "jsonwebtoken",
- "lol_html",
- "metrics",
- "metrics-exporter-prometheus",
- "murmur3",
- "rand 0.8.5",
- "reqwest",
- "secrecy",
- "serde",
- "serde_json",
- "sha2",
- "sqlx",
- "strum",
- "strum_macros",
- "thiserror",
- "tokio",
- "tower",
- "tower-http",
- "tracing",
- "tracing-loki",
- "tracing-subscriber",
- "url",
- "uuid",
-]
 
 [[package]]
 name = "quanta"

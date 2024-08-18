@@ -2,8 +2,8 @@
 FROM rust:1.79-bookworm as builder
 
 # new empty project
-RUN USER=root cargo new --bin daemon
-WORKDIR /daemon
+RUN USER=root cargo new --bin backend
+WORKDIR /app
 
 # copy manifests
 COPY ./Cargo.lock ./Cargo.lock
@@ -15,16 +15,20 @@ RUN rm src/*.rs
 
 # copy source tree
 COPY ./src ./src
+COPY ./migrations ./migrations
 
 # build for release
-RUN rm ./target/release/deps/daemon*
+RUN rm ./target/release/deps/backend*
 RUN cargo build --release
 
 # runner
 FROM debian:bookworm-slim
 
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates wait-for-it && update-ca-certificates
+RUN apt update && apt install -y --no-install-recommends ca-certificates wait-for-it && update-ca-certificates
 
-COPY --from=builder /daemon/target/release/daemon .
+COPY --from=builder /backend/target/release/backend .
 
-CMD ["./daemon"]
+EXPOSE 3000
+EXPOSE 9090
+
+CMD ["./backend"]

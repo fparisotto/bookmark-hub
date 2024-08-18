@@ -1,7 +1,7 @@
 use axum::{Extension, Router};
 use axum_otel_metrics::HttpMetricsLayerBuilder;
+use backend::{daemon, db, endpoints, s3, AppContext, Config, Env};
 use clap::Parser;
-use public_api::{daemon, database, endpoints, s3, AppContext, Config, Env};
 use reqwest::Client as HttpClient;
 use sqlx::{Pool, Postgres};
 use std::collections::HashMap;
@@ -18,8 +18,8 @@ async fn main() -> anyhow::Result<()> {
     let config = Config::parse();
     setup_tracing(&config)?;
 
-    let db: Pool<Postgres> = database::connect(&config).await?;
-    database::run_migrations(&db).await?;
+    let db: Pool<Postgres> = db::connect(&config).await?;
+    db::run_migrations(&db).await?;
 
     let app_server = setup_app(&config, db.clone());
     let daemon = tokio::spawn(setup_daemon(config.clone(), db));

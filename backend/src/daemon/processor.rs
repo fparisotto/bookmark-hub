@@ -1,25 +1,14 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
+use chrono::Utc;
 use futures::future::join_all;
 use lol_html::{element, rewrite_str, RewriteStrSettings};
-use murmur3::murmur3_x64_128;
 use reqwest::Client;
-use serde::Deserialize;
 use std::collections::HashMap;
-use std::io::Cursor;
 use tracing::instrument;
 use url::Url;
 
-#[derive(Debug)]
-pub struct Bookmark {
-    pub id: String,
-    pub original_url: String,
-    pub domain: String,
-    pub title: String,
-    pub html: String,
-    pub text: String,
-    pub images: Vec<Image>,
-    // TODO links: Vec<String>
-}
+use crate::db::bookmark::Bookmark;
+use crate::readability;
 
 #[derive(Debug)]
 pub struct Image {
@@ -30,12 +19,6 @@ pub struct Image {
     pub bytes: Vec<u8>,
 }
 
-struct ReadabilityResponse {
-    title: String,
-    html: String,
-    text: String,
-}
-
 #[derive(Debug)]
 struct ImageFound {
     id: String,
@@ -43,21 +26,21 @@ struct ImageFound {
     url: Url,
 }
 
-#[instrument(skip(http, readability_endpoint, static_image_endpoint, static_prefix))]
+#[instrument(skip(http))]
 pub async fn process_url(
     http: &Client,
-    readability_endpoint: &str,
+    readability_url: Url,
     original_url_str: &str,
-    static_image_endpoint: &str,
-    static_prefix: &str,
-) -> Result<Bookmark> {
+    s3_endpoint: Url,
+    s3_bucket: &str,
+) -> Result<(Bookmark, Vec<Image>)> {
     let original_url = Url::parse(original_url_str)?;
-    let original_url = clean_url(&original_url)?;
-    let bookmark_id: String = make_id(&original_url)?;
+    let original_url = super::clean_url(original_url)?;
+    let bookmark_id: String = super::make_bookmark_id(&original_url)?;
     let raw_html = fetch_html_content(http, &original_url).await?;
-    let readability_response = readability_process(http, readability_endpoint, raw_html).await?;
+    let readability_response = readability::process(http, readability_url, raw_html).await?;
 
-    let images_found = find_images(&original_url, &readability_response.html)?;
+    let images_found = find_images(&original_url, &readability_response.content)?;
 
     let processed_images = join_all(
         images_found
@@ -86,64 +69,32 @@ pub async fn process_url(
         .collect();
 
     let (new_content, images) = rewrite_images(
-        static_image_endpoint,
-        static_prefix,
+        s3_endpoint,
+        s3_bucket,
         &bookmark_id,
-        &readability_response.html,
+        &readability_response.content,
         images_index,
     )
     .await?;
 
     let bookmark = Bookmark {
-        id: bookmark_id,
-        original_url: original_url.to_string(),
-        domain: domain_from_url(&original_url)?,
-        title: readability_response.title.clone(),
-        html: new_content,
-        text: readability_response.text.clone(),
-        images,
+        bookmark_id,
+        url: original_url.to_string(),
+        domain: super::domain_from_url(&original_url)?,
+        title: readability_response.title,
+        html_content: new_content,
+        text_content: readability_response.text_content,
+        images: Vec::default(),
+        created_at: Utc::now(),
     };
 
-    Ok(bookmark)
+    Ok((bookmark, images))
 }
 
-pub fn clean_url(url: &Url) -> Result<Url> {
-    if let Some(host) = url.host_str() {
-        let path = &url.path();
-        let clean_url = format!("{scheme}://{host}{path}", scheme = &url.scheme());
-        tracing::info!("Clean url={clean_url}");
-        let clean = Url::parse(&clean_url)?;
-        return Ok(clean);
-    }
-    Err(anyhow!(format!("Invalid url={url}")))
-}
-
-fn make_id(url: &Url) -> Result<String> {
-    if let Some(host) = url.host_str() {
-        let path = url.path();
-        let source = format!("{host}.{path}");
-        let mut source = Cursor::new(source.as_str());
-        let hash = murmur3_x64_128(&mut source, 0)?;
-        let id = base64_url::encode(&hash.to_be_bytes());
-        tracing::info!(id = &id, url = format!("{url}"), "Making url id");
-        return Ok(id);
-    }
-    Err(anyhow!(format!("Invalid url={url}")))
-}
-
-fn domain_from_url(url: &Url) -> Result<String> {
-    let domain_or_host = url
-        .domain()
-        .or_else(|| url.host_str())
-        .map(|s| s.to_string())
-        .ok_or_else(|| anyhow!(format!("Domain not found for url={url}")))?;
-    Ok(domain_or_host)
-}
-
-#[instrument(skip(static_image_endpoint, static_prefix, content, images_found))]
+#[instrument(skip(content, images_found))]
 async fn rewrite_images(
-    static_image_endpoint: &str,
-    static_prefix: &str,
+    s3_endpoint: Url,
+    s3_bucket: &str,
     bookmark_id: &str,
     content: &str,
     images_found: HashMap<String, Image>,
@@ -153,7 +104,7 @@ async fn rewrite_images(
         let new_src = match &images_found.get(&img_src) {
             Some(image_found) => {
                 let src = format!(
-                    "{static_image_endpoint}/{static_prefix}/{bookmark_id}/{image_found_id}",
+                    "{s3_endpoint}/{s3_bucket}/{bookmark_id}/{image_found_id}",
                     image_found_id = image_found.id
                 );
                 tracing::info!("Rewriting image from={img_src}, to={src}");
@@ -220,7 +171,7 @@ fn find_images(base_url: &Url, content: &str) -> Result<Vec<ImageFound>> {
         };
         match parsed_img_src {
             Ok(parsed) => {
-                let image_id: String = make_id(&parsed)?;
+                let image_id: String = super::make_bookmark_id(&parsed)?;
                 tracing::info!("Image found, original_url={parsed}");
                 images_found.push(ImageFound {
                     id: image_id,
@@ -252,31 +203,4 @@ fn find_images(base_url: &Url, content: &str) -> Result<Vec<ImageFound>> {
 #[instrument(skip(client))]
 async fn fetch_html_content(client: &Client, url: &Url) -> Result<String> {
     Ok(client.get(url.to_string()).send().await?.text().await?)
-}
-
-#[derive(Deserialize)]
-struct ReadabilityPayload {
-    title: String,
-    content: String,
-    #[serde(rename(deserialize = "textContent"))]
-    text_content: String,
-}
-
-#[instrument(skip_all)]
-async fn readability_process(
-    client: &Client,
-    readability_endpoint: &str,
-    raw_content: String,
-) -> Result<ReadabilityResponse> {
-    let response = client
-        .post(readability_endpoint)
-        .body(raw_content)
-        .send()
-        .await?;
-    let payload = response.json::<ReadabilityPayload>().await?;
-    Ok(ReadabilityResponse {
-        title: payload.title,
-        html: payload.content,
-        text: payload.text_content,
-    })
 }

@@ -7,7 +7,7 @@ use url::Url;
 
 pub mod auth;
 pub mod daemon;
-pub mod database;
+pub mod db;
 pub mod endpoints;
 pub mod error;
 pub mod readability;

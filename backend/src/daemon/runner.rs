@@ -9,12 +9,12 @@ use tracing::instrument;
 
 use super::processor::Image;
 use crate::daemon::processor;
-use crate::database as db;
-use crate::database::bookmark::Bookmark;
-use crate::{
-    database::task::{Task, TaskStatus},
-    Config,
+use crate::db::{
+    self,
+    bookmark::Bookmark,
+    task::{Task, TaskStatus},
 };
+use crate::Config;
 
 #[instrument(skip_all)]
 pub async fn run(

@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::auth::Claim;
-use crate::database::bookmark::{self, BookmarkWithUser, TagOperation};
-use crate::database::task::{self, Task};
+use crate::db::bookmark::{self, BookmarkWithUser, TagOperation};
+use crate::db::task::{self, Task};
 use crate::endpoints::Error;
 use crate::error::Result;
 use crate::AppContext;

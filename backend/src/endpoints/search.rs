@@ -3,7 +3,7 @@ use axum::{routing::post, Extension, Router};
 use axum_macros::debug_handler;
 
 use crate::auth::Claim;
-use crate::database::search::{search, SearchRequest, SearchResponse};
+use crate::db::search::{search, SearchRequest, SearchResponse};
 use crate::error::Result;
 use crate::AppContext;
 

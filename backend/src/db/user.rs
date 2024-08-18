@@ -3,7 +3,7 @@ use sqlx::{Pool, Postgres};
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::database::{Error, Result, ResultExt};
+use crate::db::{Error, Result, ResultExt};
 
 #[derive(sqlx::FromRow)]
 pub struct User {
