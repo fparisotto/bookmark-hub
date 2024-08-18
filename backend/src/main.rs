@@ -1,6 +1,7 @@
+use anyhow::bail;
 use axum::{Extension, Router};
 use axum_otel_metrics::HttpMetricsLayerBuilder;
-use backend::{daemon, db, endpoints, s3, AppContext, Config, Env};
+use backend::{daemon, db, endpoints, AppContext, Config, Env};
 use clap::Parser;
 use reqwest::Client as HttpClient;
 use sqlx::{Pool, Postgres};
@@ -68,6 +69,8 @@ async fn setup_app(config: &Config, db: Pool<Postgres>) -> anyhow::Result<()> {
         .build();
     let app = Router::new()
         .nest("/api/v1", endpoints::routers_v1())
+        .merge(endpoints::health_check())
+        .merge(endpoints::static_content(config))
         .merge(metrics.routes())
         .layer(metrics)
         .layer(Extension(app_state))
@@ -82,10 +85,25 @@ async fn setup_app(config: &Config, db: Pool<Postgres>) -> anyhow::Result<()> {
 }
 
 async fn setup_daemon(config: Config, db: Pool<Postgres>) -> anyhow::Result<()> {
-    let s3_client = s3::s3_client(&config).await?;
+    let data_dir = config.data_dir.clone();
+    if !data_dir.exists() || !data_dir.is_dir() {
+        bail!("Data dir is not a directory, {:?}", &config.data_dir);
+    }
+    if data_dir.metadata()?.permissions().readonly() {
+        bail!(
+            "Data dir is readonly, needs write access, {:?}",
+            &config.data_dir
+        );
+    }
+    {
+        let mut test_file = data_dir.clone();
+        test_file.push("test.txt");
+        std::fs::write(&test_file, "test data")?;
+        std::fs::remove_file(&test_file)?;
+        tracing::info!("Data dir is valid");
+    }
     let http: HttpClient = HttpClient::new();
-    s3::check_bucket(&s3_client, &config.s3_bucket).await?;
-    daemon::run(&db, &http, &s3_client, &config).await
+    daemon::run(&db, &http, &config).await
 }
 
 fn setup_tracing(config: &Config) -> anyhow::Result<()> {

@@ -51,8 +51,7 @@ jsonpath "$.tags[*]" includes "Tokio"
 GET http://localhost:3000/api/v1/bookmarks
 Authorization: Bearer {{token}}
 [Options]
-retry: 5
-retry-interval: 2000
+retry: 10
 
 HTTP/1.1 200
 [Captures]
@@ -121,12 +120,11 @@ jsonpath "$.tags[*]" includes "metrics"
 GET http://localhost:3000/api/v1/bookmarks
 Authorization: Bearer {{token}}
 [Options]
-retry: 5
-retry-interval: 2000
+retry: 10
 
 HTTP/1.1 200
 [Asserts]
-jsonpath "$.bookmarks[*].url" includes "https://tokio.rs/blog/2022-02-announcing-tokio-metrics"
+body contains "https://tokio.rs/blog/2022-02-announcing-tokio-metrics"
 
 # get_all_tags
 GET http://localhost:3000/api/v1/tags

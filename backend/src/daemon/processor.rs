@@ -31,8 +31,6 @@ pub async fn process_url(
     http: &Client,
     readability_url: Url,
     original_url_str: &str,
-    s3_endpoint: Url,
-    s3_bucket: &str,
 ) -> Result<(Bookmark, Vec<Image>)> {
     let original_url = Url::parse(original_url_str)?;
     let original_url = super::clean_url(original_url)?;
@@ -68,14 +66,8 @@ pub async fn process_url(
         .map(|image| (image.original_src.clone(), image))
         .collect();
 
-    let (new_content, images) = rewrite_images(
-        s3_endpoint,
-        s3_bucket,
-        &bookmark_id,
-        &readability_response.content,
-        images_index,
-    )
-    .await?;
+    let (new_content, images) =
+        rewrite_images(&bookmark_id, &readability_response.content, images_index).await?;
 
     let bookmark = Bookmark {
         bookmark_id,
@@ -93,8 +85,6 @@ pub async fn process_url(
 
 #[instrument(skip(content, images_found))]
 async fn rewrite_images(
-    s3_endpoint: Url,
-    s3_bucket: &str,
     bookmark_id: &str,
     content: &str,
     images_found: HashMap<String, Image>,
@@ -104,7 +94,7 @@ async fn rewrite_images(
         let new_src = match &images_found.get(&img_src) {
             Some(image_found) => {
                 let src = format!(
-                    "{s3_endpoint}/{s3_bucket}/{bookmark_id}/{image_found_id}",
+                    "/static/{bookmark_id}/{image_found_id}",
                     image_found_id = image_found.id
                 );
                 tracing::info!("Rewriting image from={img_src}, to={src}");

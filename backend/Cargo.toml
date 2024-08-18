@@ -16,8 +16,6 @@ strip = false
 anyhow = "1"
 argon2 = "0.5"
 async-trait = "0.1"
-aws-config = "1.5"
-aws-sdk-s3 = { version = "1.40", features = ["behavior-version-latest"] }
 axum = { version = "0.7" }
 axum-extra = { version = "0.9", features = ["typed-header"] }
 axum-macros = "0.4"
@@ -50,8 +48,8 @@ strum = "0.26"
 strum_macros = "0.26"
 thiserror = "1"
 tokio = { version = "1.38", features = ["full"] }
-tower = "0.4"
-tower-http = { version = "0.5", features = ["trace", "cors"] }
+tower = { version = "0.4", features = ["util"] }
+tower-http = { version = "0.5", features = ["trace", "cors", "fs"] }
 tracing = "0.1"
 tracing-loki = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

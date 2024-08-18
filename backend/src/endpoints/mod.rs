@@ -5,18 +5,21 @@ use crate::error::{Error, Result};
 mod auth;
 mod bookmark;
 mod search;
+mod static_content;
 
-async fn health_check() -> Result<String> {
+async fn test_db() -> Result<String> {
+    // TODO test db connection
     Ok("OK".to_string())
 }
 
-fn routes() -> Router {
-    Router::new().route("/health-check", routing::get(health_check))
+pub fn health_check() -> Router {
+    Router::new().route("/health", routing::get(test_db))
 }
 
 pub fn routers_v1() -> Router {
     auth::router()
         .merge(bookmark::routes())
-        .merge(routes())
         .merge(search::routes())
 }
+
+pub use static_content::routes as static_content;
