@@ -3,29 +3,37 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    rust-overlay.url = "github:oxalica/rust-overlay";
+    fenix = {
+      url = "github:nix-community/fenix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, rust-overlay, flake-utils, ... }:
+  outputs = { self, nixpkgs, flake-utils, fenix, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        overlays = [ (import rust-overlay) ];
-        pkgs = import nixpkgs {
-          inherit system overlays;
-        };
+        pkgs = nixpkgs.legacyPackages.${system};
+        f = with fenix.packages.${system}; combine [
+          stable.toolchain
+          targets.wasm32-unknown-unknown.stable.rust-std
+        ];
       in
       {
         devShells.default = with pkgs; mkShell {
-          buildInputs = [
+          packages = with pkgs; [
+            f
             hurl
+            llvmPackages.bintools
             nodejs_22
             openssl
             pkg-config
-            pkg-config
             tailwindcss
             trunk
+            wasm-pack
           ];
+          CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_LINKER = "lld";
+          BACKEND_URL = "http://localhost:3000";
         };
       }
     );
