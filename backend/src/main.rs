@@ -77,7 +77,7 @@ async fn setup_app(config: &Config, db: Pool<Postgres>) -> anyhow::Result<()> {
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http());
     let listener = tokio::net::TcpListener::bind(&config.bind).await?;
-    tracing::info!("Listening on {:?}", &listener);
+    tracing::info!("Listening on {}", &config.bind);
     axum::serve(listener, app.into_make_service())
         .with_graceful_shutdown(shutdown_signal())
         .await?;

@@ -4,9 +4,6 @@ CREATE TABLE bookmark (
     domain text NOT NULL,
     title TEXT NOT NULL,
     text_content TEXT NOT NULL,
-    html_content TEXT NOT NULL,
-    images TEXT[],
-    links TEXT[],
     created_at TIMESTAMPTZ NOT NULL default now(),
     PRIMARY KEY (bookmark_id)
 );

@@ -97,11 +97,11 @@ async fn crease_or_retrieve_bookmark(
         Some(bookmark) => Ok(bookmark),
         None => {
             tracing::info!("Processing new bookmark for url={url}");
-            let (bookmark, images) =
+            let (bookmark, images, content) =
                 processor::process_url(http, config.readability_url.clone(), url)
                     .await
                     .with_context(|| format!("process_url: {url}"))?;
-            save_static_content(config, &bookmark, &images)
+            save_static_content(config, &bookmark, &images, &content)
                 .await
                 .with_context(|| {
                     format!("save_static_content: bookmark_id={}", &bookmark.bookmark_id)
@@ -122,18 +122,21 @@ async fn crease_or_retrieve_bookmark(
     }
 }
 
-async fn save_static_content(config: &Config, bookmark: &Bookmark, images: &[Image]) -> Result<()> {
-    tracing::info!(
-        "Saving bookmark, id={}, images={}",
-        &bookmark.bookmark_id,
-        &bookmark.images.len()
-    );
-    let image_dir = config.data_dir.join(&bookmark.bookmark_id);
-    if !image_dir.exists() {
-        tokio::fs::create_dir(&image_dir).await?;
+async fn save_static_content(
+    config: &Config,
+    bookmark: &Bookmark,
+    images: &[Image],
+    content: &str,
+) -> Result<()> {
+    tracing::info!("Saving bookmark, id={}", &bookmark.bookmark_id,);
+    let bookmark_dir = config.data_dir.join(&bookmark.bookmark_id);
+    if !bookmark_dir.exists() {
+        tokio::fs::create_dir(&bookmark_dir).await?;
     }
+    let index = bookmark_dir.join("index.html");
+    tokio::fs::write(&index, content).await?;
     for image in images.iter() {
-        let image_path = image_dir.join(&image.id);
+        let image_path = bookmark_dir.join(&image.id);
         if image_path.exists() {
             tracing::info!(?image_path, "Image is already there");
             continue;

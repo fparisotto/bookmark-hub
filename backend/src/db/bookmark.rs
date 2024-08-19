@@ -13,8 +13,6 @@ pub struct Bookmark {
     pub domain: String,
     pub title: String,
     pub text_content: String,
-    pub html_content: String,
-    pub images: Vec<String>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -24,8 +22,6 @@ pub struct BookmarkWithUser {
     pub url: String,
     pub domain: String,
     pub title: String,
-    pub html_content: String,
-    pub links: Option<Vec<String>>,
     pub created_at: DateTime<Utc>,
     pub user_id: Option<Uuid>,
     pub tags: Option<Vec<String>>,
@@ -195,16 +191,14 @@ pub async fn upsert_user_bookmark(
 pub async fn save(pool: &Pool<Postgres>, bookmark: &Bookmark) -> Result<()> {
     const SQL: &str = r#"
     INSERT INTO bookmark
-    (bookmark_id, url, domain, title, text_content, html_content, images, created_at)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, now());"#;
+    (bookmark_id, url, domain, title, text_content, created_at)
+    VALUES ($1, $2, $3, $4, $5, now());"#;
     sqlx::query(SQL)
         .bind(&bookmark.bookmark_id)
         .bind(&bookmark.url)
         .bind(&bookmark.domain)
         .bind(&bookmark.title)
         .bind(&bookmark.text_content)
-        .bind(&bookmark.html_content)
-        .bind(&bookmark.images)
         .execute(pool)
         .await?;
     Ok(())

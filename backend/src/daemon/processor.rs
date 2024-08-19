@@ -31,7 +31,7 @@ pub async fn process_url(
     http: &Client,
     readability_url: Url,
     original_url_str: &str,
-) -> Result<(Bookmark, Vec<Image>)> {
+) -> Result<(Bookmark, Vec<Image>, String)> {
     let original_url = Url::parse(original_url_str)?;
     let original_url = super::clean_url(original_url)?;
     let bookmark_id: String = super::make_bookmark_id(&original_url)?;
@@ -74,13 +74,11 @@ pub async fn process_url(
         url: original_url.to_string(),
         domain: super::domain_from_url(&original_url)?,
         title: readability_response.title,
-        html_content: new_content,
         text_content: readability_response.text_content,
-        images: Vec::default(),
         created_at: Utc::now(),
     };
 
-    Ok((bookmark, images))
+    Ok((bookmark, images, new_content))
 }
 
 #[instrument(skip(content, images_found))]
