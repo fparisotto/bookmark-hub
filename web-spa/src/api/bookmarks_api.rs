@@ -12,7 +12,6 @@ pub struct Bookmark {
     pub url: String,
     pub domain: String,
     pub title: String,
-    pub html_content: String,
     pub links: Option<Vec<String>>,
     pub created_at: DateTime<Utc>,
     pub user_id: Option<Uuid>,
@@ -103,4 +102,28 @@ pub async fn set_tags(token: &str, id: &str, tags: Vec<String>) -> Result<Bookma
         serde_json::to_string(&payload).unwrap()
     );
     Ok(response)
+}
+
+pub async fn get_content(token: &str, id: &str) -> Result<Option<String>, Error> {
+    let endpoint = format!("{BACKEND_URL}/static/{id}/index.html");
+    let response = Request::get(&endpoint)
+        .header("Authorization", &format!("Bearer {token}"))
+        .send()
+        .await?;
+    log::info!("Get static content, id={id}");
+    match response.status() {
+        200 => {
+            let content = response.text().await?;
+            Ok(Some(content))
+        }
+        404 => Ok(None),
+        _ => {
+            let response_body = response.text().await?;
+            log::warn!(
+                "Api get bookmark by id={id}, error = unexpected response, status={status}, response={response_body}",
+                status = response.status(),
+            );
+            Err(Error::GlooError("unexpected response".to_owned()))
+        }
+    }
 }
