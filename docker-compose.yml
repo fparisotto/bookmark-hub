@@ -27,8 +27,6 @@ services:
   web-spa:
     build:
       context: web-spa/
-      args:
-        - BACKEND_URL=http://localhost:3000
     depends_on:
       - backend
     ports:

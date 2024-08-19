@@ -11,6 +11,7 @@ use crate::db::bookmark::Bookmark;
 use crate::readability;
 
 #[derive(Debug)]
+#[allow(dead_code)] // FIXME
 pub struct Image {
     pub id: String,
     pub original_url: String,

@@ -15,7 +15,6 @@ use jsonwebtoken::{decode, encode, Header, Validation};
 use jsonwebtoken::{DecodingKey, EncodingKey};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
 use uuid::Uuid;
 
 mod auth;
@@ -47,12 +46,6 @@ pub fn routers_v1() -> Router {
     auth::router()
         .merge(bookmark::routes())
         .merge(search::routes())
-}
-
-impl Display for Claim {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Claims[email: {}]", self.sub)
-    }
 }
 
 #[async_trait]

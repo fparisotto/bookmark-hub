@@ -2,8 +2,6 @@ use gloo_net::http::Request;
 use gloo_net::Error;
 use serde::{Deserialize, Serialize};
 
-use crate::api::BACKEND_URL;
-
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Tag {
     pub tag: String,
@@ -16,8 +14,8 @@ pub struct TagsResponse {
 }
 
 pub async fn get_all_tags(token: &String) -> Result<TagsResponse, Error> {
-    let endpoint = format!("{BACKEND_URL}/api/v1/tags");
-    let response = Request::get(&endpoint)
+    const ENDPOINT: &str = "/api/v1/tags";
+    let response = Request::get(ENDPOINT)
         .header("Authorization", &format!("Bearer {token}"))
         .send()
         .await?

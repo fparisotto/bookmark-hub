@@ -15,3 +15,11 @@ command_arguments = [
   "styles.min.css",
   "--minify",
 ]
+
+[[proxy]]
+rewrite = "/api/v1/"
+backend = "http://localhost:3000/api/v1/"
+
+[[proxy]]
+rewrite = "/static"
+backend = "http://localhost:3000/static"
