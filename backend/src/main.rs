@@ -3,7 +3,6 @@ use axum::{Extension, Router};
 use axum_otel_metrics::HttpMetricsLayerBuilder;
 use backend::{daemon, db, endpoints, AppContext, Config, Env};
 use clap::Parser;
-use reqwest::Client as HttpClient;
 use sqlx::{Pool, Postgres};
 use std::collections::HashMap;
 use std::io;
@@ -22,8 +21,9 @@ async fn main() -> anyhow::Result<()> {
     let db: Pool<Postgres> = db::connect(&config).await?;
     db::run_migrations(&db).await?;
 
-    let app_server = setup_app(&config, db.clone());
-    let daemon = tokio::spawn(setup_daemon(config.clone(), db));
+    let (tx, rx) = tokio::sync::watch::channel(());
+    let daemon = tokio::spawn(setup_daemon(config.clone(), db.clone(), rx));
+    let app_server = setup_app(&config, db.clone(), tx);
     tokio::select! {
         result = app_server => {
             if let Err(error) = result {
@@ -59,10 +59,15 @@ async fn shutdown_signal() {
     tracing::debug!("signal received, starting graceful shutdown")
 }
 
-async fn setup_app(config: &Config, db: Pool<Postgres>) -> anyhow::Result<()> {
+async fn setup_app(
+    config: &Config,
+    db: Pool<Postgres>,
+    tx: tokio::sync::watch::Sender<()>,
+) -> anyhow::Result<()> {
     let app_state = AppContext {
         config: Arc::new(config.clone()),
         db,
+        tx_new_task: tx,
     };
     let metrics = HttpMetricsLayerBuilder::new()
         .with_service_name("bookmark-rs".to_string())
@@ -84,7 +89,11 @@ async fn setup_app(config: &Config, db: Pool<Postgres>) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn setup_daemon(config: Config, db: Pool<Postgres>) -> anyhow::Result<()> {
+async fn setup_daemon(
+    config: Config,
+    db: Pool<Postgres>,
+    rx: tokio::sync::watch::Receiver<()>,
+) -> anyhow::Result<()> {
     let data_dir = config.data_dir.clone();
     if !data_dir.exists() || !data_dir.is_dir() {
         bail!("Data dir is not a directory, {:?}", &config.data_dir);
@@ -102,8 +111,7 @@ async fn setup_daemon(config: Config, db: Pool<Postgres>) -> anyhow::Result<()> 
         std::fs::remove_file(&test_file)?;
         tracing::info!("Data dir is valid");
     }
-    let http: HttpClient = HttpClient::new();
-    daemon::run(&db, &http, &config).await
+    daemon::run(&db, &config, rx).await
 }
 
 fn setup_tracing(config: &Config) -> anyhow::Result<()> {

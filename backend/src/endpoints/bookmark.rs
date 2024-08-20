@@ -4,6 +4,7 @@ use axum::Json;
 use axum::{routing::get, routing::post, Extension, Router};
 use axum_macros::debug_handler;
 use serde::{Deserialize, Serialize};
+use tracing::error;
 use url::Url;
 
 use crate::db::bookmark::{self, BookmarkWithUser, TagOperation};
@@ -106,6 +107,9 @@ async fn new_bookmark(
     let mut tags = input.tags.clone().unwrap_or_default();
     tags.retain(|t| !t.trim().is_empty());
     let response = task::create(&app_context.db, &claims.user_id, &input.url, &tags).await?;
+    if let Err(error) = app_context.tx_new_task.send(()) {
+        error!(?error, "Fail on notify new task");
+    }
     Ok((StatusCode::CREATED, Json(response)))
 }
 

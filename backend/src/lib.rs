@@ -15,6 +15,7 @@ pub mod readability;
 pub struct AppContext {
     pub db: Pool<Postgres>,
     pub config: Arc<Config>,
+    pub tx_new_task: tokio::sync::watch::Sender<()>,
 }
 
 #[derive(Debug, Clone, EnumString)]

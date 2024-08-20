@@ -1,8 +1,9 @@
+use std::time::Duration;
+
 use anyhow::{Context, Result};
 use chrono::Utc;
 use reqwest::Client as HttpClient;
 use sqlx::{Pool, Postgres};
-use tokio::time::{sleep, Duration as TokioDuration};
 use tracing::instrument;
 
 use super::processor::Image;
@@ -14,52 +15,69 @@ use crate::db::{
 };
 use crate::Config;
 
-const DAEMON_IDLE_SLEEP: u64 = 10;
+const DAEMON_IDLE_SLEEP: u64 = 60;
 
 #[instrument(skip_all)]
-pub async fn run(pool: &Pool<Postgres>, http: &HttpClient, config: &Config) -> Result<()> {
-    // TODO wake up with notification
+pub async fn run(
+    pool: &Pool<Postgres>,
+    config: &Config,
+    mut rx: tokio::sync::watch::Receiver<()>,
+) -> Result<()> {
+    let http: HttpClient = HttpClient::new();
+    let mut interval = tokio::time::interval(Duration::from_secs(DAEMON_IDLE_SLEEP));
     loop {
-        let tasks: Vec<Task> = db::task::peek(pool, Utc::now()).await?;
-        if tasks.is_empty() {
-            let duration = TokioDuration::from_secs(DAEMON_IDLE_SLEEP);
-            tracing::debug!(
-                "No new task, going to sleep for {} seconds",
-                &duration.as_secs()
-            );
-            sleep(duration).await;
-            continue;
-        } else {
-            tracing::info!("New tasks found {}", tasks.len());
-        }
-        for task in tasks {
-            tracing::info!(?task, "Executing task");
-            match handle_task(pool, http, config, &task).await {
-                Ok(_) => {
-                    db::task::update(pool, &task, TaskStatus::Done, None, None).await?;
-                    tracing::info!(task_uuid = format!("{}", task.task_id), "Task executed")
+        tokio::select! {
+            _ = rx.changed() => {
+                tracing::info!("Notification receive, executing...");
+                if let Err(error) = execute_step(pool, &http, config).await {
+                    tracing::error!(?error, "Fail to process tasks");
                 }
-                Err(error) => {
-                    if task.should_retry() {
-                        let retry_value: i16 = task.retries.unwrap_or(0) + 1;
-                        db::task::update(pool, &task, TaskStatus::Pending, Some(retry_value), None)
-                            .await?;
-                        tracing::warn!(?task, ?error, "Task failed, retying",)
-                    } else {
-                        db::task::update(
-                            pool,
-                            &task,
-                            TaskStatus::Fail,
-                            None,
-                            Some(format!("{error}")),
-                        )
-                        .await?;
-                        tracing::error!(?task, ?error, "Task failed");
-                    }
+            }
+            _ = interval.tick() => {
+                tracing::info!("Seconds {DAEMON_IDLE_SLEEP} passed, executing...");
+                if let Err(error) = execute_step(pool, &http, config).await {
+                    tracing::error!(?error, "Fail to process tasks");
                 }
             }
         }
     }
+}
+
+async fn execute_step(pool: &Pool<Postgres>, http: &HttpClient, config: &Config) -> Result<()> {
+    let tasks: Vec<Task> = db::task::peek(pool, Utc::now()).await?;
+    if tasks.is_empty() {
+        tracing::info!("No new task");
+        return Ok(());
+    }
+    tracing::info!("New tasks found: {}", tasks.len());
+    for task in tasks {
+        tracing::info!(?task, "Executing task");
+        match handle_task(pool, http, config, &task).await {
+            Ok(_) => {
+                db::task::update(pool, &task, TaskStatus::Done, None, None).await?;
+                tracing::info!(task_uuid = format!("{}", task.task_id), "Task executed")
+            }
+            Err(error) => {
+                if task.should_retry() {
+                    let retry_value: i16 = task.retries.unwrap_or(0) + 1;
+                    db::task::update(pool, &task, TaskStatus::Pending, Some(retry_value), None)
+                        .await?;
+                    tracing::warn!(?task, ?error, "Task failed, retying",)
+                } else {
+                    db::task::update(
+                        pool,
+                        &task,
+                        TaskStatus::Fail,
+                        None,
+                        Some(format!("{error}")),
+                    )
+                    .await?;
+                    tracing::error!(?task, ?error, "Task failed");
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 #[instrument(skip(pool, http, config))]
