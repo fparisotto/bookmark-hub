@@ -34,7 +34,7 @@ pub struct Claim {
 async fn health_check_handler(
     Extension(app_context): Extension<AppContext>,
 ) -> Result<Json<String>> {
-    db::run_health_check(&app_context.db).await?;
+    db::run_health_check(&app_context.pool).await?;
     Ok(Json("OK".to_string()))
 }
 

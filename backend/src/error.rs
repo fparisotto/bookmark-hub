@@ -14,11 +14,11 @@ struct ErrorsPayload {
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    #[error("authentication required")]
+    #[error("authentication_required")]
     Unauthorized,
     #[error("action_not_allowed")]
     Forbidden,
-    #[error("request path not found")]
+    #[error("request_path_not_found")]
     NotFound,
     #[error("invalid_payload")]
     UnprocessableEntity {
@@ -29,9 +29,9 @@ pub enum Error {
         errors: HashMap<Cow<'static, str>, Vec<Cow<'static, str>>>,
     },
     #[error("database_error")]
-    Database(#[from] sqlx::Error),
-    #[error("Migration error")]
-    Migration(#[from] sqlx::migrate::MigrateError),
+    DatabaseError(#[from] tokio_postgres::Error),
+    #[error("database_error")]
+    DatabasePool(#[from] deadpool_postgres::PoolError),
     #[error("constraint_violation")]
     ConstraintViolation { constraint: String, message: String },
     #[error("internal_server_error")]
@@ -96,20 +96,20 @@ impl Error {
 
     fn status_code(&self) -> StatusCode {
         match self {
-            Error::Unauthorized => StatusCode::UNAUTHORIZED,
-            Error::WrongCredentials => StatusCode::UNAUTHORIZED,
-            Error::Forbidden => StatusCode::FORBIDDEN,
-            Error::NotFound => StatusCode::NOT_FOUND,
-            Error::UnprocessableEntity { .. } => StatusCode::UNPROCESSABLE_ENTITY,
-            Error::ConstraintViolation { .. } => StatusCode::BAD_REQUEST,
-            Error::BadRequest { .. } => StatusCode::BAD_REQUEST,
-            Error::MissingCredentials => StatusCode::BAD_REQUEST,
-            Error::InvalidToken => StatusCode::BAD_REQUEST,
-            Error::Argon2 { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::Jwt(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::Database(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Error::Anyhow(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::Migration(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::Argon2 { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::BadRequest { .. } => StatusCode::BAD_REQUEST,
+            Error::ConstraintViolation { .. } => StatusCode::BAD_REQUEST,
+            Error::DatabaseError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::DatabasePool(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::Forbidden => StatusCode::FORBIDDEN,
+            Error::InvalidToken => StatusCode::BAD_REQUEST,
+            Error::Jwt(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::MissingCredentials => StatusCode::BAD_REQUEST,
+            Error::NotFound => StatusCode::NOT_FOUND,
+            Error::Unauthorized => StatusCode::UNAUTHORIZED,
+            Error::UnprocessableEntity { .. } => StatusCode::UNPROCESSABLE_ENTITY,
+            Error::WrongCredentials => StatusCode::UNAUTHORIZED,
         }
     }
 }
@@ -138,13 +138,15 @@ impl IntoResponse for Error {
                 );
                 return t.into_response();
             }
-            Self::Database(ref e) => {
-                tracing::error!("Database error: {:?}", e);
+            Self::DatabaseError(ref e) => {
+                tracing::error!("Database error: {}", e);
+            }
+            Self::DatabasePool(ref e) => {
+                tracing::error!("Database pool error: {}", e);
             }
             Self::Anyhow(ref e) => {
-                tracing::error!("Generic error: {:?}", e);
+                tracing::error!("Generic error: {}", e);
             }
-
             _ => (),
         }
 

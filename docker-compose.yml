@@ -13,9 +13,13 @@ services:
       APP_BIND: "[::]:3000"
       APP_DATA_DIR: /data
       HMAC_KEY: secret
-      DB_POOL_SIZE: 5
-      DB_URL: postgres://main:main@postgres/main
       READABILITY_URL: http://readability-api:3001
+      PG_HOST: postgres
+      PG_PORT: 5432
+      PG_USER: main
+      PG_PASSWORD: main
+      PG_DATABASE: main
+      PG_MAX_CONNECTIONS: 5
     volumes:
       - backend-data:/data
     healthcheck:
@@ -24,6 +28,7 @@ services:
       interval: 10s
       start_period: 10s
       retries: 5
+    restart: on-failure
   web-spa:
     build:
       context: web-spa/
@@ -31,12 +36,14 @@ services:
       - backend
     ports:
       - 8080:80
+    restart: on-failure
   readability-api:
     image: ghcr.io/fparisotto/readability-api:v0.0.1
     environment:
       PORT: 3001
     ports:
       - 3001:3001
+    restart: on-failure
   postgres:
     image: postgres:16
     ports:

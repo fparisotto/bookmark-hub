@@ -3,7 +3,6 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use chrono::Utc;
 use reqwest::Client as HttpClient;
-use sqlx::{Pool, Postgres};
 use tracing::instrument;
 
 use super::processor::Image;
@@ -12,19 +11,20 @@ use crate::db::{
     self,
     bookmark::Bookmark,
     task::{Task, TaskStatus},
+    PgPool,
 };
 use crate::Config;
 
-const DAEMON_IDLE_SLEEP: u64 = 60;
+const DAEMON_IDLE_SLEEP: Duration = Duration::from_secs(300);
 
 #[instrument(skip_all)]
 pub async fn run(
-    pool: &Pool<Postgres>,
+    pool: &PgPool,
     config: &Config,
     mut rx: tokio::sync::watch::Receiver<()>,
 ) -> Result<()> {
     let http: HttpClient = HttpClient::new();
-    let mut interval = tokio::time::interval(Duration::from_secs(DAEMON_IDLE_SLEEP));
+    let mut interval = tokio::time::interval(DAEMON_IDLE_SLEEP);
     loop {
         tokio::select! {
             _ = rx.changed() => {
@@ -34,7 +34,7 @@ pub async fn run(
                 }
             }
             _ = interval.tick() => {
-                tracing::info!("Seconds {DAEMON_IDLE_SLEEP} passed, executing...");
+                tracing::info!("{DAEMON_IDLE_SLEEP:?} passed, executing...");
                 if let Err(error) = execute_step(pool, &http, config).await {
                     tracing::error!(?error, "Fail to process tasks");
                 }
@@ -43,7 +43,7 @@ pub async fn run(
     }
 }
 
-async fn execute_step(pool: &Pool<Postgres>, http: &HttpClient, config: &Config) -> Result<()> {
+async fn execute_step(pool: &PgPool, http: &HttpClient, config: &Config) -> Result<()> {
     let tasks: Vec<Task> = db::task::peek(pool, Utc::now()).await?;
     if tasks.is_empty() {
         tracing::info!("No new task");
@@ -54,19 +54,25 @@ async fn execute_step(pool: &Pool<Postgres>, http: &HttpClient, config: &Config)
         tracing::info!(?task, "Executing task");
         match handle_task(pool, http, config, &task).await {
             Ok(_) => {
-                db::task::update(pool, &task, TaskStatus::Done, None, None).await?;
+                db::task::update(pool, task.clone(), TaskStatus::Done, None, None).await?;
                 tracing::info!(task_uuid = format!("{}", task.task_id), "Task executed")
             }
             Err(error) => {
                 if task.should_retry() {
                     let retry_value: i16 = task.retries.unwrap_or(0) + 1;
-                    db::task::update(pool, &task, TaskStatus::Pending, Some(retry_value), None)
-                        .await?;
+                    db::task::update(
+                        pool,
+                        task.clone(),
+                        TaskStatus::Pending,
+                        Some(retry_value),
+                        None,
+                    )
+                    .await?;
                     tracing::warn!(?task, ?error, "Task failed, retying",)
                 } else {
                     db::task::update(
                         pool,
-                        &task,
+                        task.clone(),
                         TaskStatus::Fail,
                         None,
                         Some(format!("{error}")),
@@ -81,20 +87,11 @@ async fn execute_step(pool: &Pool<Postgres>, http: &HttpClient, config: &Config)
 }
 
 #[instrument(skip(pool, http, config))]
-async fn handle_task(
-    pool: &Pool<Postgres>,
-    http: &HttpClient,
-    config: &Config,
-    task: &Task,
-) -> Result<()> {
+async fn handle_task(pool: &PgPool, http: &HttpClient, config: &Config, task: &Task) -> Result<()> {
     let bookmark = crease_or_retrieve_bookmark(pool, http, config, &task.url).await?;
-    let uuid = db::bookmark::upsert_user_bookmark(
-        pool,
-        &bookmark.bookmark_id,
-        task.user_id,
-        task.tags.clone(),
-    )
-    .await?;
+    let uuid =
+        db::bookmark::upsert_user_bookmark(pool, &bookmark.bookmark_id, task.user_id, &task.tags)
+            .await?;
     tracing::info!(
         user_id = format!("{}", task.user_id),
         bookmark_user_id = format!("{uuid}"),
@@ -106,7 +103,7 @@ async fn handle_task(
 
 #[instrument(skip(pool, http, config))]
 async fn crease_or_retrieve_bookmark(
-    pool: &Pool<Postgres>,
+    pool: &PgPool,
     http: &HttpClient,
     config: &Config,
     url: &str,

@@ -51,21 +51,21 @@ struct NewBookmark {
     tags: Option<Vec<String>>,
 }
 
-#[debug_handler()]
+#[debug_handler]
 async fn get_bookmarks(
     claims: Claim,
     Extension(app_context): Extension<AppContext>,
 ) -> Result<Json<Bookmarks>> {
-    let bookmarks = bookmark::get_by_user(&app_context.db, &claims.user_id).await?;
+    let bookmarks = bookmark::get_by_user(&app_context.pool, claims.user_id).await?;
     Ok(Json(Bookmarks { bookmarks }))
 }
 
-#[debug_handler()]
+#[debug_handler]
 async fn get_all_tags(
     claims: Claim,
     Extension(app_context): Extension<AppContext>,
 ) -> Result<Json<TagsWithCounters>> {
-    let tags = bookmark::get_tag_count_by_user(&app_context.db, &claims.user_id).await?;
+    let tags = bookmark::get_tag_count_by_user(&app_context.pool, claims.user_id).await?;
     let tags = tags
         .into_iter()
         .map(|(tag, count)| TagCount { tag, count })
@@ -73,31 +73,31 @@ async fn get_all_tags(
     Ok(Json(TagsWithCounters { tags }))
 }
 
-#[debug_handler()]
+#[debug_handler]
 async fn get_bookmarks_by_tag(
     claims: Claim,
     Extension(app_context): Extension<AppContext>,
     Path(tag): Path<String>,
 ) -> Result<Json<Bookmarks>> {
-    let bookmarks = bookmark::get_by_tag(&app_context.db, &claims.user_id, &tag).await?;
+    let bookmarks = bookmark::get_by_tag(&app_context.pool, claims.user_id, &tag).await?;
     Ok(Json(Bookmarks { bookmarks }))
 }
 
-#[debug_handler()]
+#[debug_handler]
 async fn get_bookmark(
     claims: Claim,
     Extension(app_context): Extension<AppContext>,
     Path(id): Path<String>,
 ) -> Result<Json<BookmarkWithUser>> {
     let maybe_bookmark =
-        bookmark::get_with_user_data(&app_context.db, &claims.user_id, &id).await?;
+        bookmark::get_with_user_data(&app_context.pool, claims.user_id, &id).await?;
     match maybe_bookmark {
         Some(bookmark) => Ok(Json(bookmark)),
         None => Err(Error::NotFound),
     }
 }
 
-#[debug_handler()]
+#[debug_handler]
 async fn new_bookmark(
     claims: Claim,
     Extension(app_context): Extension<AppContext>,
@@ -106,14 +106,14 @@ async fn new_bookmark(
     // FIXME put this validation in a better place
     let mut tags = input.tags.clone().unwrap_or_default();
     tags.retain(|t| !t.trim().is_empty());
-    let response = task::create(&app_context.db, &claims.user_id, &input.url, &tags).await?;
+    let response = task::create(&app_context.pool, claims.user_id, input.url, tags).await?;
     if let Err(error) = app_context.tx_new_task.send(()) {
         error!(?error, "Fail on notify new task");
     }
     Ok((StatusCode::CREATED, Json(response)))
 }
 
-#[debug_handler()]
+#[debug_handler]
 async fn set_tags(
     claims: Claim,
     Extension(app_context): Extension<AppContext>,
@@ -121,16 +121,16 @@ async fn set_tags(
     Json(tags): Json<Tags>,
 ) -> Result<Json<BookmarkWithUser>> {
     let updated = bookmark::update_tags(
-        &app_context.db,
-        &claims.user_id,
+        &app_context.pool,
+        claims.user_id,
         &bookmark_id,
-        TagOperation::Set(tags.tags),
+        &TagOperation::Set(tags.tags),
     )
     .await?;
     Ok(Json(updated))
 }
 
-#[debug_handler()]
+#[debug_handler]
 async fn append_tags(
     claims: Claim,
     Extension(app_context): Extension<AppContext>,
@@ -138,10 +138,10 @@ async fn append_tags(
     Json(tags): Json<Tags>,
 ) -> Result<Json<BookmarkWithUser>> {
     let updated = bookmark::update_tags(
-        &app_context.db,
-        &claims.user_id,
+        &app_context.pool,
+        claims.user_id,
         &bookmark_id,
-        TagOperation::Append(tags.tags),
+        &TagOperation::Append(tags.tags),
     )
     .await?;
     Ok(Json(updated))

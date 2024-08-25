@@ -12,12 +12,12 @@ pub fn routes() -> Router {
     Router::new().route("/search", post(search_bookmark))
 }
 
-#[debug_handler()]
+#[debug_handler]
 async fn search_bookmark(
     claims: Claim,
     Extension(app_context): Extension<AppContext>,
     Json(input): Json<SearchRequest>,
 ) -> Result<Json<SearchResponse>> {
-    let result = search(&app_context.db, &claims.user_id, input).await?;
+    let result = search(&app_context.pool, claims.user_id, &input).await?;
     Ok(Json(result))
 }

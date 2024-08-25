@@ -1,12 +1,15 @@
 use chrono::{DateTime, Utc};
+use deadpool_postgres::GenericClient;
+use postgres_from_row::FromRow;
 use serde::{Deserialize, Serialize};
-use sqlx::{Pool, Postgres};
-use tracing::instrument;
+use tracing::{info, instrument};
 use uuid::Uuid;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 
-#[derive(Debug, sqlx::FromRow, Serialize, Deserialize)]
+use super::PgPool;
+
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct Bookmark {
     pub bookmark_id: String,
     pub url: String,
@@ -16,7 +19,7 @@ pub struct Bookmark {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, sqlx::FromRow, Serialize, Deserialize)]
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct BookmarkWithUser {
     pub bookmark_id: String,
     pub url: String,
@@ -29,17 +32,14 @@ pub struct BookmarkWithUser {
     pub user_updated_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TagOperation {
     Set(Vec<String>),
     Append(Vec<String>),
 }
 
-#[instrument(skip(db))]
-pub async fn get_tag_count_by_user(
-    db: &Pool<Postgres>,
-    user_id: &Uuid,
-) -> Result<Vec<(String, i64)>> {
+#[instrument(skip(pool))]
+pub async fn get_tag_count_by_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<(String, i64)>> {
     const SQL: &str = r#"
     WITH tags AS (
         SELECT unnest(tags) AS tag
@@ -47,12 +47,22 @@ pub async fn get_tag_count_by_user(
         WHERE user_id = $1
     )
     SELECT tag, count(1) AS counter FROM tags GROUP BY tag;"#;
-    let result: Vec<(String, i64)> = sqlx::query_as(SQL).bind(user_id).fetch_all(db).await?;
+    let client = pool.get().await?;
+    let rows = client.query(SQL, &[&user_id]).await?;
+    let result = rows
+        .iter()
+        .map(|row| {
+            let tag = row.try_get::<usize, String>(0);
+            let counter = row.try_get::<usize, i64>(1);
+            tag.and_then(|t| counter.map(|c| (t, c)))
+                .map_err(Error::from)
+        })
+        .collect::<Result<Vec<_>>>()?;
     Ok(result)
 }
 
-#[instrument(skip(db))]
-pub async fn get_by_user(db: &Pool<Postgres>, user_id: &Uuid) -> Result<Vec<BookmarkWithUser>> {
+#[instrument(skip(pool))]
+pub async fn get_by_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<BookmarkWithUser>> {
     const SQL: &str = r#"
     SELECT
         b.*,
@@ -64,16 +74,18 @@ pub async fn get_by_user(db: &Pool<Postgres>, user_id: &Uuid) -> Result<Vec<Book
     INNER JOIN bookmark b USING(bookmark_id)
     WHERE bu.user_id = $1
     ORDER BY bu.created_at ASC;"#;
-    let result: Vec<BookmarkWithUser> = sqlx::query_as(SQL).bind(user_id).fetch_all(db).await?;
-    Ok(result)
+    let client = pool.get().await?;
+    let results = client
+        .query(SQL, &[&user_id])
+        .await?
+        .iter()
+        .map(|row| BookmarkWithUser::try_from_row(row).map_err(Error::from))
+        .collect::<Result<Vec<_>>>()?;
+    Ok(results)
 }
 
-#[instrument(skip(db))]
-pub async fn get_by_tag(
-    db: &Pool<Postgres>,
-    user_id: &Uuid,
-    tag: &str,
-) -> Result<Vec<BookmarkWithUser>> {
+#[instrument(skip(pool))]
+pub async fn get_by_tag(pool: &PgPool, user_id: Uuid, tag: &str) -> Result<Vec<BookmarkWithUser>> {
     const SQL: &str = r#"
     SELECT
         b.*,
@@ -86,27 +98,33 @@ pub async fn get_by_tag(
     WHERE bu.user_id = $1
     AND bu.tags @> $2
     ORDER BY bu.created_at ASC;"#;
-    let tags: Vec<String> = vec![tag.to_string()];
-    let result: Vec<BookmarkWithUser> = sqlx::query_as(SQL)
-        .bind(user_id)
-        .bind(tags)
-        .fetch_all(db)
-        .await?;
+    let client = pool.get().await?;
+    let results = client
+        .query(SQL, &[&user_id, &[&tag]])
+        .await?
+        .iter()
+        .map(|row| BookmarkWithUser::try_from_row(row).map_err(Error::from))
+        .collect::<Result<Vec<_>>>()?;
+    Ok(results)
+}
+
+#[instrument(skip(pool))]
+pub async fn get_by_url(pool: &PgPool, url: &str) -> Result<Option<Bookmark>> {
+    const SQL: &str = "SELECT * FROM bookmark WHERE url = $1;";
+    let client = pool.get().await?;
+    let result = client
+        .query_opt(SQL, &[&url])
+        .await?
+        .map(|row| Bookmark::try_from_row(&row).map_err(Error::from))
+        .transpose()?;
     Ok(result)
 }
 
 #[instrument(skip(pool))]
-pub async fn get_by_url(pool: &Pool<Postgres>, url: &str) -> Result<Option<Bookmark>> {
-    const SQL: &str = "SELECT * FROM bookmark WHERE url = $1;";
-    let result: Option<Bookmark> = sqlx::query_as(SQL).bind(url).fetch_optional(pool).await?;
-    Ok(result)
-}
-
-#[instrument(skip(db))]
 pub async fn get_with_user_data(
-    db: &Pool<Postgres>,
-    user_id: &Uuid,
-    bookmark_id: &String,
+    pool: &PgPool,
+    user_id: Uuid,
+    bookmark_id: &str,
 ) -> Result<Option<BookmarkWithUser>> {
     const SQL: &str = r#"
     SELECT
@@ -119,22 +137,23 @@ pub async fn get_with_user_data(
     INNER JOIN bookmark b USING(bookmark_id)
     WHERE bu.user_id = $1
     AND bookmark_id = $2;"#;
-    let result: Option<BookmarkWithUser> = sqlx::query_as(SQL)
-        .bind(user_id)
-        .bind(bookmark_id)
-        .fetch_optional(db)
-        .await?;
+    let client = pool.get().await?;
+    let result = client
+        .query_opt(SQL, &[&user_id, &bookmark_id])
+        .await?
+        .map(|row| BookmarkWithUser::try_from_row(&row).map_err(Error::from))
+        .transpose()?;
     Ok(result)
 }
 
-#[instrument(skip(db))]
+#[instrument(skip(pool))]
 pub async fn update_tags(
-    db: &Pool<Postgres>,
-    user_id: &Uuid,
-    bookmark_id: &String,
-    operation: TagOperation,
+    pool: &PgPool,
+    user_id: Uuid,
+    bookmark_id: &str,
+    operation: &TagOperation,
 ) -> Result<BookmarkWithUser> {
-    let (update_tag_sql, tags) = match operation {
+    let (update_tag_sql, tags) = match operation.clone() {
         TagOperation::Set(tags) => ("tags=$1", tags),
         TagOperation::Append(tags) => ("tags=array_cat(tags, $1)", tags),
     };
@@ -155,21 +174,21 @@ pub async fn update_tags(
         FROM update_bookmark_user bi
         INNER JOIN bookmark b using(bookmark_id);"#
     );
-    let result: BookmarkWithUser = sqlx::query_as(&sql)
-        .bind(tags)
-        .bind(bookmark_id)
-        .bind(user_id)
-        .fetch_one(db)
+    let client = pool.get().await?;
+    let row = client
+        .query_one(&sql, &[&tags, &bookmark_id, &user_id])
         .await?;
+    let result = BookmarkWithUser::try_from_row(&row)?;
+    info!(?operation, %bookmark_id, "Updated tags for bookmark");
     Ok(result)
 }
 
 #[instrument(skip(pool))]
 pub async fn upsert_user_bookmark(
-    pool: &Pool<Postgres>,
+    pool: &PgPool,
     bookmark_id: &str,
     user_id: Uuid,
-    tags: Vec<String>,
+    tags: &[String],
 ) -> Result<Uuid> {
     const SQL: &str = r#"
     INSERT INTO bookmark_user
@@ -178,28 +197,34 @@ pub async fn upsert_user_bookmark(
     ON CONFLICT ON CONSTRAINT bookmark_user_unique
     DO UPDATE SET tags = $3, updated_at = now()
     RETURNING bookmark_user_id;"#;
-    let result: Uuid = sqlx::query_scalar(SQL)
-        .bind(bookmark_id)
-        .bind(user_id)
-        .bind(tags)
-        .fetch_one(pool)
+    let client = pool.get().await?;
+    let row = client
+        .query_one(SQL, &[&bookmark_id, &user_id, &tags])
         .await?;
-    Ok(result)
+    let uuid: Uuid = row.try_get(0)?;
+    info!(?uuid, %bookmark_id, %user_id, ?tags, "Bookmark upsert");
+    Ok(uuid)
 }
 
 #[instrument(skip(pool))]
-pub async fn save(pool: &Pool<Postgres>, bookmark: &Bookmark) -> Result<()> {
+pub async fn save(pool: &PgPool, bookmark: &Bookmark) -> Result<()> {
     const SQL: &str = r#"
     INSERT INTO bookmark
     (bookmark_id, url, domain, title, text_content, created_at)
     VALUES ($1, $2, $3, $4, $5, now());"#;
-    sqlx::query(SQL)
-        .bind(&bookmark.bookmark_id)
-        .bind(&bookmark.url)
-        .bind(&bookmark.domain)
-        .bind(&bookmark.title)
-        .bind(&bookmark.text_content)
-        .execute(pool)
+    let client = pool.get().await?;
+    let rows_affected = client
+        .execute(
+            SQL,
+            &[
+                &bookmark.bookmark_id,
+                &bookmark.url,
+                &bookmark.domain,
+                &bookmark.title,
+                &bookmark.text_content,
+            ],
+        )
         .await?;
+    info!(%rows_affected, ?bookmark, "Bookmark safe");
     Ok(())
 }

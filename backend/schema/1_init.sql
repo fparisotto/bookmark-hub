@@ -1,3 +1,21 @@
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+CREATE TABLE schema_version (
+  version INTEGER NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (version)
+);
+
+CREATE TABLE "user" (
+    user_id UUID DEFAULT uuid_generate_v4(),
+    email TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT null DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id)
+);
+CREATE UNIQUE INDEX user_email_unique ON "user" (LOWER(email));
+
 CREATE TABLE bookmark (
     bookmark_id VARCHAR(512) UNIQUE NOT NULL,
     url TEXT NOT NULL UNIQUE,
@@ -44,3 +62,6 @@ CREATE TABLE bookmark_task (
     PRIMARY KEY (task_id),
     CONSTRAINT fk_user FOREIGN KEY(user_id) REFERENCES "user"(user_id) ON DELETE CASCADE
 );
+
+INSERT INTO schema_version (version, updated_at)
+VALUES ('1', NOW());

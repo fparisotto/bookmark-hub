@@ -15,7 +15,7 @@ RUN rm src/*.rs
 
 # copy source tree
 COPY ./src ./src
-COPY ./migrations ./migrations
+COPY ./schema ./schema
 
 # build for release
 RUN rm ./target/release/deps/backend*

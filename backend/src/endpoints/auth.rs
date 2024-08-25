@@ -104,12 +104,12 @@ pub fn router() -> Router {
         .route("/auth/user-profile", get(get_user_profile))
 }
 
-#[debug_handler()]
+#[debug_handler]
 async fn get_user_profile(
     claims: Claim,
     Extension(app_context): Extension<AppContext>,
 ) -> Result<Json<UserProfile>> {
-    match user::get_by_id(&app_context.db, &claims.user_id).await {
+    match user::get_by_id(&app_context.pool, &claims.user_id).await {
         Ok(Some(user)) => Ok(Json(UserProfile {
             user_id: user.user_id,
             email: user.email,
@@ -129,14 +129,14 @@ async fn get_user_profile(
     }
 }
 
-#[debug_handler()]
+#[debug_handler]
 async fn sign_up(
     Extension(app_context): Extension<AppContext>,
     Json(payload): Json<SignUpPayload>,
 ) -> Result<Json<SignUpResponse>> {
     payload.validate()?;
     let hashed_password = super::hash_password(payload.password).await?;
-    let try_user = user::create(&app_context.db, payload.email, hashed_password).await;
+    let try_user = user::create(&app_context.pool, payload.email, hashed_password).await;
     match try_user {
         Ok(user) => Ok(Json(SignUpResponse {
             id: user.user_id,
@@ -158,7 +158,7 @@ async fn sign_in(
     Json(payload): Json<SignInPayload>,
 ) -> Result<Json<AuthBody>> {
     payload.validate()?;
-    let maybe_user = user::get_by_email(&app_context.db, &payload.email).await?;
+    let maybe_user = user::get_by_email(&app_context.pool, payload.email).await?;
     if let Some(user) = maybe_user {
         super::verify_password(payload.password, user.password_hash.clone()).await?;
         let expiration = Utc::now()
