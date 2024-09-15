@@ -78,10 +78,8 @@ pub fn app() -> Html {
         if *logged {
             <Home user_session={storage.as_ref().expect("if logged is true, user session is some").clone()} />
         } else {
-            <main class="container mx-auto flex justify-center align-middle">
-                <div class="w-full max-w-xs">
-                    <LoginForm on_login={on_login_event}/>
-                </div>
+            <main>
+                <LoginForm on_login={on_login_event}/>
             </main>
         }
     }

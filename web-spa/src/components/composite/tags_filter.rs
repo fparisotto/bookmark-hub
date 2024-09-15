@@ -27,35 +27,36 @@ fn render_tag(on_tag_checked: Callback<TagCheckedEvent>, tag: Tag) -> Html {
             }
         })
     };
-    let tag_label = format!("{} ({})", &tag.tag, &tag.count);
+
     html! {
         <li>
-            <label class="label cursor-pointer justify-start gap-2">
+            <div class="form-check">
                 <InputCheckbox
                     id={tag.tag.clone()}
                     name={tag.tag.clone()}
                     value={tag.tag.clone()}
-                    class={classes!("checkbox")}
+                    class={classes!("form-check-input")}
                     on_change={on_change} />
-                <span class="label-text">{tag_label}</span>
-            </label>
+                <label class="form-check-label" for={tag.tag.clone()}>
+                    {tag.tag.clone()} <span class="badge bg-secondary">{tag.count}</span>
+                </label>
+            </div>
         </li>
     }
 }
 
-#[function_component(AsideTags)]
-pub fn aside_tags(props: &Props) -> Html {
+#[function_component(TagsFilter)]
+pub fn tags_filter(props: &Props) -> Html {
     let tags = props
         .tags
         .clone()
         .into_iter()
         .map(|tag| render_tag(props.on_tag_checked.clone(), tag))
         .collect::<Html>();
+
     html! {
-        <aside class="col-span-1 p-4">
-            <ul>
-                {tags}
-            </ul>
-        </aside>
+        <ul class="list-unstyled d-flex flex-wrap gap-3">
+            {tags}
+        </ul>
     }
 }

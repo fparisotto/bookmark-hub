@@ -34,7 +34,6 @@ pub fn login_form(props: &Props) -> Html {
         })
     };
 
-    // TODO remove duplicated code for event handling
     let on_submit = {
         let state = state.clone();
         let on_login = props.on_login.clone();
@@ -47,37 +46,38 @@ pub fn login_form(props: &Props) -> Html {
         })
     };
 
-    let on_click = {
-        let on_login = props.on_login.clone();
-        Callback::from(move |_: MouseEvent| {
-            let data = (*state).clone();
-            if !data.email.is_empty() && !data.password.is_empty() {
-                on_login.emit(data);
-            }
-        })
-    };
-
     html! {
-        <form class="px-8 pt-6 pb-8 mb-4" onsubmit={on_submit}>
-            <label class="block text-sm font-bold mb-2" for="username"> {"E-mail"}
-                <InputText
-                    id="email"
-                    name="email"
-                    placeholder="e-mail"
-                    class={classes!("input", "input-bordered", "w-full", "max-w-x")}
-                    input_type={InputType::Email}
-                    on_change={on_change_email} />
-            </label>
-            <label class="block text-sm font-bold mb-2" for="username"> {"Password"}
-                <InputText
-                    id="password"
-                    name="password"
-                    placeholder="password"
-                    input_type={InputType::Password}
-                    class={classes!("input", "input-bordered", "w-full", "max-w-x")}
-                    on_change={on_change_password} />
-            </label>
-            <button class="btn" type="button" onclick={on_click}>{"Sign In"}</button>
-        </form>
+        <div class="container mt-5">
+            <div class="row justify-content-center">
+                <div class="col-md-4">
+                    <h2 class="text-center mb-4">{ "Login" }</h2>
+                    <form onsubmit={on_submit}>
+                        <div class="mb-3">
+                            <label for="email" class="form-label">{ "Email address" }</label>
+                            <InputText
+                                id="email"
+                                name="email"
+                                placeholder="Enter your e-mail"
+                                class={"form-control"}
+                                input_type={InputType::Email}
+                                on_change={on_change_email} />
+                        </div>
+                        <div class="mb-3">
+                            <label for="password" class="form-label">{ "Password" }</label>
+                            <InputText
+                                id="password"
+                                name="password"
+                                placeholder="Enter your password"
+                                input_type={InputType::Password}
+                                class={"form-control"}
+                                on_change={on_change_password} />
+                        </div>
+                        <div class="d-grid">
+                            <input class="btn btn-primary" type="submit" value="Login" />
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
     }
 }

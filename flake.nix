@@ -25,10 +25,8 @@
             f
             hurl
             llvmPackages.bintools
-            nodejs_22
             openssl
             pkg-config
-            tailwindcss
             trunk
             wasm-pack
           ];

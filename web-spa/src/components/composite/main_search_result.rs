@@ -14,7 +14,7 @@ fn article(callback: Callback<SearchResultItem>, item: SearchResultItem) -> Html
         .tags
         .unwrap_or_default()
         .into_iter()
-        .map(|tag| html! { <strong class="badge">{tag}</strong> })
+        .map(|tag| html! { <span class="badge bg-primary me-1">{tag}</span> })
         .collect::<Html>();
     let search_match = match item.search_match.clone() {
         Some(html) => html! { <BlockquoteHtml html={html} /> },
@@ -23,16 +23,17 @@ fn article(callback: Callback<SearchResultItem>, item: SearchResultItem) -> Html
     let on_click = Callback::from(move |_| {
         callback.emit(item_for_event.clone());
     });
+
     html! {
-    <article class="prose">
-        <header>
-            <h2 class="text-lg">{item.title.clone()}</h2>
-            <span class="block">{"Tags:"} {tags} </span>
-            <span class="block">{"Created at:"}<strong>{item.created_at}</strong></span>
-        </header>
-        {search_match}
-        <a class="link" onclick={on_click}>{"Read..."}</a>
-    </article>
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5 class="card-title">{item.title.clone()}</h5>
+                <p class="card-text">{search_match}</p>
+                <div>{tags}</div>
+                <small class="text-muted">{"Created at:"} {item.created_at}</small>
+                <a onclick={on_click} class="btn btn-link mt-2 d-block">{"Read more..."}</a>
+            </div>
+        </div>
     }
 }
 
@@ -40,13 +41,12 @@ fn article(callback: Callback<SearchResultItem>, item: SearchResultItem) -> Html
 pub fn main_search_result(props: &Props) -> Html {
     let results = props.results.clone();
     html! {
-        <main class="container col-span-5 p-4">
+        <main>
             {
                 results.into_iter().map(|bookmark| {
                     html! {
                         <>
                             {article(props.on_item_selected.clone(), bookmark)}
-                            <div class="divider"></div>
                         </>
                     }
                 }).collect::<Html>()
