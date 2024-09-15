@@ -8,7 +8,7 @@ services:
       - postgres
     environment:
       RUST_BACKTRACE: 1
-      RUST_LOG: info
+      RUST_LOG: info,backend=debug
       APP_ENV: DEV
       APP_BIND: "[::]:3000"
       APP_DATA_DIR: /data
@@ -52,7 +52,7 @@ services:
       POSTGRES_USER: main
       POSTGRES_PASSWORD: main
       POSTGRES_DB: main
-    restart: unless-stopped
+    restart: on-failure
     volumes:
       - postgres-data:/data/postgres
 volumes:
