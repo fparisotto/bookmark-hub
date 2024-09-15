@@ -1,4 +1,4 @@
-# bookmark-rs
+# bookmark-hub
 
 Manage and store your bookmarks offline.
 
