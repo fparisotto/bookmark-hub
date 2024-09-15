@@ -8,10 +8,11 @@ use crate::{
     },
     components::composite::{
         add_bookmark_modal::{AddBookmarkData, AddBookmarkModal},
-        aside_tags::{AsideTags, TagCheckedEvent},
         bookmark_reader::BookmarkReader,
         main_search_result::MainSearchResult,
-        navigation_bar::{NavigationBar, SearchInputSubmit},
+        navigation_bar::NavigationBar,
+        search_bar::{SearchBar, SearchInputSubmit},
+        tags_filter::{TagCheckedEvent, TagsFilter},
     },
     user_session::UserSession,
 };
@@ -64,7 +65,7 @@ pub fn home(props: &Props) -> Html {
         Callback::from(move |event: AddBookmarkData| {
             let token = token.clone();
             spawn_local(async move {
-                // FIXME notify the user about the outcome
+                // FIXME notify user
                 match bookmarks_api::add_bookmark(&token, event.into()).await {
                     Ok(result) => log::info!(
                         "New bookmark added, response={}",
@@ -160,11 +161,7 @@ pub fn home(props: &Props) -> Html {
         Callback::from(move |event: Vec<String>| {
             let token = token.clone();
             let state = state.clone();
-            let bookmark_id = (*state)
-                .bookmark_read
-                .clone()
-                .expect("not none")
-                .bookmark_id;
+            let bookmark_id = state.bookmark_read.clone().expect("not none").bookmark_id;
             spawn_local(async move {
                 match bookmarks_api::set_tags(&token, &bookmark_id, event).await {
                     Ok(bookmark) => {
@@ -182,21 +179,31 @@ pub fn home(props: &Props) -> Html {
 
     let bookmark_read = state.bookmark_read.clone();
 
-    html! {
-        if let Some(bookmark) = bookmark_read {
-            <BookmarkReader bookmark={bookmark} on_goback={on_goback} on_new_tags={on_new_tags} />
-        } else {
+    let content = if let Some(bookmark) = bookmark_read {
+        html! {
+            <BookmarkReader
+                user_session={props.user_session.clone()}
+                bookmark={bookmark}
+                on_goback={on_goback}
+                on_new_tags={on_new_tags} />
+        }
+    } else {
+        html! {
             <>
-                <div class="container mx-auto grid grid-cols-6">
-                    <NavigationBar
-                        email={props.user_session.email.clone()}
-                        add_new_bookmark_modal_id="add-new-bookmark-modal"
-                        on_submit={on_search_submit} />
-                    <AsideTags tags={state.tags.clone()} on_tag_checked={on_tag_checked} />
-                    <MainSearchResult on_item_selected={on_item_selected} results={state.bookmarks.clone()} />
-                </div>
-                <AddBookmarkModal id="add-new-bookmark-modal" on_submit={on_new_bookmark} />
+                <SearchBar on_submit={on_search_submit} />
+                <TagsFilter tags={state.tags.clone()} on_tag_checked={on_tag_checked} />
+                <MainSearchResult on_item_selected={on_item_selected} results={state.bookmarks.clone()} />
+                <AddBookmarkModal on_submit={on_new_bookmark} />
             </>
         }
+    };
+
+    html! {
+        <>
+            <NavigationBar email={props.user_session.email.clone()} />
+            <div class="container mt-5">
+                {content}
+            </div>
+        </>
     }
 }

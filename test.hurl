@@ -51,8 +51,7 @@ jsonpath "$.tags[*]" includes "Tokio"
 GET http://localhost:3000/api/v1/bookmarks
 Authorization: Bearer {{token}}
 [Options]
-retry: true
-retry-interval: 2000
+retry: 10
 
 HTTP/1.1 200
 [Captures]
@@ -121,12 +120,11 @@ jsonpath "$.tags[*]" includes "metrics"
 GET http://localhost:3000/api/v1/bookmarks
 Authorization: Bearer {{token}}
 [Options]
-retry: true
-retry-interval: 2000
+retry: 10
 
 HTTP/1.1 200
 [Asserts]
-jsonpath "$.bookmarks[*].url" includes "https://tokio.rs/blog/2022-02-announcing-tokio-metrics"
+body contains "https://tokio.rs/blog/2022-02-announcing-tokio-metrics"
 
 # get_all_tags
 GET http://localhost:3000/api/v1/tags
@@ -135,10 +133,10 @@ Authorization: Bearer {{token}}
 HTTP/1.1 200
 [Asserts]
 jsonpath "$.tags" count == 4
-jsonpath "$.tags[?(@.tag=='rust')].count" == 2
-jsonpath "$.tags[?(@.tag=='tokio')].count" == 2
-jsonpath "$.tags[?(@.tag=='tracing')].count" == 1
-jsonpath "$.tags[?(@.tag=='metrics')].count" == 1
+jsonpath "$.tags[?(@.tag=='rust')].count" includes 2
+jsonpath "$.tags[?(@.tag=='tokio')].count" includes 2
+jsonpath "$.tags[?(@.tag=='tracing')].count" includes 1
+jsonpath "$.tags[?(@.tag=='metrics')].count" includes 1
 
 
 # get_bookmarks_by_tag

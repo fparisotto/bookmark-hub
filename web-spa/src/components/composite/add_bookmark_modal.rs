@@ -21,7 +21,6 @@ impl From<AddBookmarkData> for NewBookmarkRequest {
 
 #[derive(Debug, Clone, PartialEq, Properties)]
 pub struct Props {
-    pub id: String,
     pub on_submit: Callback<AddBookmarkData>,
 }
 
@@ -44,7 +43,6 @@ pub fn add_bookmark_modal(props: &Props) -> Html {
         })
     };
 
-    // TODO fix duplicated event handler code
     let on_form_submit = {
         let url_state = url_state.clone();
         let tags_state = tags_state.clone();
@@ -63,55 +61,41 @@ pub fn add_bookmark_modal(props: &Props) -> Html {
         })
     };
 
-    // TODO fix duplicated event handler code
-    let on_save_click = {
-        let on_new_bookmark = props.on_submit.clone();
-        Callback::from(move |_event: MouseEvent| {
-            on_new_bookmark.emit(AddBookmarkData {
-                url: (*url_state).clone(),
-                tags: (*tags_state)
-                    .split(',')
-                    .map(|tag| tag.trim().to_owned())
-                    .collect(),
-            });
-            url_state.set(String::default());
-            tags_state.set(String::default());
-        })
-    };
-
     html! {
-    <div class="modal" id={props.id.clone()}>
-        <div class="modal-box">
-            <h3 class="font-bold">{"New bookmark"}</h3>
-            <form class="form-control py-4" onsubmit={on_form_submit}>
-                <label class="label">
-                    <span class="label-text">{ "Url" }</span>
-                </label>
-                <InputText
-                    id="url"
-                    name="url"
-                    placeholder="url..."
-                    input_type={InputType::Url}
-                    class={classes!("input", "input-bordered")}
-                    on_change={on_change_url} />
-
-                <label class="label">
-                    <span class="label-text">{ "Tags" }</span>
-                </label>
-                <InputText
-                    id="tags"
-                    name="tags"
-                    placeholder="tags (separated by ,)"
-                    input_type={InputType::Text}
-                    class={classes!("input", "input-bordered")}
-                    on_change={on_change_tags} />
-
-            </form>
-            <div class="modal-action">
-                <a href="#" class="btn btn-primary" onclick={on_save_click}>{ "Save" }</a>
-                <a href="#" class="btn">{ "Cancel" }</a>
+        <div class="modal fade" id="add-bookmark-modal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="bookmarkModalLabel">{"Add a New Bookmark"}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="bookmark-form" onsubmit={on_form_submit}>
+                            <div class="mb-3">
+                                <label for="bookmark-link" class="form-label">{"Link"}</label>
+                                <InputText
+                                    id="url"
+                                    name="url"
+                                    placeholder="Enter link"
+                                    input_type={InputType::Url}
+                                    class={classes!("form-control")}
+                                    on_change={on_change_url} />
+                            </div>
+                            <div class="mb-3">
+                                <label for="bookmark-tags" class="form-label">{"Tags"}</label>
+                                <InputText
+                                    id="tags"
+                                    name="tags"
+                                    placeholder="Enter tags separated by commas"
+                                    input_type={InputType::Text}
+                                    class={classes!("form-control")}
+                                    on_change={on_change_tags} />
+                            </div>
+                            <input type="submit" class="btn btn-primary" value="Save Bookmark" data-bs-dismiss="modal" data-bs-target="#add-bookmark-modal" />
+                        </form>
+                    </div>
+                </div>
             </div>
         </div>
-    </div>
     }
 }

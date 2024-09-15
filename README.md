@@ -2,22 +2,12 @@
 
 Manage and store your bookmarks offline.
 
-_This is a toy project of full-stack [Rust](https://www.rust-lang.org/)
-application, built for educational purposes, not intended to be used in
-production._
+## System design
 
-## Brief explanation of system design
-
-- `public-api` exposes the functionality of adding/retrieving bookmarks for the
-  user.
-- `daemon` process asynchronously new bookmarks requests, downloading its HTML
-  content and images.
-- `readability-api` exposes the
-  [readability](https://github.com/mozilla/readability) as HTTP API service,
-  used by `daemon` to clean up the HTML content.
-- `web-spa` is a [yew](https://yew.rs/) front-end application.
-- [minio](https://min.io/) used as static content storage and
-  [postgresql](https://www.postgresql.org/) as the application database.
+- `backend` allows users to create an account, save bookmarks, and download them for offline consumption.
+- `web-spa` [yew](https://yew.rs/) front-end application.
+- `readability-api` exposes the [readability](https://github.com/mozilla/readability) as HTTP API service, used by `backend` to clean up the HTML content.
+- [postgresql](https://www.postgresql.org/) as application database.
 
 ## How to run
 
@@ -25,10 +15,10 @@ production._
 $ docker compose down --volumes && docker compose build && docker compose up
 ```
 
-## How to run E2E tests:
+## E2E tests:
 
 With the `docker-compose.yml` running, use [hurl](https://hurl.dev/)
 
 ```bash
-$ hurl --verbose test.hurl
+$ hurl --verbose --test test.hurl
 ```

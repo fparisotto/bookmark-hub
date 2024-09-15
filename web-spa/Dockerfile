@@ -1,12 +1,12 @@
 # builder
-FROM rust:1.66.0-bullseye as builder
+FROM rust:1.80-bookworm as builder
 
-ARG PUBLIC_API_ENDPOINT
-ENV PUBLIC_API_ENDPOINT=$PUBLIC_API_ENDPOINT
+ARG BACKEND_URL
+ENV BACKEND_URL=$BACKEND_URL
 
-RUN echo $PUBLIC_API_ENDPOINT
+RUN echo $BACKEND_URL
 
-ENV TRUNK_VERSION=v0.16.0
+ENV TRUNK_VERSION=v0.20.3
 
 # curl
 RUN apt-get update \
@@ -20,9 +20,6 @@ RUN curl -sLO https://github.com/thedodd/trunk/releases/download/$TRUNK_VERSION/
   && chmod +x trunk \
   && mv trunk /usr/local/bin/
 
-# nodejs
-RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && apt-get install -y nodejs
-
 # wasm32 target
 RUN rustup target add wasm32-unknown-unknown
 
@@ -33,20 +30,15 @@ WORKDIR /web-spa
 # copy manifests
 COPY ./Cargo.lock ./Cargo.lock
 COPY ./Cargo.toml ./Cargo.toml
-COPY ./package.json ./package.json
-COPY ./package-lock.json ./package-lock.json
 COPY ./Trunk.toml ./Trunk.toml
-COPY ./tailwind.config.js ./tailwind.config.js
 
 # cache dependencies
 RUN cargo build --release
-RUN npm install
 RUN rm src/*.rs
 
 # copy source tree
 COPY ./src ./src
 COPY ./index.html ./index.html
-COPY ./styles.css ./styles.css
 
 # build for release
 RUN cargo clean && trunk build --release

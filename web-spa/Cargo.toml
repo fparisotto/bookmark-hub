@@ -3,22 +3,19 @@ name = "web-spa"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-getrandom = { version = "0.2", features = ["js"] }
 chrono = { version = "0.4", features = ["serde"] }
-gloo-net = "0.2"
+getrandom = { version = "0.2", features = ["js"] }
+gloo-net = "0.5"
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-strum = "0.24"
-strum_macros = "0.24"
-url = { version = "2.3", features = ["serde"] }
-uuid = { version = "1.2", features = ["serde", "v4"] }
+strum = "0.26"
+strum_macros = "0.26"
+url = { version = "2.5", features = ["serde"] }
+uuid = { version = "1.10", features = ["serde", "v4"] }
 wasm-bindgen = "0.2"
 wasm-logger = "0.2"
 web-sys = { version = "0.3", features = ["HtmlInputElement"] }
-yew = { version = "0.20", features = ["csr"]}
-yew-hooks = "0.2.0"
-
+yew = { version = "0.20", features = ["csr"] }
+yew-hooks = "0.2"
