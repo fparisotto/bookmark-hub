@@ -1,5 +1,5 @@
 # builder
-FROM rust:1.80-bookworm as builder
+FROM rust:1.82-bookworm as builder
 
 ARG BACKEND_URL
 ENV BACKEND_URL=$BACKEND_URL
