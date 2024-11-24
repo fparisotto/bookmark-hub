@@ -51,7 +51,9 @@ jsonpath "$.tags[*]" includes "Tokio"
 GET http://localhost:3000/api/v1/bookmarks
 Authorization: Bearer {{token}}
 [Options]
+delay: 30s
 retry: 10
+retry-interval: 10s
 
 HTTP/1.1 200
 [Captures]
@@ -120,7 +122,10 @@ jsonpath "$.tags[*]" includes "metrics"
 GET http://localhost:3000/api/v1/bookmarks
 Authorization: Bearer {{token}}
 [Options]
+delay: 30s
 retry: 10
+retry-interval: 10s
+
 
 HTTP/1.1 200
 [Asserts]

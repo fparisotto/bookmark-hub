@@ -14,6 +14,9 @@ services:
       APP_DATA_DIR: /data
       HMAC_KEY: secret
       READABILITY_URL: http://readability-api:3001
+      OLLAMA_URL: http://host.docker.internal:11434
+      OLLAMA_MODEL: llama3.1:latest
+      READABILITY_URL: http://readability-api:3001
       PG_HOST: postgres
       PG_PORT: 5432
       PG_USER: main
@@ -45,7 +48,7 @@ services:
       - 3001:3001
     restart: on-failure
   postgres:
-    image: postgres:17
+    image: pgvector/pgvector:pg17
     ports:
       - 5432:5432
     environment:

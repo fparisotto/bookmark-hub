@@ -3,7 +3,6 @@ use deadpool_postgres::GenericClient;
 use postgres_from_row::FromRow;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
-use tracing::instrument;
 use url::Url;
 use uuid::Uuid;
 
@@ -53,7 +52,6 @@ pub struct BookmarkUserTask {
     pub updated_at: DateTime<Utc>,
 }
 
-#[instrument(skip(pool))]
 pub async fn create(pool: &PgPool, user_id: Uuid, url: Url, tags: Vec<String>) -> Result<Task> {
     const SQL: &str = r#"INSERT INTO "bookmark_task" (user_id, url, status, tags)
     VALUES ($1, $2, $3, $4) RETURNING "bookmark_task".*;"#;
@@ -65,10 +63,10 @@ pub async fn create(pool: &PgPool, user_id: Uuid, url: Url, tags: Vec<String>) -
         )
         .await?;
     let task = Task::try_from_row(&row)?;
+    tracing::debug!(?task, "Task created");
     Ok(task)
 }
 
-#[instrument(skip(pool))]
 pub async fn peek(pool: &PgPool, now: DateTime<Utc>) -> Result<Vec<Task>> {
     const QUERY: &str = r#"SELECT * FROM bookmark_task WHERE next_delivery <= $1
     AND status = 'pending' FOR UPDATE SKIP LOCKED LIMIT 10;"#;
@@ -98,7 +96,6 @@ pub async fn peek(pool: &PgPool, now: DateTime<Utc>) -> Result<Vec<Task>> {
     Ok(tasks)
 }
 
-#[instrument(skip(pool))]
 pub async fn update(
     pool: &PgPool,
     task: Task,
@@ -112,6 +109,6 @@ pub async fn update(
     let row_count = client
         .execute(SQL, &[&status, &retries, &fail_reason, &task.task_id])
         .await?;
-    tracing::info!("Task updated, rows affected = {row_count}");
+    tracing::debug!(?task, "Task updated, rows affected = {row_count}");
     Ok(())
 }

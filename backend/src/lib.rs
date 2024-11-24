@@ -10,6 +10,7 @@ pub mod daemon;
 pub mod db;
 pub mod endpoints;
 pub mod error;
+pub mod ollama;
 pub mod readability;
 
 #[derive(Clone)]
@@ -41,7 +42,13 @@ pub struct Config {
     pub loki_url: Option<Url>,
 
     #[arg(long, env = "READABILITY_URL")]
-    pub readability_url: Url, // FIXME validate if it has scheme
+    pub readability_url: Url,
+
+    #[arg(long, env = "OLLAMA_URL")]
+    pub ollama_url: Url,
+
+    #[clap(long, env = "OLLAMA_MODEL")]
+    pub ollama_model: String,
 
     #[arg(long, env = "APP_BIND", default_value = "[::]:3000")]
     pub bind: SocketAddr,
@@ -52,25 +59,21 @@ pub struct Config {
 
 #[derive(Debug, Clone, Args)]
 pub struct PgParams {
-    #[clap(long, help = "Postgres host", env = "PG_HOST")]
+    #[clap(long, env = "PG_HOST")]
     pg_host: String,
 
-    #[clap(long, help = "Postgres port", env = "PG_PORT")]
+    #[clap(long, env = "PG_PORT")]
     pg_port: u16,
 
-    #[clap(long, help = "Postgres user", env = "PG_USER")]
+    #[clap(long, env = "PG_USER")]
     pg_user: SecretString,
 
-    #[clap(long, help = "Postgres password", env = "PG_PASSWORD")]
+    #[clap(long, env = "PG_PASSWORD")]
     pg_password: SecretString,
 
-    #[clap(long, help = "Postgres database", env = "PG_DATABASE")]
+    #[clap(long, env = "PG_DATABASE")]
     pg_database: SecretString,
 
-    #[clap(
-        long,
-        help = "Postgres connection pool max connections",
-        env = "PG_MAX_CONNECTIONS"
-    )]
+    #[clap(long, env = "PG_MAX_CONNECTIONS")]
     pg_max_connections: u8,
 }

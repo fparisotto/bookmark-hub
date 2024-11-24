@@ -32,6 +32,8 @@ lol_html = "1.2"
 metrics = "0.23"
 metrics-exporter-prometheus = "0.15"
 murmur3 = "0.5"
+ollama-rs = { version = "0.2.1" }
+pgvector = { version = "0.4", features = ["postgres"] }
 postgres-from-row = "0.5.2"
 postgres-types = { version = "0.2.7", features = ["derive"] }
 rand = "0.8"

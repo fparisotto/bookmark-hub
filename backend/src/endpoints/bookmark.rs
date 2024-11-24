@@ -4,10 +4,10 @@ use axum::Json;
 use axum::{routing::get, routing::post, Extension, Router};
 use axum_macros::debug_handler;
 use serde::{Deserialize, Serialize};
-use tracing::error;
+use tracing::warn;
 use url::Url;
 
-use crate::db::bookmark::{self, BookmarkWithUser, TagOperation};
+use crate::db::bookmark::{self, Bookmark, TagOperation};
 use crate::db::task::{self, Task};
 use crate::endpoints::Error;
 use crate::error::Result;
@@ -42,7 +42,7 @@ struct Tags {
 
 #[derive(Debug, Serialize)]
 struct Bookmarks {
-    bookmarks: Vec<BookmarkWithUser>,
+    bookmarks: Vec<Bookmark>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -88,7 +88,7 @@ async fn get_bookmark(
     claims: Claim,
     Extension(app_context): Extension<AppContext>,
     Path(id): Path<String>,
-) -> Result<Json<BookmarkWithUser>> {
+) -> Result<Json<Bookmark>> {
     let maybe_bookmark =
         bookmark::get_with_user_data(&app_context.pool, claims.user_id, &id).await?;
     match maybe_bookmark {
@@ -103,12 +103,18 @@ async fn new_bookmark(
     Extension(app_context): Extension<AppContext>,
     Json(input): Json<NewBookmark>,
 ) -> Result<(StatusCode, Json<Task>)> {
-    // FIXME put this validation in a better place
-    let mut tags = input.tags.clone().unwrap_or_default();
-    tags.retain(|t| !t.trim().is_empty());
+    let tags = input
+        .tags
+        .clone()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|e| e.trim().to_owned())
+        .filter(|e| !e.is_empty())
+        .collect::<Vec<_>>();
+
     let response = task::create(&app_context.pool, claims.user_id, input.url, tags).await?;
     if let Err(error) = app_context.tx_new_task.send(()) {
-        error!(?error, "Fail on notify new task");
+        warn!(?error, "Fail on notify new task");
     }
     Ok((StatusCode::CREATED, Json(response)))
 }
@@ -119,7 +125,7 @@ async fn set_tags(
     Extension(app_context): Extension<AppContext>,
     Path(bookmark_id): Path<String>,
     Json(tags): Json<Tags>,
-) -> Result<Json<BookmarkWithUser>> {
+) -> Result<Json<Bookmark>> {
     let updated = bookmark::update_tags(
         &app_context.pool,
         claims.user_id,
@@ -136,7 +142,7 @@ async fn append_tags(
     Extension(app_context): Extension<AppContext>,
     Path(bookmark_id): Path<String>,
     Json(tags): Json<Tags>,
-) -> Result<Json<BookmarkWithUser>> {
+) -> Result<Json<Bookmark>> {
     let updated = bookmark::update_tags(
         &app_context.pool,
         claims.user_id,

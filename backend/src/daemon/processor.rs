@@ -1,17 +1,29 @@
 use anyhow::Result;
-use chrono::Utc;
 use futures::future::join_all;
 use lol_html::{element, rewrite_str, RewriteStrSettings};
 use reqwest::Client;
 use std::collections::HashMap;
-use tracing::instrument;
 use url::Url;
+use uuid::Uuid;
 
-use crate::db::bookmark::Bookmark;
-use crate::readability;
+use crate::{ollama, readability};
 
-#[derive(Debug)]
-#[allow(dead_code)] // FIXME
+#[derive(Debug, Clone)]
+pub struct ProcessorOutput {
+    pub bookmark_id: String,
+    pub url: String,
+    pub domain: String,
+    pub title: String,
+    pub text_content: String,
+    pub tags: Vec<String>,
+    pub summary: String,
+    pub images: Vec<Image>,
+    pub html: String,
+    pub embeddings: Vec<f32>,
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)] // FIXME: remove or use
 pub struct Image {
     pub id: String,
     pub original_url: String,
@@ -27,17 +39,39 @@ struct ImageFound {
     url: Url,
 }
 
-#[instrument(skip(http))]
 pub async fn process_url(
     http: &Client,
     readability_url: Url,
+    ollama_url: Url,
+    ollama_model: String,
+    user_id: &Uuid,
     original_url_str: &str,
-) -> Result<(Bookmark, Vec<Image>, String)> {
+    tags: &Vec<String>,
+) -> Result<ProcessorOutput> {
     let original_url = Url::parse(original_url_str)?;
     let original_url = super::clean_url(original_url)?;
     let bookmark_id: String = super::make_bookmark_id(&original_url)?;
     let raw_html = fetch_html_content(http, &original_url).await?;
     let readability_response = readability::process(http, readability_url, raw_html).await?;
+
+    let tags = if tags.is_empty() {
+        ollama::tags(
+            ollama_url.clone(),
+            ollama_model.clone(),
+            readability_response.text_content.clone(),
+        )
+        .await?
+    } else {
+        tags.to_owned()
+    };
+    let summary = ollama::summary(
+        ollama_url.clone(),
+        ollama_model.clone(),
+        readability_response.text_content.clone(),
+    )
+    .await?;
+    let embeddings =
+        ollama::embeddings(ollama_url.clone(), ollama_model.clone(), summary.clone()).await?;
 
     let images_found = find_images(&original_url, &readability_response.content)?;
 
@@ -67,24 +101,31 @@ pub async fn process_url(
         .map(|image| (image.original_src.clone(), image))
         .collect();
 
-    let (new_content, images) =
-        rewrite_images(&bookmark_id, &readability_response.content, images_index).await?;
+    let (rewrite_html, images) = rewrite_images(
+        &bookmark_id,
+        user_id,
+        &readability_response.content,
+        images_index,
+    )
+    .await?;
 
-    let bookmark = Bookmark {
+    Ok(ProcessorOutput {
         bookmark_id,
         url: original_url.to_string(),
         domain: super::domain_from_url(&original_url)?,
         title: readability_response.title,
         text_content: readability_response.text_content,
-        created_at: Utc::now(),
-    };
-
-    Ok((bookmark, images, new_content))
+        images,
+        html: rewrite_html,
+        tags,
+        summary,
+        embeddings,
+    })
 }
 
-#[instrument(skip(content, images_found))]
 async fn rewrite_images(
     bookmark_id: &str,
+    user_id: &Uuid,
     content: &str,
     images_found: HashMap<String, Image>,
 ) -> Result<(String, Vec<Image>)> {
@@ -93,7 +134,7 @@ async fn rewrite_images(
         let new_src = match &images_found.get(&img_src) {
             Some(image_found) => {
                 let src = format!(
-                    "/static/{bookmark_id}/{image_found_id}",
+                    "/static/{user_id}/{bookmark_id}/{image_found_id}",
                     image_found_id = image_found.id
                 );
                 tracing::info!("Rewriting image from={img_src}, to={src}");
@@ -122,7 +163,6 @@ async fn rewrite_images(
     Ok((new_content, images))
 }
 
-#[instrument(skip(http))]
 async fn process_image_found(http: &Client, image_found: &ImageFound) -> Result<Image> {
     let response = http
         .get(image_found.url.to_string())
@@ -189,7 +229,6 @@ fn find_images(base_url: &Url, content: &str) -> Result<Vec<ImageFound>> {
     Ok(images_found)
 }
 
-#[instrument(skip(client))]
 async fn fetch_html_content(client: &Client, url: &Url) -> Result<String> {
     Ok(client.get(url.to_string()).send().await?.text().await?)
 }

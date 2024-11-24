@@ -3,7 +3,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use chrono::Utc;
 use reqwest::Client as HttpClient;
-use tracing::instrument;
+use uuid::Uuid;
 
 use super::processor::Image;
 use crate::daemon::processor;
@@ -17,7 +17,6 @@ use crate::Config;
 
 const DAEMON_IDLE_SLEEP: Duration = Duration::from_secs(300);
 
-#[instrument(skip_all)]
 pub async fn run(
     pool: &PgPool,
     config: &Config,
@@ -86,55 +85,71 @@ async fn execute_step(pool: &PgPool, http: &HttpClient, config: &Config) -> Resu
     Ok(())
 }
 
-#[instrument(skip(pool, http, config))]
 async fn handle_task(pool: &PgPool, http: &HttpClient, config: &Config, task: &Task) -> Result<()> {
-    let bookmark = crease_or_retrieve_bookmark(pool, http, config, &task.url).await?;
-    let uuid =
-        db::bookmark::upsert_user_bookmark(pool, &bookmark.bookmark_id, task.user_id, &task.tags)
-            .await?;
+    if db::bookmark::get_by_url_and_user_id(pool, &task.url, task.user_id)
+        .await?
+        .is_some()
+    {
+        tracing::info!(?task, "Duplicated bookmark");
+        return Ok(());
+    }
+
+    tracing::info!("Processing new bookmark for url={}", &task.url);
+    let output = processor::process_url(
+        http,
+        config.readability_url.clone(),
+        config.ollama_url.clone(),
+        config.ollama_model.clone(),
+        &task.user_id,
+        &task.url,
+        &task.tags,
+    )
+    .await
+    .with_context(|| format!("process_url: {}", &task.url))?;
+
+    let bookmark = Bookmark {
+        bookmark_id: output.bookmark_id,
+        user_id: task.user_id,
+        url: output.url,
+        domain: output.domain,
+        title: output.title,
+        text_content: output.text_content,
+        tags: output.tags,
+        summary: output.summary,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    };
+
+    let bookmark_saved = db::bookmark::save(pool, &bookmark, output.embeddings.clone())
+        .await
+        .with_context(|| {
+            format!(
+                "save_bookmark_into_database: bookmark_id={}",
+                &bookmark.bookmark_id
+            )
+        })?;
+
+    save_static_content(
+        config,
+        &bookmark_saved,
+        &output.images,
+        &output.html,
+        &task.user_id,
+    )
+    .await
+    .with_context(|| {
+        format!(
+            "save_static_content: bookmark_id={}",
+            &bookmark_saved.bookmark_id
+        )
+    })?;
+
     tracing::info!(
-        user_id = format!("{}", task.user_id),
-        bookmark_user_id = format!("{uuid}"),
-        bookmark_id = &bookmark.bookmark_id,
-        "Creating a new bookmark and bound with user",
+        url = task.url,
+        bookmark_id = format!("{}", &bookmark_saved.bookmark_id),
+        "Bookmark created",
     );
     Ok(())
-}
-
-#[instrument(skip(pool, http, config))]
-async fn crease_or_retrieve_bookmark(
-    pool: &PgPool,
-    http: &HttpClient,
-    config: &Config,
-    url: &str,
-) -> Result<Bookmark> {
-    match db::bookmark::get_by_url(pool, url).await? {
-        Some(bookmark) => Ok(bookmark),
-        None => {
-            tracing::info!("Processing new bookmark for url={url}");
-            let (bookmark, images, content) =
-                processor::process_url(http, config.readability_url.clone(), url)
-                    .await
-                    .with_context(|| format!("process_url: {url}"))?;
-            save_static_content(config, &bookmark, &images, &content)
-                .await
-                .with_context(|| {
-                    format!("save_static_content: bookmark_id={}", &bookmark.bookmark_id)
-                })?;
-            db::bookmark::save(pool, &bookmark).await.with_context(|| {
-                format!(
-                    "save_bookmark_into_database: bookmark_id={}",
-                    &bookmark.bookmark_id
-                )
-            })?;
-            tracing::info!(
-                url = url,
-                bookmark_id = format!("{}", &bookmark.bookmark_id),
-                "Bookmark created",
-            );
-            Ok(bookmark)
-        }
-    }
 }
 
 async fn save_static_content(
@@ -142,11 +157,20 @@ async fn save_static_content(
     bookmark: &Bookmark,
     images: &[Image],
     content: &str,
+    user_id: &Uuid,
 ) -> Result<()> {
-    tracing::info!("Saving bookmark, id={}", &bookmark.bookmark_id,);
-    let bookmark_dir = config.data_dir.join(&bookmark.bookmark_id);
+    tracing::info!(
+        "Saving bookmark, id={}, user_id={}",
+        &bookmark.bookmark_id,
+        user_id
+    );
+    let bookmark_dir = config
+        .data_dir
+        .join(user_id.to_string())
+        .join(&bookmark.bookmark_id);
+
     if !bookmark_dir.exists() {
-        tokio::fs::create_dir(&bookmark_dir).await?;
+        tokio::fs::create_dir_all(&bookmark_dir).await?;
     }
     let index = bookmark_dir.join("index.html");
     tokio::fs::write(&index, content).await?;
