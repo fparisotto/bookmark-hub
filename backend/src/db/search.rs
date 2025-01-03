@@ -166,18 +166,8 @@ async fn run_search(
     let mut sql = "SELECT ".to_owned();
     let query_select = match request.query.clone() {
         Some(query) => {
-            if query.trim().starts_with('"') && query.trim().ends_with('"') {
-                sql.push_str(" ts_headline('english', b.text_content, phraseto_tsquery('english', $1), 'StartSel=<mark>, StopSel=</mark>') AS search_match, ");
-                Some(query)
-            } else {
-                sql.push_str(" ts_headline('english', b.text_content, to_tsquery('english', $1), 'StartSel=<mark>, StopSel=</mark>') AS search_match, ");
-                let query = if query.contains('&') {
-                    query.to_owned()
-                } else {
-                    query.split(' ').collect::<Vec<_>>().join(" | ")
-                };
-                Some(query)
-            }
+            sql.push_str(" ts_headline('english', b.text_content, websearch_to_tsquery('english', $1), 'StartSel=<mark>, StopSel=</mark>') AS search_match, ");
+            Some(query)
         }
         None => {
             sql.push_str(" $1 AS search_match, ");
@@ -211,22 +201,11 @@ async fn run_search(
 
     let query_filter: Option<String> = match request.query.clone() {
         Some(query) => {
-            if query.trim().starts_with('"') && query.trim().ends_with('"') {
-                sql.push_str(" AND b.search_tokens @@ phraseto_tsquery('english', $4) ");
-                sql.push_str(
-                    " ORDER BY ts_rank(b.search_tokens, phraseto_tsquery('english', $4)) ",
-                );
-                Some(query)
-            } else {
-                let query = if query.contains('&') {
-                    query
-                } else {
-                    query.split(' ').collect::<Vec<_>>().join(" | ")
-                };
-                sql.push_str(" AND b.search_tokens @@ to_tsquery('english', $4) ");
-                sql.push_str(" ORDER BY ts_rank(b.search_tokens, to_tsquery('english', $4)) ");
-                Some(query)
-            }
+            sql.push_str(" AND b.search_tokens @@ websearch_to_tsquery('english', $4) ");
+            sql.push_str(
+                " ORDER BY ts_rank(b.search_tokens, websearch_to_tsquery('english', $4)) ",
+            );
+            Some(query)
         }
         None => {
             sql.push_str(" AND CAST($4 AS TEXT) IS NULL ");
@@ -263,17 +242,7 @@ fn modify_query_and_get_bindings(
     match (request.tags_filter.clone(), request.query.clone()) {
         (None, None) => (sql, None, None),
         (None, Some(query)) => {
-            let query = if query.trim().starts_with('"') && query.trim().ends_with('"') {
-                sql.push_str(" AND b.search_tokens @@ phraseto_tsquery('english', $2) ");
-                query
-            } else {
-                sql.push_str(" AND b.search_tokens @@ to_tsquery('english', $2) ");
-                if query.contains('&') {
-                    query
-                } else {
-                    query.split(' ').collect::<Vec<_>>().join(" | ")
-                }
-            };
+            sql.push_str(" AND b.search_tokens @@ websearch_to_tsquery('english', $2) ");
             (sql, Some(query), None)
         }
         (Some(tag_filter), None) => {
@@ -295,17 +264,7 @@ fn modify_query_and_get_bindings(
             (sql, None, tags)
         }
         (Some(tag_filter), Some(query)) => {
-            let query = if query.trim().starts_with('"') && query.trim().ends_with('"') {
-                sql.push_str(" AND b.search_tokens @@ phraseto_tsquery('english', $2) ");
-                query
-            } else {
-                sql.push_str(" AND b.search_tokens @@ to_tsquery('english', $2) ");
-                if query.contains('&') {
-                    query
-                } else {
-                    query.split(' ').collect::<Vec<_>>().join(" | ")
-                }
-            };
+            sql.push_str(" AND b.search_tokens @@ websearch_to_tsquery('english', $2) ");
             let tags: Option<Vec<String>> = match tag_filter {
                 TagFilter::And(tags) => {
                     sql.push_str(" AND b.tags @> $3 ");
