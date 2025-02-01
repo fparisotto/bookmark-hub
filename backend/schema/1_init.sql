@@ -20,7 +20,7 @@ CREATE TABLE bookmark (
     text_content TEXT NOT NULL,
     tags TEXT[],
     summary TEXT,
-    embedding vector,
+    embedding vector(3072),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (bookmark_id, user_id),
@@ -32,7 +32,7 @@ ALTER TABLE bookmark ADD COLUMN search_tokens TSVECTOR GENERATED ALWAYS AS (
     setweight(to_tsvector('english', coalesce(summary, '')), 'C')
 ) STORED;
 CREATE INDEX bookmark_search_index ON bookmark USING GIN (search_tokens);
-CREATE INDEX bookmark_embedding_index ON bookmark USING hnsw (embedding vector_l2_ops);
+CREATE INDEX bookmark_embedding_index ON bookmark USING hnsw ((embedding::halfvec(3072)) halfvec_l2_ops);
 
 CREATE TYPE task_status AS ENUM ('done', 'pending', 'fail');
 CREATE TABLE bookmark_task (

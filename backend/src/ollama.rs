@@ -1,5 +1,3 @@
-use std::collections::BTreeSet;
-
 use anyhow::bail;
 use ollama_rs::{
     generation::{
@@ -9,9 +7,9 @@ use ollama_rs::{
     Ollama,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use tracing::warn;
 use url::Url;
-
-const MAX_WINDOW_CHAR: u32 = 5_000;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct TagsModelResponse {
@@ -27,30 +25,27 @@ pub async fn tags(
     Response as this JSON format: '{ "tags": ["some tag", "another tag"] }'.
     Here's text:
     "#;
-
-    const CONSOLITATION_PROMPT: &str = r#"Consolidate all given tags. Remove things you think has the same meaning or are redundant.
-    Give me only the final consolidated result. Response as this JSON format: '{ "tags": ["some tag", "another tag"] }'.
-    Here's tags:
-    "#;
-
+    let tag_response_schema: Value = json!({
+        "required": ["tags"],
+        "properties": {
+            "tags": {
+                "type": "array",
+                "items": { "type": "string" }
+            }
+        }
+    });
     let ollama = Ollama::from_url(ollama_url);
-    let chunks = naive_chunkenizer(&text, MAX_WINDOW_CHAR);
-    let mut responses: Vec<TagsModelResponse> = vec![];
-    for chunk in chunks {
-        let prompt = format!("{PROMPT_PREFIX}\n{chunk}");
-        let request = GenerationRequest::new(ollama_model.to_owned(), prompt.to_owned())
-            .format(ollama_rs::generation::parameters::FormatType::Json);
-        let response = ollama.generate(request).await?;
-        let parsed: TagsModelResponse = serde_json::from_str(&response.response)?;
-        responses.push(parsed);
-    }
-    let tags: BTreeSet<_> = responses.into_iter().flat_map(|e| e.tags).collect();
-    let prompt = format!("{CONSOLITATION_PROMPT}\n{}", serde_json::to_string(&tags)?);
-    let request = GenerationRequest::new(ollama_model, prompt.to_owned())
-        .format(ollama_rs::generation::parameters::FormatType::Json);
+    let request =
+        GenerationRequest::new(ollama_model.to_owned(), format!("{PROMPT_PREFIX}\n{text}")).format(
+            ollama_rs::generation::parameters::FormatType::Json(tag_response_schema),
+        );
     let response = ollama.generate(request).await?;
-    let parsed: TagsModelResponse = serde_json::from_str(&response.response)?;
-    Ok(parsed.tags)
+    if let Ok(parsed) = serde_json::from_str::<TagsModelResponse>(&response.response) {
+        Ok(parsed.tags)
+    } else {
+        warn!(%text, response = response.response, "Ollama failed to extract tags from chunk");
+        todo!();
+    }
 }
 
 pub async fn summary(
@@ -58,47 +53,11 @@ pub async fn summary(
     ollama_model: String,
     text: String,
 ) -> anyhow::Result<String> {
-    const CONSOLITATION_PROMPT: &str = r#"
-    Consolidate all given text, these are a concatenation of summary chunks for the same original text.
-    Make it consice and consistent, fixing any issues. Here's the text:
-    "#;
-
+    const PROMPT: &str = "Summarize the following text, be succinct, maximum 5 sentences:";
     let ollama = Ollama::from_url(ollama_url);
-    let chunks = naive_chunkenizer(&text, MAX_WINDOW_CHAR);
-    let mut responses: Vec<String> = vec![];
-    for chunk in chunks {
-        let prompt = format!("Summarize the following text:\n{chunk}");
-        let request = GenerationRequest::new(ollama_model.clone(), prompt.to_owned());
-        let response = ollama.generate(request).await?;
-        responses.push(response.response.clone());
-    }
-    let prompt = format!("{CONSOLITATION_PROMPT}\n{}", responses.join("\n"));
-    let request = GenerationRequest::new(ollama_model, prompt.to_owned());
+    let request = GenerationRequest::new(ollama_model.clone(), format!("{PROMPT}\n{text}"));
     let response = ollama.generate(request).await?;
     Ok(response.response)
-}
-
-fn naive_chunkenizer(text: &str, max_window_char: u32) -> Vec<String> {
-    let lines: Vec<_> = text
-        .lines()
-        .map(|e| e.trim())
-        .filter(|e| !e.is_empty())
-        .map(|e| e.to_owned())
-        .collect();
-    let mut result = vec![];
-    let mut buff = String::new();
-    for line in lines {
-        if buff.len() < max_window_char as usize {
-            buff.push_str(&format!("{}\n", line));
-        } else {
-            result.push(buff.clone());
-            buff.clear();
-        }
-    }
-    if !buff.is_empty() {
-        result.push(buff.clone());
-    }
-    result
 }
 
 pub async fn embeddings(

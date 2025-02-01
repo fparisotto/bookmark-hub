@@ -54,6 +54,10 @@ pub async fn process_url(
     let raw_html = fetch_html_content(http, &original_url).await?;
     let readability_response = readability::process(http, readability_url, raw_html).await?;
 
+    // FIXME: chunk text first
+    // for each chunk do tag, summary and embeddings
+    // save embeddings in a separated table
+
     let tags = if tags.is_empty() {
         ollama::tags(
             ollama_url.clone(),

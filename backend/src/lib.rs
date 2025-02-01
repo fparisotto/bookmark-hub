@@ -12,6 +12,7 @@ pub mod endpoints;
 pub mod error;
 pub mod ollama;
 pub mod readability;
+pub mod text;
 
 #[derive(Clone)]
 pub struct AppContext {
