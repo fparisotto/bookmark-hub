@@ -1,4 +1,4 @@
-use web_spa::app::App;
+use spa::app::App;
 
 fn main() {
     wasm_logger::init(wasm_logger::Config::default());

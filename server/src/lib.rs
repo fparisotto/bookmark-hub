@@ -41,13 +41,16 @@ pub struct Config {
     pub loki_url: Option<Url>,
 
     #[arg(long, env = "READABILITY_URL")]
-    pub readability_url: Url, // FIXME validate if it has scheme
+    pub readability_url: Url,
 
     #[arg(long, env = "APP_BIND", default_value = "[::]:3000")]
     pub bind: SocketAddr,
 
     #[arg(long, env = "APP_DATA_DIR")]
     pub data_dir: PathBuf,
+
+    #[arg(long, env = "SPA_DIST")]
+    pub spa_dir_dir: PathBuf,
 }
 
 #[derive(Debug, Clone, Args)]

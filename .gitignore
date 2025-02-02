@@ -1,1 +1,6 @@
-.direnv/
+target/
+temp/
+spa/dist/*
+result
+.env
+.direnv
