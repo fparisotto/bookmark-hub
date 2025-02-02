@@ -1,33 +1,32 @@
 services:
-  bookmark-hub:
-    image: bookmark-hub:latest
-    ports:
-      - 3000:3000
-    depends_on:
-      - postgres
-    environment:
-      RUST_BACKTRACE: full
-      RUST_LOG: info
-      APP_ENV: DEV
-      APP_BIND: "[::]:3000"
-      APP_DATA_DIR: /data
-      HMAC_KEY: secret
-      READABILITY_URL: http://readability-api:3001
-      PG_HOST: postgres
-      PG_PORT: 5432
-      PG_USER: main
-      PG_PASSWORD: main
-      PG_DATABASE: main
-      PG_MAX_CONNECTIONS: 5
-    volumes:
-      - bookmark-hub-data:/data
-    healthcheck:
-      test: curl --fail http://localhost:3000/health || exit 1
-      timeout: 2s
-      interval: 10s
-      start_period: 10s
-      retries: 5
-    restart: on-failure
+  # bookmark-hub:
+  #   image: bookmark-hub:latest
+  #   ports:
+  #     - 3000:3000
+  #   depends_on:
+  #     - postgres
+  #   environment:
+  #     RUST_BACKTRACE: full
+  #     RUST_LOG: info
+  #     APP_BIND: "[::]:3000"
+  #     APP_DATA_DIR: /data
+  #     HMAC_KEY: secret
+  #     READABILITY_URL: http://readability-api:3001
+  #     PG_HOST: postgres
+  #     PG_PORT: 5432
+  #     PG_USER: main
+  #     PG_PASSWORD: main
+  #     PG_DATABASE: main
+  #     PG_MAX_CONNECTIONS: 5
+  #   volumes:
+  #     - bookmark-hub-data:/data
+  #   healthcheck:
+  #     test: curl --fail http://localhost:3000/health || exit 1
+  #     timeout: 2s
+  #     interval: 10s
+  #     start_period: 10s
+  #     retries: 5
+  #   restart: on-failure
   readability-api:
     image: ghcr.io/fparisotto/readability-api:v0.0.1
     environment:

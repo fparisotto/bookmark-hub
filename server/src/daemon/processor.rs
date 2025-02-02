@@ -3,11 +3,11 @@ use chrono::Utc;
 use futures::future::join_all;
 use lol_html::{element, rewrite_str, RewriteStrSettings};
 use reqwest::Client;
+use shared::Bookmark;
 use std::collections::HashMap;
 use tracing::instrument;
 use url::Url;
 
-use crate::db::bookmark::Bookmark;
 use crate::readability;
 
 #[derive(Debug)]
@@ -32,7 +32,7 @@ pub async fn process_url(
     http: &Client,
     readability_url: Url,
     original_url_str: &str,
-) -> Result<(Bookmark, Vec<Image>, String)> {
+) -> Result<(Bookmark, Vec<Image>, String, String)> {
     let original_url = Url::parse(original_url_str)?;
     let original_url = super::clean_url(original_url)?;
     let bookmark_id: String = super::make_bookmark_id(&original_url)?;
@@ -67,7 +67,7 @@ pub async fn process_url(
         .map(|image| (image.original_src.clone(), image))
         .collect();
 
-    let (new_content, images) =
+    let (html_content, images) =
         rewrite_images(&bookmark_id, &readability_response.content, images_index).await?;
 
     let bookmark = Bookmark {
@@ -75,11 +75,20 @@ pub async fn process_url(
         url: original_url.to_string(),
         domain: super::domain_from_url(&original_url)?,
         title: readability_response.title,
-        text_content: readability_response.text_content,
         created_at: Utc::now(),
+        links: None,
+        user_id: None,
+        tags: None,
+        user_created_at: Utc::now(),
+        user_updated_at: None,
     };
 
-    Ok((bookmark, images, new_content))
+    Ok((
+        bookmark,
+        images,
+        html_content,
+        readability_response.text_content,
+    ))
 }
 
 #[instrument(skip(content, images_found))]

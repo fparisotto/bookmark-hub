@@ -3,6 +3,7 @@ use deadpool_postgres::GenericClient;
 use futures::TryFutureExt;
 use postgres_from_row::FromRow;
 use serde::{Deserialize, Serialize};
+use shared::{Bookmark, SearchRequest, SearchResponse, SearchResultItem, TagCount, TagFilter};
 use tokio::try_join;
 use tracing::{debug, instrument, warn};
 use uuid::Uuid;
@@ -11,46 +12,59 @@ use crate::error::{Error, Result};
 
 use super::{PgConnection, PgPool};
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-struct TagCount {
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+struct RowTagCount {
     tag: String,
     count: i64,
 }
 
+impl From<RowTagCount> for TagCount {
+    fn from(value: RowTagCount) -> Self {
+        Self {
+            tag: value.tag,
+            count: value.count,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct SearchResultItem {
-    pub bookmark_id: String,
-    pub url: String,
-    pub domain: String,
-    pub title: String,
-    pub search_match: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub user_id: Option<Uuid>,
-    pub tags: Option<Vec<String>>,
-    pub user_created_at: Option<DateTime<Utc>>,
-    pub user_updated_at: Option<DateTime<Utc>>,
+struct RowSearchResultItem {
+    bookmark_id: String,
+    url: String,
+    domain: String,
+    title: String,
+    search_match: Option<String>,
+    created_at: DateTime<Utc>,
+    user_id: Option<Uuid>,
+    tags: Option<Vec<String>>,
+    user_created_at: Option<DateTime<Utc>>,
+    user_updated_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SearchResponse {
-    bookmarks: Vec<SearchResultItem>,
-    tags: Vec<TagCount>,
-    total: u64,
+impl From<RowSearchResultItem> for Bookmark {
+    fn from(value: RowSearchResultItem) -> Self {
+        Self {
+            bookmark_id: value.bookmark_id,
+            url: value.url,
+            domain: value.domain,
+            title: value.title,
+            links: None,
+            created_at: value.created_at,
+            user_id: value.user_id,
+            tags: value.tags,
+            user_created_at: value.user_created_at.unwrap_or_default(),
+            user_updated_at: value.user_updated_at,
+        }
+    }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TagFilter {
-    And(Vec<String>),
-    Or(Vec<String>),
-    Any,
-    Untagged,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SearchRequest {
-    query: Option<String>,
-    tags_filter: Option<TagFilter>,
-    limit: Option<i32>,
+impl From<RowSearchResultItem> for SearchResultItem {
+    fn from(value: RowSearchResultItem) -> Self {
+        Self {
+            search_match: value.search_match.clone(),
+            bookmark: value.into(),
+        }
+    }
 }
 
 #[instrument(skip(pool))]
@@ -72,12 +86,8 @@ pub async fn search(
         warn!("Total query fail");
         e
     });
-    let (bookmarks, tags, total) = try_join!(f_search, f_aggregation, f_total)?;
-    Ok(SearchResponse {
-        bookmarks,
-        tags,
-        total,
-    })
+    let (items, tags, total) = try_join!(f_search, f_aggregation, f_total)?;
+    Ok(SearchResponse { items, tags, total })
 }
 
 #[instrument(skip(client))]
@@ -131,7 +141,11 @@ async fn run_aggregation(
                 .query(&sql, &[&user_id])
                 .await?
                 .iter()
-                .map(|row| TagCount::try_from_row(row).map_err(Error::from))
+                .map(|row| {
+                    RowTagCount::try_from_row(row)
+                        .map(TagCount::from)
+                        .map_err(Error::from)
+                })
                 .collect::<Result<Vec<_>>>()?;
             Ok(result)
         }
@@ -140,7 +154,11 @@ async fn run_aggregation(
                 .query(&sql, &[&user_id, &tags])
                 .await?
                 .iter()
-                .map(|row| TagCount::try_from_row(row).map_err(Error::from))
+                .map(|row| {
+                    RowTagCount::try_from_row(row)
+                        .map(TagCount::from)
+                        .map_err(Error::from)
+                })
                 .collect::<Result<Vec<_>>>()?;
             Ok(result)
         }
@@ -149,7 +167,11 @@ async fn run_aggregation(
                 .query(&sql, &[&user_id, &query])
                 .await?
                 .iter()
-                .map(|row| TagCount::try_from_row(row).map_err(Error::from))
+                .map(|row| {
+                    RowTagCount::try_from_row(row)
+                        .map(TagCount::from)
+                        .map_err(Error::from)
+                })
                 .collect::<Result<Vec<_>>>()?;
             Ok(result)
         }
@@ -158,7 +180,11 @@ async fn run_aggregation(
                 .query(&sql, &[&user_id, &query, &tags])
                 .await?
                 .iter()
-                .map(|row| TagCount::try_from_row(row).map_err(Error::from))
+                .map(|row| {
+                    RowTagCount::try_from_row(row)
+                        .map(TagCount::from)
+                        .map_err(Error::from)
+                })
                 .collect::<Result<Vec<_>>>()?;
             Ok(result)
         }
@@ -257,7 +283,11 @@ async fn run_search(
         .query(&sql, &[&query_select, &user_id, &tags, &query_filter])
         .await?
         .iter()
-        .map(|row| SearchResultItem::try_from_row(row).map_err(Error::from))
+        .map(|row| {
+            RowSearchResultItem::try_from_row(row)
+                .map(SearchResultItem::from)
+                .map_err(Error::from)
+        })
         .collect::<Result<Vec<_>>>()?;
 
     Ok(result)

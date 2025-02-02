@@ -1,10 +1,8 @@
 use serde::{Deserialize, Serialize};
+use shared::SearchType;
 use yew::prelude::*;
 
-use crate::{
-    api::search_api::SearchType,
-    components::atoms::input_text::{InputText, InputType},
-};
+use crate::components::atoms::input_text::{InputText, InputType};
 
 #[derive(Debug, PartialEq, Default, Clone, Serialize, Deserialize)]
 pub struct SearchInputSubmit {

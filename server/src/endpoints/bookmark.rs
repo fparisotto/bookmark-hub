@@ -3,11 +3,10 @@ use axum::http::StatusCode;
 use axum::Json;
 use axum::{routing::get, routing::post, Extension, Router};
 use axum_macros::debug_handler;
-use serde::{Deserialize, Serialize};
+use shared::{Bookmark, Bookmarks, NewBookmark, TagCount, TagOperation, Tags, TagsWithCounters};
 use tracing::error;
-use url::Url;
 
-use crate::db::bookmark::{self, BookmarkWithUser, TagOperation};
+use crate::db::bookmark;
 use crate::db::task::{self, Task};
 use crate::endpoints::Error;
 use crate::error::Result;
@@ -22,33 +21,6 @@ pub fn routes() -> Router {
         .route("/bookmarks", get(get_bookmarks).post(new_bookmark))
         .route("/bookmarks/:id", get(get_bookmark))
         .route("/bookmarks/:id/tags", post(set_tags).patch(append_tags))
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct TagCount {
-    tag: String,
-    count: i64,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct TagsWithCounters {
-    tags: Vec<TagCount>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct Tags {
-    tags: Vec<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct Bookmarks {
-    bookmarks: Vec<BookmarkWithUser>,
-}
-
-#[derive(Debug, Deserialize)]
-struct NewBookmark {
-    url: Url,
-    tags: Option<Vec<String>>,
 }
 
 #[debug_handler]
@@ -88,7 +60,7 @@ async fn get_bookmark(
     claims: Claim,
     Extension(app_context): Extension<AppContext>,
     Path(id): Path<String>,
-) -> Result<Json<BookmarkWithUser>> {
+) -> Result<Json<Bookmark>> {
     let maybe_bookmark =
         bookmark::get_with_user_data(&app_context.pool, claims.user_id, &id).await?;
     match maybe_bookmark {
@@ -119,7 +91,7 @@ async fn set_tags(
     Extension(app_context): Extension<AppContext>,
     Path(bookmark_id): Path<String>,
     Json(tags): Json<Tags>,
-) -> Result<Json<BookmarkWithUser>> {
+) -> Result<Json<Bookmark>> {
     let updated = bookmark::update_tags(
         &app_context.pool,
         claims.user_id,
@@ -136,7 +108,7 @@ async fn append_tags(
     Extension(app_context): Extension<AppContext>,
     Path(bookmark_id): Path<String>,
     Json(tags): Json<Tags>,
-) -> Result<Json<BookmarkWithUser>> {
+) -> Result<Json<Bookmark>> {
     let updated = bookmark::update_tags(
         &app_context.pool,
         claims.user_id,

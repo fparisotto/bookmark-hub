@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use deadpool_postgres::GenericClient;
 use postgres_from_row::FromRow;
 use serde::{Deserialize, Serialize};
+use shared::{Bookmark, TagOperation};
 use tracing::{info, instrument};
 use uuid::Uuid;
 
@@ -10,32 +11,33 @@ use crate::error::{Error, Result};
 use super::PgPool;
 
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
-pub struct Bookmark {
-    pub bookmark_id: String,
-    pub url: String,
-    pub domain: String,
-    pub title: String,
-    pub text_content: String,
-    pub created_at: DateTime<Utc>,
+struct RowBookmark {
+    bookmark_id: String,
+    url: String,
+    domain: String,
+    title: String,
+    created_at: DateTime<Utc>,
+    user_id: Option<Uuid>,
+    tags: Option<Vec<String>>,
+    user_created_at: Option<DateTime<Utc>>,
+    user_updated_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
-pub struct BookmarkWithUser {
-    pub bookmark_id: String,
-    pub url: String,
-    pub domain: String,
-    pub title: String,
-    pub created_at: DateTime<Utc>,
-    pub user_id: Option<Uuid>,
-    pub tags: Option<Vec<String>>,
-    pub user_created_at: Option<DateTime<Utc>>,
-    pub user_updated_at: Option<DateTime<Utc>>,
-}
-
-#[derive(Debug, Clone)]
-pub enum TagOperation {
-    Set(Vec<String>),
-    Append(Vec<String>),
+impl From<RowBookmark> for Bookmark {
+    fn from(value: RowBookmark) -> Self {
+        Self {
+            bookmark_id: value.bookmark_id,
+            url: value.url,
+            domain: value.domain,
+            title: value.title,
+            links: None,
+            created_at: value.created_at,
+            user_id: value.user_id,
+            tags: value.tags,
+            user_created_at: value.user_created_at.unwrap_or_default(),
+            user_updated_at: value.user_updated_at,
+        }
+    }
 }
 
 #[instrument(skip(pool))]
@@ -62,7 +64,7 @@ pub async fn get_tag_count_by_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<(
 }
 
 #[instrument(skip(pool))]
-pub async fn get_by_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<BookmarkWithUser>> {
+pub async fn get_by_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<Bookmark>> {
     const SQL: &str = r#"
     SELECT
         b.*,
@@ -79,13 +81,17 @@ pub async fn get_by_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<BookmarkWit
         .query(SQL, &[&user_id])
         .await?
         .iter()
-        .map(|row| BookmarkWithUser::try_from_row(row).map_err(Error::from))
+        .map(|row| {
+            RowBookmark::try_from_row(row)
+                .map(Bookmark::from)
+                .map_err(Error::from)
+        })
         .collect::<Result<Vec<_>>>()?;
     Ok(results)
 }
 
 #[instrument(skip(pool))]
-pub async fn get_by_tag(pool: &PgPool, user_id: Uuid, tag: &str) -> Result<Vec<BookmarkWithUser>> {
+pub async fn get_by_tag(pool: &PgPool, user_id: Uuid, tag: &str) -> Result<Vec<Bookmark>> {
     const SQL: &str = r#"
     SELECT
         b.*,
@@ -103,7 +109,11 @@ pub async fn get_by_tag(pool: &PgPool, user_id: Uuid, tag: &str) -> Result<Vec<B
         .query(SQL, &[&user_id, &[&tag]])
         .await?
         .iter()
-        .map(|row| BookmarkWithUser::try_from_row(row).map_err(Error::from))
+        .map(|row| {
+            RowBookmark::try_from_row(row)
+                .map(Bookmark::from)
+                .map_err(Error::from)
+        })
         .collect::<Result<Vec<_>>>()?;
     Ok(results)
 }
@@ -115,7 +125,11 @@ pub async fn get_by_url(pool: &PgPool, url: &str) -> Result<Option<Bookmark>> {
     let result = client
         .query_opt(SQL, &[&url])
         .await?
-        .map(|row| Bookmark::try_from_row(&row).map_err(Error::from))
+        .map(|row| {
+            RowBookmark::try_from_row(&row)
+                .map(Bookmark::from)
+                .map_err(Error::from)
+        })
         .transpose()?;
     Ok(result)
 }
@@ -125,7 +139,7 @@ pub async fn get_with_user_data(
     pool: &PgPool,
     user_id: Uuid,
     bookmark_id: &str,
-) -> Result<Option<BookmarkWithUser>> {
+) -> Result<Option<Bookmark>> {
     const SQL: &str = r#"
     SELECT
         b.*,
@@ -141,7 +155,11 @@ pub async fn get_with_user_data(
     let result = client
         .query_opt(SQL, &[&user_id, &bookmark_id])
         .await?
-        .map(|row| BookmarkWithUser::try_from_row(&row).map_err(Error::from))
+        .map(|row| {
+            RowBookmark::try_from_row(&row)
+                .map(Bookmark::from)
+                .map_err(Error::from)
+        })
         .transpose()?;
     Ok(result)
 }
@@ -152,7 +170,7 @@ pub async fn update_tags(
     user_id: Uuid,
     bookmark_id: &str,
     operation: &TagOperation,
-) -> Result<BookmarkWithUser> {
+) -> Result<Bookmark> {
     let (update_tag_sql, tags) = match operation.clone() {
         TagOperation::Set(tags) => ("tags=$1", tags),
         TagOperation::Append(tags) => ("tags=array_cat(tags, $1)", tags),
@@ -178,9 +196,9 @@ pub async fn update_tags(
     let row = client
         .query_one(&sql, &[&tags, &bookmark_id, &user_id])
         .await?;
-    let result = BookmarkWithUser::try_from_row(&row)?;
+    let result = RowBookmark::try_from_row(&row)?;
     info!(?operation, %bookmark_id, "Updated tags for bookmark");
-    Ok(result)
+    Ok(result.into())
 }
 
 #[instrument(skip(pool))]
@@ -207,7 +225,7 @@ pub async fn upsert_user_bookmark(
 }
 
 #[instrument(skip(pool))]
-pub async fn save(pool: &PgPool, bookmark: &Bookmark) -> Result<()> {
+pub async fn save(pool: &PgPool, bookmark: &Bookmark, content: &str) -> Result<()> {
     const SQL: &str = r#"
     INSERT INTO bookmark
     (bookmark_id, url, domain, title, text_content, created_at)
@@ -221,7 +239,7 @@ pub async fn save(pool: &PgPool, bookmark: &Bookmark) -> Result<()> {
                 &bookmark.url,
                 &bookmark.domain,
                 &bookmark.title,
-                &bookmark.text_content,
+                &content,
             ],
         )
         .await?;

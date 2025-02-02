@@ -1,11 +1,8 @@
+use shared::{Bookmark, SearchRequest, SearchResultItem, TagCount, TagFilter};
 use yew::{platform::spawn_local, prelude::*};
 
 use crate::{
-    api::{
-        bookmarks_api::{self, Bookmark},
-        search_api::{self, SearchRequest, SearchResultItem, TagFilter},
-        tags_api::Tag,
-    },
+    api::{bookmarks_api, search_api},
     components::composite::{
         add_bookmark_modal::{AddBookmarkData, AddBookmarkModal},
         bookmark_reader::BookmarkReader,
@@ -20,8 +17,8 @@ use crate::{
 #[derive(Clone, PartialEq, Default, Debug)]
 pub struct HomeState {
     pub user_session: UserSession,
-    pub bookmarks: Vec<SearchResultItem>,
-    pub tags: Vec<Tag>,
+    pub items: Vec<SearchResultItem>,
+    pub tags: Vec<TagCount>,
     pub tags_filter: Vec<String>,
     pub search_input: String,
     pub new_bookmark_url: String,
@@ -89,7 +86,7 @@ pub fn home(props: &Props) -> Html {
                 match search_api::search(&token, home.clone().into()).await {
                     Ok(result) => {
                         log::info!("result={:?}", result);
-                        home.bookmarks = result.bookmarks;
+                        home.items = result.items;
                         home.tags = result.tags;
                         state.set(home);
                     }
@@ -129,7 +126,7 @@ pub fn home(props: &Props) -> Html {
             let state = state.clone();
             let token = token.clone();
             spawn_local(async move {
-                match bookmarks_api::get_by_id(&token, &event.bookmark_id).await {
+                match bookmarks_api::get_by_id(&token, &event.bookmark.bookmark_id).await {
                     Ok(Some(bookmark)) => {
                         let mut home = (*state).clone();
                         home.bookmark_read = Some(bookmark);
@@ -192,7 +189,7 @@ pub fn home(props: &Props) -> Html {
             <>
                 <SearchBar on_submit={on_search_submit} />
                 <TagsFilter tags={state.tags.clone()} on_tag_checked={on_tag_checked} />
-                <MainSearchResult on_item_selected={on_item_selected} results={state.bookmarks.clone()} />
+                <MainSearchResult on_item_selected={on_item_selected} results={state.items.clone()} />
                 <AddBookmarkModal on_submit={on_new_bookmark} />
             </>
         }

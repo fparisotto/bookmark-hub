@@ -3,13 +3,13 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use chrono::Utc;
 use reqwest::Client as HttpClient;
+use shared::Bookmark;
 use tracing::instrument;
 
 use super::processor::Image;
 use crate::daemon::processor;
 use crate::db::{
     self,
-    bookmark::Bookmark,
     task::{Task, TaskStatus},
     PgPool,
 };
@@ -112,21 +112,23 @@ async fn crease_or_retrieve_bookmark(
         Some(bookmark) => Ok(bookmark),
         None => {
             tracing::info!("Processing new bookmark for url={url}");
-            let (bookmark, images, content) =
+            let (bookmark, images, html_content, text_content) =
                 processor::process_url(http, config.readability_url.clone(), url)
                     .await
                     .with_context(|| format!("process_url: {url}"))?;
-            save_static_content(config, &bookmark, &images, &content)
+            save_static_content(config, &bookmark, &images, &html_content)
                 .await
                 .with_context(|| {
                     format!("save_static_content: bookmark_id={}", &bookmark.bookmark_id)
                 })?;
-            db::bookmark::save(pool, &bookmark).await.with_context(|| {
-                format!(
-                    "save_bookmark_into_database: bookmark_id={}",
-                    &bookmark.bookmark_id
-                )
-            })?;
+            db::bookmark::save(pool, &bookmark, &text_content)
+                .await
+                .with_context(|| {
+                    format!(
+                        "save_bookmark_into_database: bookmark_id={}",
+                        &bookmark.bookmark_id
+                    )
+                })?;
             tracing::info!(
                 url = url,
                 bookmark_id = format!("{}", &bookmark.bookmark_id),

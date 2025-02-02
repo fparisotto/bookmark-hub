@@ -1,21 +1,21 @@
+use shared::TagCount;
 use yew::prelude::*;
 
-use crate::api::tags_api::Tag;
 use crate::components::atoms::input_checkbox::{InputCheckbox, ItemCheckEvent};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TagCheckedEvent {
-    Checked(Tag),
-    Unchecked(Tag),
+    Checked(TagCount),
+    Unchecked(TagCount),
 }
 
 #[derive(Debug, Clone, PartialEq, Properties)]
 pub struct Props {
-    pub tags: Vec<Tag>,
+    pub tags: Vec<TagCount>,
     pub on_tag_checked: Callback<TagCheckedEvent>,
 }
 
-fn render_tag(on_tag_checked: Callback<TagCheckedEvent>, tag: Tag) -> Html {
+fn render_tag(on_tag_checked: Callback<TagCheckedEvent>, tag: TagCount) -> Html {
     let on_change = {
         let tag = tag.clone();
         Callback::from(move |event: ItemCheckEvent| match event {

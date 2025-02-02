@@ -1,6 +1,7 @@
+use shared::SearchResultItem;
 use yew::prelude::*;
 
-use crate::{api::search_api::SearchResultItem, components::atoms::safe_html::BlockquoteHtml};
+use crate::components::atoms::safe_html::BlockquoteHtml;
 
 #[derive(Debug, Clone, PartialEq, Properties)]
 pub struct Props {
@@ -11,6 +12,7 @@ pub struct Props {
 fn article(callback: Callback<SearchResultItem>, item: SearchResultItem) -> Html {
     let item_for_event = item.clone();
     let tags = item
+        .bookmark
         .tags
         .unwrap_or_default()
         .into_iter()
@@ -27,10 +29,10 @@ fn article(callback: Callback<SearchResultItem>, item: SearchResultItem) -> Html
     html! {
         <div class="card mb-3">
             <div class="card-body">
-                <h5 class="card-title">{item.title.clone()}</h5>
+                <h5 class="card-title">{item.bookmark.title.clone()}</h5>
                 <p class="card-text">{search_match}</p>
                 <div>{tags}</div>
-                <small class="text-muted">{"Created at:"} {item.created_at}</small>
+                <small class="text-muted">{"Created at:"} {item.bookmark.created_at}</small>
                 <a onclick={on_click} class="btn btn-link mt-2 d-block">{"Read more..."}</a>
             </div>
         </div>

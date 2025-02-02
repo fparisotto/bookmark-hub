@@ -3087,6 +3087,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "shared",
  "strum",
  "strum_macros",
  "thiserror 1.0.69",
@@ -3146,7 +3147,14 @@ dependencies = [
 name = "shared"
 version = "0.1.0"
 dependencies = [
+ "chrono",
+ "secrecy",
  "serde",
+ "serde_json",
+ "strum",
+ "strum_macros",
+ "url",
+ "uuid",
 ]
 
 [[package]]
@@ -3235,8 +3243,11 @@ dependencies = [
  "log",
  "serde",
  "serde_json",
+ "sha2",
+ "shared",
  "strum",
  "strum_macros",
+ "thiserror 1.0.69",
  "url",
  "uuid",
  "wasm-bindgen",

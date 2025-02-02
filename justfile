@@ -27,7 +27,7 @@ clippy *ARGS="--locked":
   just clippy_package server {{ARGS}}
   just clippy_package spa --target wasm32-unknown-unknown {{ARGS}}
 
-run-spa:
+run_spa:
   #!/usr/bin/env bash
   set -euo pipefail
   pushd spa

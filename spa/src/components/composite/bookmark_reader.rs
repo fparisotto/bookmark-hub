@@ -1,11 +1,12 @@
 use crate::{
-    api::{self, bookmarks_api::Bookmark},
+    api::bookmarks_api,
     components::atoms::{
         input_text::{InputText, InputType},
         safe_html::ArticleHtml,
     },
     user_session::UserSession,
 };
+use shared::Bookmark;
 use yew::platform::spawn_local;
 use yew::prelude::*;
 
@@ -30,7 +31,7 @@ pub fn bookmark_page(props: &Props) -> Html {
         use_effect_with_deps(
             move |_| {
                 spawn_local(async move {
-                    match api::bookmarks_api::get_content(&token, &bookmark_id).await {
+                    match bookmarks_api::get_content(&token, &bookmark_id).await {
                         Ok(Some(data)) => html_contentt.set(Some(data)),
                         Ok(None) => todo!(),
                         Err(_) => todo!(),

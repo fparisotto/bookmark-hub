@@ -3,21 +3,29 @@ use axum::{Extension, Router};
 use axum_otel_metrics::HttpMetricsLayerBuilder;
 use clap::Parser;
 use server::db::PgPool;
-use server::{daemon, db, endpoints, AppContext, Config, Env};
-use std::collections::HashMap;
+use server::{daemon, db, endpoints, AppContext, Config};
 use std::io;
 use std::sync::Arc;
 use tokio::signal::unix::SignalKind;
 use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
+use tracing::level_filters::LevelFilter;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let config = Config::parse();
-    setup_tracing(&config)?;
+
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer())
+        .with(
+            EnvFilter::builder()
+                .with_default_directive(LevelFilter::INFO.into())
+                .from_env_lossy(),
+        )
+        .init();
 
     let pool = db::get_pool(config.pg.clone()).await?;
     db::run_migrations(&pool).await?;
@@ -114,29 +122,4 @@ async fn setup_daemon(
         tracing::info!("Data dir is valid");
     }
     daemon::run(&pool, &config, rx).await
-}
-
-fn setup_tracing(config: &Config) -> anyhow::Result<()> {
-    let tracing_setup = tracing_subscriber::registry().with(EnvFilter::from_default_env());
-    match config.app_env {
-        Env::DEV => {
-            tracing_setup.with(tracing_subscriber::fmt::layer()).init();
-        }
-        Env::PROD => {
-            let loki_url = config
-                .loki_url
-                .clone()
-                .expect("'LOKI_URL' env var need to be set in APP_ENV=PROD");
-            // Prefix with 'LOKI_LABEL_' to expose desired information in k8s deployment
-            // https://kubernetes.io/docs/tasks/inject-data-application/environment-variable-expose-pod-information/
-            let labels: HashMap<String, String> = std::env::vars()
-                .filter(|(key, _)| key.starts_with("LOKI_LABEL_"))
-                .map(|(key, value)| (key.replace("LOKI_LABEL_", "").to_lowercase(), value))
-                .collect();
-            let (layer, task) = tracing_loki::layer(loki_url, labels, HashMap::new())?;
-            tracing_setup.with(layer).init();
-            tokio::spawn(task);
-        }
-    }
-    Ok(())
 }

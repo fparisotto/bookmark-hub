@@ -1,9 +1,8 @@
 use axum::{routing::get, routing::post, Extension, Json, Router};
 use axum_macros::debug_handler;
-use chrono::{DateTime, Duration, Utc};
-use secrecy::{ExposeSecret, SecretString};
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
+use chrono::{Duration, Utc};
+use secrecy::ExposeSecret;
+use shared::{SignInRequest, SignInResponse, SignUpRequest, SignUpResponse, UserProfile};
 
 use crate::db::user;
 use crate::error::{Error, Result};
@@ -11,90 +10,41 @@ use crate::AppContext;
 
 use super::Claim;
 
-#[derive(Debug, Deserialize)]
-struct SignUpPayload {
-    email: String,
-    password: SecretString,
-    password_confirmation: SecretString,
-}
-
-impl SignUpPayload {
-    fn validate(&self) -> Result<()> {
-        let mut errors: Vec<(&'static str, &'static str)> = Vec::new();
-        if self.email.trim().is_empty() {
-            errors.push(("email", "email must not be empty"));
-        }
-        if self.password.expose_secret().trim().is_empty() {
-            errors.push(("password", "password must not be empty"));
-        }
-        if self
-            .password
-            .expose_secret()
-            .ne(self.password_confirmation.expose_secret())
-        {
-            errors.push(("password", "password confirmation should match"));
-        }
-        if errors.is_empty() {
-            Ok(())
-        } else {
-            Err(Error::unprocessable_entity(errors))
-        }
+fn validate_signup(payload: &SignUpRequest) -> Result<()> {
+    let mut errors: Vec<(&'static str, &'static str)> = Vec::new();
+    if payload.email.trim().is_empty() {
+        errors.push(("email", "email must not be empty"));
+    }
+    if payload.password.expose_secret().trim().is_empty() {
+        errors.push(("password", "password must not be empty"));
+    }
+    if payload
+        .password
+        .expose_secret()
+        .ne(payload.password_confirmation.expose_secret())
+    {
+        errors.push(("password", "password confirmation should match"));
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(Error::unprocessable_entity(errors))
     }
 }
 
-#[derive(Debug, Serialize)]
-struct SignUpResponse {
-    id: Uuid,
-    email: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct SignInPayload {
-    email: String,
-    password: SecretString,
-}
-
-impl SignInPayload {
-    fn validate(&self) -> Result<()> {
-        let mut errors: Vec<(&'static str, &'static str)> = Vec::new();
-        if self.email.trim().is_empty() {
-            errors.push(("email", "email must not be empty"));
-        }
-        if self.password.expose_secret().trim().is_empty() {
-            errors.push(("password", "password must not be empty"));
-        }
-        if errors.is_empty() {
-            Ok(())
-        } else {
-            Err(Error::unprocessable_entity(errors))
-        }
+fn validate_signin(payload: &SignInRequest) -> Result<()> {
+    let mut errors: Vec<(&'static str, &'static str)> = Vec::new();
+    if payload.email.trim().is_empty() {
+        errors.push(("email", "email must not be empty"));
     }
-}
-
-#[derive(Debug, Serialize)]
-struct AuthBody {
-    user_id: Uuid,
-    email: String,
-    access_token: String,
-    token_type: String,
-}
-
-impl AuthBody {
-    fn new(user: &user::User, access_token: String) -> Self {
-        Self {
-            user_id: user.user_id,
-            email: user.email.clone(),
-            access_token,
-            token_type: "Bearer".to_owned(),
-        }
+    if payload.password.expose_secret().trim().is_empty() {
+        errors.push(("password", "password must not be empty"));
     }
-}
-
-#[derive(Debug, Serialize)]
-struct UserProfile {
-    user_id: Uuid,
-    email: String,
-    created_at: DateTime<Utc>,
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(Error::unprocessable_entity(errors))
+    }
 }
 
 pub fn router() -> Router {
@@ -132,9 +82,9 @@ async fn get_user_profile(
 #[debug_handler]
 async fn sign_up(
     Extension(app_context): Extension<AppContext>,
-    Json(payload): Json<SignUpPayload>,
+    Json(payload): Json<SignUpRequest>,
 ) -> Result<Json<SignUpResponse>> {
-    payload.validate()?;
+    validate_signup(&payload)?;
     let hashed_password = super::hash_password(payload.password).await?;
     let try_user = user::create(&app_context.pool, payload.email, hashed_password).await;
     match try_user {
@@ -155,9 +105,9 @@ async fn sign_up(
 #[debug_handler()]
 async fn sign_in(
     Extension(app_context): Extension<AppContext>,
-    Json(payload): Json<SignInPayload>,
-) -> Result<Json<AuthBody>> {
-    payload.validate()?;
+    Json(payload): Json<SignInRequest>,
+) -> Result<Json<SignInResponse>> {
+    validate_signin(&payload)?;
     let maybe_user = user::get_by_email(&app_context.pool, payload.email).await?;
     if let Some(user) = maybe_user {
         super::verify_password(payload.password, user.password_hash.clone()).await?;
@@ -172,7 +122,13 @@ async fn sign_in(
         };
         let token = super::encode_token(&app_context.config, &claims)?;
         tracing::info!("User authenticated, email={}", &claims.sub);
-        return Ok(Json(AuthBody::new(&user, token)));
+        let login_response = SignInResponse {
+            user_id: user.user_id,
+            email: user.email,
+            access_token: token,
+            token_type: "Bearer".to_owned(),
+        };
+        return Ok(Json(login_response));
     }
     Err(Error::WrongCredentials)
 }

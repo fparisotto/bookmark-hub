@@ -1,67 +1,6 @@
-use chrono::{DateTime, Utc};
 use gloo_net::http::Request;
 use gloo_net::Error;
-use serde::{Deserialize, Serialize};
-use strum_macros::EnumString;
-use uuid::Uuid;
-
-use super::tags_api::Tag;
-
-#[derive(Debug, PartialEq, Default, Clone, EnumString, Serialize, Deserialize)]
-pub enum SearchType {
-    #[default]
-    #[strum(ascii_case_insensitive)]
-    Query,
-
-    #[strum(ascii_case_insensitive)]
-    Phrase,
-}
-
-#[derive(Debug, PartialEq, Default, Clone, EnumString, Serialize, Deserialize)]
-pub enum TagFilterType {
-    #[default]
-    #[strum(ascii_case_insensitive)]
-    Or,
-
-    #[strum(ascii_case_insensitive)]
-    And,
-}
-
-#[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub struct SearchResultItem {
-    pub bookmark_id: String,
-    pub url: String,
-    pub domain: String,
-    pub title: String,
-    pub search_match: Option<String>,
-    pub links: Option<Vec<String>>,
-    pub created_at: DateTime<Utc>,
-    pub user_id: Option<Uuid>,
-    pub tags: Option<Vec<String>>,
-    pub user_created_at: Option<DateTime<Utc>>,
-    pub user_updated_at: Option<DateTime<Utc>>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub enum TagFilter {
-    And(Vec<String>),
-    Or(Vec<String>),
-    Any,
-    Untagged,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SearchRequest {
-    pub query: Option<String>,
-    pub tags_filter: Option<TagFilter>,
-    pub limit: Option<i32>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SearchResponse {
-    pub bookmarks: Vec<SearchResultItem>,
-    pub tags: Vec<Tag>,
-}
+use shared::{SearchRequest, SearchResponse};
 
 pub async fn search(token: &String, request: SearchRequest) -> Result<SearchResponse, Error> {
     const ENDPOINT: &str = "/api/v1/search";

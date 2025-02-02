@@ -12,7 +12,7 @@ pub struct ReadabilityResponse {
     pub text_content: String,
 }
 
-#[instrument(skip_all)]
+#[instrument(skip(client))]
 pub async fn process(
     client: &Client,
     readability_url: Url,

@@ -1,7 +1,6 @@
 use clap::{Args, Parser};
 use secrecy::SecretString;
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
-use strum_macros::EnumString;
 use url::Url;
 
 use self::db::PgPool;
@@ -19,18 +18,9 @@ pub struct AppContext {
     pub tx_new_task: tokio::sync::watch::Sender<()>,
 }
 
-#[derive(Debug, Clone, EnumString)]
-pub enum Env {
-    PROD,
-    DEV,
-}
-
 #[derive(Parser, Clone, Debug)]
 #[command(version)]
 pub struct Config {
-    #[arg(long, env = "APP_ENV")]
-    pub app_env: Env,
-
     #[arg(long, env = "HMAC_KEY")]
     pub hmac_key: SecretString,
 

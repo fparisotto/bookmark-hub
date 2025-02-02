@@ -1,8 +1,9 @@
 use axum::Json;
 use axum::{routing::post, Extension, Router};
 use axum_macros::debug_handler;
+use shared::{SearchRequest, SearchResponse};
 
-use crate::db::search::{search, SearchRequest, SearchResponse};
+use crate::db::search::search;
 use crate::error::Result;
 use crate::AppContext;
 

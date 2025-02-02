@@ -1,24 +1,9 @@
 use gloo_net::http::Request;
 use gloo_net::Error;
-use serde::{Deserialize, Serialize};
 use serde_json::json;
-use uuid::Uuid;
+use shared::{SignInResponse, UserProfileResponse};
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct LoginResponse {
-    pub user_id: Uuid,
-    pub email: String,
-    pub access_token: String,
-    pub token_type: String,
-}
-
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
-pub struct UserProfileResponse {
-    pub user_id: Uuid,
-    pub email: String,
-}
-
-pub async fn login(email: String, password: String) -> Result<LoginResponse, Error> {
+pub async fn login(email: String, password: String) -> Result<SignInResponse, Error> {
     const ENDPOINT: &str = "/api/v1/auth/sign-in";
     let json_value = json!({"email": email, "password": password});
     log::info!("Doing login, endpoint={ENDPOINT}");
@@ -28,7 +13,7 @@ pub async fn login(email: String, password: String) -> Result<LoginResponse, Err
         .body(request_body)?
         .send()
         .await?
-        .json::<LoginResponse>()
+        .json::<SignInResponse>()
         .await?;
     log::info!("Api auth login, email={email}");
     Ok(response)

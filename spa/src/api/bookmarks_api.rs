@@ -1,41 +1,6 @@
-use chrono::{DateTime, Utc};
 use gloo_net::http::Request;
 use gloo_net::Error;
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-
-#[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub struct Bookmark {
-    pub bookmark_id: String,
-    pub url: String,
-    pub domain: String,
-    pub title: String,
-    pub links: Option<Vec<String>>,
-    pub created_at: DateTime<Utc>,
-    pub user_id: Option<Uuid>,
-    pub tags: Option<Vec<String>>,
-    pub user_created_at: DateTime<Utc>,
-    pub user_updated_at: Option<DateTime<Utc>>,
-}
-
-#[derive(PartialEq, Clone, Serialize, Deserialize)]
-pub struct NewBookmarkRequest {
-    pub url: String,
-    pub tags: Vec<String>,
-}
-
-#[derive(PartialEq, Clone, Serialize, Deserialize)]
-pub struct NewBookmarkResponse {
-    pub task_id: Uuid,
-    pub url: String,
-    pub tags: Vec<String>,
-    pub created_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct Tags {
-    tags: Vec<String>,
-}
+use shared::{Bookmark, NewBookmarkRequest, NewBookmarkResponse, Tags};
 
 pub async fn add_bookmark(
     token: &String,

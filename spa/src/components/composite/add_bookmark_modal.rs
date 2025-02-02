@@ -1,7 +1,5 @@
-use crate::{
-    api::bookmarks_api::NewBookmarkRequest,
-    components::atoms::input_text::{InputText, InputType},
-};
+use crate::components::atoms::input_text::{InputText, InputType};
+use shared::NewBookmarkRequest;
 use yew::prelude::*;
 
 #[derive(Debug, PartialEq, Default, Clone)]
