@@ -1,14 +1,15 @@
 use anyhow::bail;
 use axum::{Extension, Router};
 use axum_otel_metrics::HttpMetricsLayerBuilder;
-use backend::db::PgPool;
-use backend::{daemon, db, endpoints, AppContext, Config, Env};
 use clap::Parser;
+use server::db::PgPool;
+use server::{daemon, db, endpoints, AppContext, Config, Env};
 use std::collections::HashMap;
 use std::io;
 use std::sync::Arc;
 use tokio::signal::unix::SignalKind;
 use tower_http::cors::CorsLayer;
+use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -73,6 +74,7 @@ async fn setup_app(
         .with_service_name("bookmark-rs".to_string())
         .build();
     let app = Router::new()
+        .nest_service("/", ServeDir::new(env!("SPA_DIST")))
         .nest("/api/v1", endpoints::routers_v1())
         .merge(endpoints::health_check())
         .merge(endpoints::static_content(config))
