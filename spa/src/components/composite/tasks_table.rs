@@ -1,3 +1,4 @@
+use chrono::SecondsFormat;
 use shared::{BookmarkTask, BookmarkTaskSearchResponse};
 use yew::prelude::*;
 
@@ -6,18 +7,53 @@ pub struct Props {
     pub response: Option<BookmarkTaskSearchResponse>,
 }
 
+fn render_fail_reason_modal(task_id: &str, fail_reason: &str) -> Html {
+    let mini_text = format!("{}...", &fail_reason[0..12]);
+    let modal_id = format!("modal-id-{}", task_id);
+    let modal_id_ref = format!("#{}", modal_id);
+    html! {
+        <>
+            <a href=""  data-bs-toggle="modal" data-bs-target={modal_id_ref}>{mini_text}</a>
+            <div class="modal fade" id={modal_id} tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+              <div class="odal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h1 class="modal-title fs-5" id="exampleModalLabel">{"Fail reason"}</h1>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                  </div>
+                  <div class="modal-body">
+                    <pre>{fail_reason}</pre>
+                  </div>
+                  <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{"Close"}</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+        </>
+    }
+}
+
 fn render_bookmark_task(task: &BookmarkTask) -> Html {
+    let task_id_strip = format!("{}...", &task.task_id.to_string()[0..6]);
+
+    let fail_content = if let Some(fail_reason) = &task.fail_reason {
+        render_fail_reason_modal(&task_id_strip, fail_reason)
+    } else {
+        html! {}
+    };
+
     html! {
         <tr>
-            <td>{task.task_id}</td>
-            <td>{&task.url}</td>
+            <td>{task_id_strip}</td>
+            <td><a href={task.url.to_owned()} target="_blank">{&task.url}</a></td>
             <td>{task.status.as_ref()}</td>
             <td>{&task.tags.join(", ")}</td>
-            <td>{&task.created_at.to_rfc3339()}</td>
-            <td>{&task.updated_at.to_rfc3339()}</td>
-            <td>{&task.next_delivery.to_rfc3339()}</td>
+            <td>{&task.created_at.to_rfc3339_opts(SecondsFormat::Secs, true)}</td>
+            <td>{&task.updated_at.to_rfc3339_opts(SecondsFormat::Secs, true)}</td>
+            <td>{&task.next_delivery.to_rfc3339_opts(SecondsFormat::Secs, true)}</td>
             <td>{&task.retries.map(|e| e.to_string()).unwrap_or_default()}</td>
-            <td>{&task.fail_reason.to_owned().unwrap_or_default()}</td>
+            <td>{fail_content}</td>
         </tr>
     }
 }
