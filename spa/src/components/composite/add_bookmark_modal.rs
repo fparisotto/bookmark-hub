@@ -64,7 +64,7 @@ pub fn add_bookmark_modal(props: &Props) -> Html {
             <div class="modal-dialog">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title" id="bookmarkModalLabel">{"Add a New Bookmark"}</h5>
+                        <h5 class="modal-title" id="bookmarkModalLabel">{"New Bookmark"}</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
@@ -89,7 +89,7 @@ pub fn add_bookmark_modal(props: &Props) -> Html {
                                     class={classes!("form-control")}
                                     on_change={on_change_tags} />
                             </div>
-                            <input type="submit" class="btn btn-primary" value="Save Bookmark" data-bs-dismiss="modal" data-bs-target="#add-bookmark-modal" />
+                            <input type="submit" class="btn btn-primary" value="Save" data-bs-dismiss="modal" data-bs-target="#add-bookmark-modal" />
                         </form>
                     </div>
                 </div>

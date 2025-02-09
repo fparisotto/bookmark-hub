@@ -3237,6 +3237,7 @@ dependencies = [
 name = "spa"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "chrono",
  "getrandom 0.2.15",
  "gloo-net 0.5.0",

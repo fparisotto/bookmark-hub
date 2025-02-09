@@ -1,27 +1,58 @@
 use yew::prelude::*;
 
+use crate::pages::home::Page;
+
 #[derive(PartialEq, Properties)]
 pub struct Props {
     pub email: String,
+    pub active_page: Page,
+    pub on_page_change: Callback<Page>,
 }
 
 #[function_component(NavigationBar)]
 pub fn navigation_bar(props: &Props) -> Html {
+    let on_search_click = {
+        let on_page_change = props.on_page_change.clone();
+        Callback::from(move |_| {
+            on_page_change.emit(Page::Search);
+        })
+    };
+
+    let on_tasks_click = {
+        let on_page_change = props.on_page_change.clone();
+        Callback::from(move |_| {
+            on_page_change.emit(Page::Tasks);
+        })
+    };
+
+    let search_classes = if props.active_page == Page::Search {
+        classes!("nav-link", "active")
+    } else {
+        classes!("nav-link")
+    };
+    let task_classes = if props.active_page == Page::Tasks {
+        classes!("nav-link", "active")
+    } else {
+        classes!("nav-link")
+    };
+
     html! {
         <nav class="navbar navbar-expand-lg bg-body-tertiary">
             <div class="container-fluid">
                 <a class="navbar-brand" href="#">{"BookMark Hub"}</a>
-                <div class="collapse navbar-collapse" id="navbarNav">
-                    <ul class="navbar-nav ms-auto">
+                <div class="collapse navbar-collapse">
+                    <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                         <li class="nav-item">
-                            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#add-bookmark-modal">
-                                {"Add Bookmark"}
-                            </button>
+                            <a onclick={on_search_click} class={search_classes}>{"Search"}</a>
                         </li>
                         <li class="nav-item">
-                            <span class="nav-link">{&props.email}</span>
+                            <a onclick={on_tasks_click} class={task_classes}>{"Tasks"}</a>
                         </li>
                     </ul>
+                    <button class="btn btn-sm me-2 btn-outline-primary" data-bs-toggle="modal" data-bs-target="#add-bookmark-modal">
+                        {"+ Bookmark"}
+                    </button>
+                    <span class="navbar-text">{&props.email}</span>
                 </div>
             </div>
         </nav>

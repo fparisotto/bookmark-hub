@@ -5,3 +5,5 @@ pub mod main_search_result;
 pub mod navigation_bar;
 pub mod search_bar;
 pub mod tags_filter;
+pub mod tasks_filter;
+pub mod tasks_table;

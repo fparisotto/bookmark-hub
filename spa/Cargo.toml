@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+anyhow = { workspace = true }
 chrono = { workspace = true }
 getrandom = { version = "0.2", features = ["js"] }
 gloo-net = "0.5"

@@ -14,7 +14,6 @@ fn article(callback: Callback<SearchResultItem>, item: SearchResultItem) -> Html
     let tags = item
         .bookmark
         .tags
-        .unwrap_or_default()
         .into_iter()
         .map(|tag| html! { <span class="badge bg-primary me-1">{tag}</span> })
         .collect::<Html>();
@@ -39,8 +38,8 @@ fn article(callback: Callback<SearchResultItem>, item: SearchResultItem) -> Html
     }
 }
 
-#[function_component(MainSearchResult)]
-pub fn main_search_result(props: &Props) -> Html {
+#[function_component(SearchResult)]
+pub fn search_result(props: &Props) -> Html {
     let results = props.results.clone();
     html! {
         <main>

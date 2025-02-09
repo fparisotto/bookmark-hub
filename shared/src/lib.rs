@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
-use strum_macros::EnumString;
+use strum_macros::{AsRefStr, EnumString};
 use url::Url;
 use uuid::Uuid;
 
@@ -48,15 +48,13 @@ pub struct UserProfileResponse {
 #[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct Bookmark {
     pub bookmark_id: String,
+    pub user_id: Uuid,
     pub url: String,
     pub domain: String,
     pub title: String,
-    pub links: Option<Vec<String>>,
+    pub tags: Vec<String>,
     pub created_at: DateTime<Utc>,
-    pub user_id: Option<Uuid>,
-    pub tags: Option<Vec<String>>,
-    pub user_created_at: DateTime<Utc>,
-    pub user_updated_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
 }
 
 #[derive(PartialEq, Clone, Serialize, Deserialize)]
@@ -157,4 +155,42 @@ pub struct NewBookmark {
 pub enum TagOperation {
     Set(Vec<String>),
     Append(Vec<String>),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, EnumString, AsRefStr, Default)]
+pub enum BookmarkTaskStatus {
+    #[default]
+    Done,
+    Pending,
+    Fail,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BookmarkTask {
+    pub task_id: Uuid,
+    pub user_id: Uuid,
+    pub url: String,
+    pub status: BookmarkTaskStatus,
+    pub tags: Vec<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub next_delivery: DateTime<Utc>,
+    pub retries: Option<i16>,
+    pub fail_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct BookmarkTaskSearchRequest {
+    pub url: Option<String>,
+    pub status: Option<BookmarkTaskStatus>,
+    pub tags: Option<Vec<String>>,
+    pub from_created_at: Option<DateTime<Utc>>,
+    pub to_created_at: Option<DateTime<Utc>>,
+    pub page_size: Option<u8>,
+    pub last_task_id: Option<Uuid>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BookmarkTaskSearchResponse {
+    pub tasks: Vec<BookmarkTask>,
 }

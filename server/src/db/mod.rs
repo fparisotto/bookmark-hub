@@ -9,8 +9,8 @@ use crate::error::{Error, Result};
 use crate::PgParams;
 
 pub mod bookmark;
+pub mod bookmark_task;
 pub mod search;
-pub mod task;
 pub mod user;
 
 pub type PgPool = deadpool_postgres::Pool;

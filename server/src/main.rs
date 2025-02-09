@@ -37,17 +37,20 @@ async fn main() -> anyhow::Result<()> {
         result = app_server => {
             if let Err(error) = result {
                 tracing::error!(?error, "App server error");
+                std::process::exit(1);
             }
         },
         result = daemon => {
             match result {
                 Ok(Err(error)) => {
                     tracing::error!(?error, "Daemon task error");
+                    std::process::exit(1);
                 },
                 Err(error) => {
                     tracing::error!(?error, "Join error in daemon task");
+                    std::process::exit(1);
                 },
-                _ => {}
+                Ok(Ok(_)) => {}
             }
         },
     }
@@ -121,5 +124,5 @@ async fn setup_daemon(
         std::fs::remove_file(&test_file)?;
         tracing::info!("Data dir is valid");
     }
-    daemon::run(&pool, &config, rx).await
+    daemon::add_bookmark::run(&pool, &config, rx).await
 }

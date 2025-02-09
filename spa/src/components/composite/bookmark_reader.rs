@@ -21,7 +21,7 @@ pub struct Props {
 #[function_component(BookmarkReader)]
 pub fn bookmark_page(props: &Props) -> Html {
     let token = props.user_session.token.clone();
-    let state = use_state_eq(|| props.bookmark.tags.clone().unwrap_or_default());
+    let state = use_state_eq(|| props.bookmark.tags.clone());
     let tags_as_string = state.clone().join(", ");
     let html_content = use_state(|| None);
     {
@@ -84,7 +84,7 @@ pub fn bookmark_page(props: &Props) -> Html {
                   <div class="mb-4">
                       <div class="d-flex justify-content-between align-items-center">
                           <p class="mb-0"><strong>{"ID:"}</strong> {props.bookmark.bookmark_id.clone()}</p>
-                          <p class="mb-0"><strong>{"Created at:"}</strong> {props.bookmark.user_created_at}</p>
+                          <p class="mb-0"><strong>{"Created at:"}</strong> {props.bookmark.created_at}</p>
                       </div>
                       <p class="mb-2">
                           <strong>{"Original URL:"}</strong>

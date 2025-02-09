@@ -3,11 +3,13 @@ use axum::http::StatusCode;
 use axum::Json;
 use axum::{routing::get, routing::post, Extension, Router};
 use axum_macros::debug_handler;
-use shared::{Bookmark, Bookmarks, NewBookmark, TagCount, TagOperation, Tags, TagsWithCounters};
+use shared::{
+    Bookmark, BookmarkTask, Bookmarks, NewBookmark, TagCount, TagOperation, Tags, TagsWithCounters,
+};
 use tracing::error;
 
 use crate::db::bookmark;
-use crate::db::task::{self, Task};
+use crate::db::bookmark_task;
 use crate::endpoints::Error;
 use crate::error::Result;
 use crate::AppContext;
@@ -74,11 +76,12 @@ async fn new_bookmark(
     claims: Claim,
     Extension(app_context): Extension<AppContext>,
     Json(input): Json<NewBookmark>,
-) -> Result<(StatusCode, Json<Task>)> {
-    // FIXME put this validation in a better place
+) -> Result<(StatusCode, Json<BookmarkTask>)> {
+    // FIXME: move validation logic to a better place?
     let mut tags = input.tags.clone().unwrap_or_default();
     tags.retain(|t| !t.trim().is_empty());
-    let response = task::create(&app_context.pool, claims.user_id, input.url, tags).await?;
+    let response =
+        bookmark_task::create(&app_context.pool, claims.user_id, input.url, tags).await?;
     if let Err(error) = app_context.tx_new_task.send(()) {
         error!(?error, "Fail on notify new task");
     }

@@ -19,6 +19,7 @@ use uuid::Uuid;
 
 mod auth;
 mod bookmark;
+mod bookmark_task;
 mod search;
 mod static_content;
 
@@ -46,6 +47,7 @@ pub fn routers_v1() -> Router {
     auth::router()
         .merge(bookmark::routes())
         .merge(search::routes())
+        .merge(bookmark_task::routes())
 }
 
 #[async_trait]
