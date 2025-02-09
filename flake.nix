@@ -141,10 +141,6 @@
         devShells.default = craneLib.devShell {
           checks = self.checks.${system};
 
-          shellHook = ''
-            export CLIENT_DIST=$PWD/client/dist;
-          '';
-
           SPA_DIST = "spa/dist";
 
           packages = [
