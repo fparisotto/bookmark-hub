@@ -3,7 +3,7 @@ use deadpool_postgres::GenericClient;
 use postgres_from_row::FromRow;
 use serde::{Deserialize, Serialize};
 use shared::{Bookmark, TagOperation};
-use tracing::{debug, instrument};
+use tracing::debug;
 use uuid::Uuid;
 
 use crate::error::{Error, Result};
@@ -17,7 +17,8 @@ struct RowBookmark {
     url: String,
     domain: String,
     title: String,
-    tags: Vec<String>,
+    tags: Option<Vec<String>>,
+    summary: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: Option<DateTime<Utc>>,
 }
@@ -31,6 +32,7 @@ impl From<RowBookmark> for Bookmark {
             title: value.title,
             user_id: value.user_id,
             tags: value.tags,
+            summary: value.summary,
             created_at: value.created_at,
             updated_at: value.updated_at,
         }
@@ -131,7 +133,6 @@ pub async fn get_with_user_data(
     Ok(result)
 }
 
-#[instrument(skip(pool))]
 pub async fn update_tags(
     pool: &PgPool,
     user_id: Uuid,
@@ -181,4 +182,74 @@ pub async fn save(pool: &PgPool, bookmark: &Bookmark, text_content: &str) -> Res
         .map_err(Error::from)?;
     debug!(id = bookmark.bookmark_id, "Bookmark safe");
     Ok(result)
+}
+
+pub async fn update_summary(
+    pool: &PgPool,
+    user_id: Uuid,
+    bookmark_id: &str,
+    summary: &str,
+) -> Result<Bookmark> {
+    const SQL: &str = "UPDATE bookmark SET summary = $1, updated_at=now() WHERE bookmark_id=$2 AND user_id=$3 RETURNING *;";
+    let client = pool.get().await?;
+    let row = client
+        .query_one(SQL, &[&summary, &bookmark_id, &user_id])
+        .await?;
+    let result = RowBookmark::try_from_row(&row)
+        .map(Bookmark::from)
+        .map_err(Error::from)?;
+    debug!(%bookmark_id, "Updated summary for bookmark");
+    Ok(result)
+}
+
+pub async fn get_text_content(
+    pool: &PgPool,
+    user_id: Uuid,
+    bookmark_id: &str,
+) -> Result<Option<String>> {
+    const SQL: &str = "SELECT text_content FROM bookmark WHERE bookmark_id = $1 AND user_id = $2";
+    let client = pool.get().await?;
+    let result: Option<String> = client
+        .query_opt(SQL, &[&bookmark_id, &user_id])
+        .await?
+        .map(|row| row.try_get(0))
+        .transpose()?;
+    Ok(result)
+}
+
+pub async fn get_untagged_bookmarks(pool: &PgPool, limit: usize) -> Result<Vec<Bookmark>> {
+    let sql  =
+        format!("SELECT * FROM bookmark WHERE tags IS NULL OR array_length(tags, 1) = 0 ORDER BY random() LIMIT {limit};");
+    let client = pool.get().await?;
+    let results = client
+        .query(&sql, &[])
+        .await?
+        .iter()
+        .map(|row| {
+            RowBookmark::try_from_row(row)
+                .map(Bookmark::from)
+                .map_err(Error::from)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(results)
+}
+
+pub async fn get_bookmarks_without_summary(
+    pool: &PgPool,
+    limit: usize,
+) -> anyhow::Result<Vec<Bookmark>> {
+    let sql =
+        format!("SELECT * FROM bookmark WHERE summary IS NULL ORDER BY random() LIMIT {limit};");
+    let client = pool.get().await?;
+    let results = client
+        .query(&sql, &[])
+        .await?
+        .iter()
+        .map(|row| {
+            RowBookmark::try_from_row(row)
+                .map(Bookmark::from)
+                .map_err(Error::from)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(results)
 }

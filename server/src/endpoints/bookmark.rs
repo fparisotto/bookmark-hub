@@ -19,10 +19,10 @@ use super::Claim;
 pub fn routes() -> Router {
     Router::new()
         .route("/tags", get(get_all_tags))
-        .route("/tags/:tag", get(get_bookmarks_by_tag))
+        .route("/tags/{tag}", get(get_bookmarks_by_tag))
         .route("/bookmarks", get(get_bookmarks).post(new_bookmark))
-        .route("/bookmarks/:id", get(get_bookmark))
-        .route("/bookmarks/:id/tags", post(set_tags).patch(append_tags))
+        .route("/bookmarks/{id}", get(get_bookmark))
+        .route("/bookmarks/{id}/tags", post(set_tags).patch(append_tags))
 }
 
 #[debug_handler]

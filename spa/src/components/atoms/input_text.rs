@@ -28,6 +28,7 @@ impl InputType {
 pub struct Props {
     pub id: String,
     pub name: String,
+    #[prop_or_default]
     pub value: Option<String>,
     #[prop_or_default]
     pub class: Classes,

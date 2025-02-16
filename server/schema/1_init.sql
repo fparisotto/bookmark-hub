@@ -18,6 +18,7 @@ CREATE TABLE bookmark (
     title TEXT NOT NULL,
     text_content TEXT NOT NULL,
     tags TEXT[],
+    summary TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (bookmark_id, user_id),
@@ -25,7 +26,8 @@ CREATE TABLE bookmark (
 );
 ALTER TABLE bookmark ADD COLUMN search_tokens TSVECTOR GENERATED ALWAYS AS (
     setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
-    setweight(to_tsvector('english', coalesce(text_content, '')), 'B')
+    setweight(to_tsvector('english', coalesce(text_content, '')), 'B') ||
+    setweight(to_tsvector('english', coalesce(summary, '')), 'C')
 ) STORED;
 CREATE INDEX bookmark_search_index ON bookmark USING GIN (search_tokens);
 
@@ -36,6 +38,7 @@ CREATE TABLE bookmark_task (
     url TEXT NOT NULL,
     status task_status NOT NULL DEFAULT 'pending',
     tags TEXT[],
+    summary TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     next_delivery TIMESTAMPTZ NOT NULL DEFAULT now(),

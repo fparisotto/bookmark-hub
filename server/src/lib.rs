@@ -9,7 +9,9 @@ pub mod daemon;
 pub mod db;
 pub mod endpoints;
 pub mod error;
+pub mod ollama;
 pub mod readability;
+pub mod tokenizer;
 
 #[derive(Clone)]
 pub struct AppContext {
@@ -27,8 +29,8 @@ pub struct Config {
     #[clap(flatten)]
     pub pg: PgParams,
 
-    #[arg(long, env = "LOKI_URL")]
-    pub loki_url: Option<Url>,
+    #[clap(flatten)]
+    pub ollama: OllamaParams,
 
     #[arg(long, env = "READABILITY_URL")]
     pub readability_url: Url,
@@ -41,6 +43,15 @@ pub struct Config {
 
     #[arg(long, env = "SPA_DIST")]
     pub spa_dir_dir: PathBuf,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct OllamaParams {
+    #[arg(long, env = "OLLAMA_URL")]
+    pub ollama_url: Option<Url>,
+
+    #[arg(long, env = "OLLAMA_TEXT_MODEL")]
+    pub ollama_text_model: Option<String>,
 }
 
 #[derive(Debug, Clone, Args)]

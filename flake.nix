@@ -122,7 +122,7 @@
           bookmark-hub-clippy = craneLib.cargoClippy (commonArgs // {
             inherit cargoArtifacts;
             cargoClippyExtraArgs = "--all-targets -- --deny warnings";
-            CLIENT_DIST = "";
+            SPA_DIST = "";
           });
 
           bookmark-hub-fmt = craneLib.cargoFmt commonArgs;

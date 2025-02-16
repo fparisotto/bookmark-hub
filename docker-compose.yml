@@ -19,6 +19,8 @@ services:
       PG_PASSWORD: main
       PG_DATABASE: main
       PG_MAX_CONNECTIONS: 5
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_TEXT_MODEL: llama3.2:latest
     volumes:
       - bookmark-hub-data:/data
     healthcheck:
@@ -27,7 +29,7 @@ services:
       interval: 10s
       start_period: 10s
       retries: 5
-    restart: on-failure
+    restart: on-failure # needed during startup, until pg is available
   readability-api:
     image: ghcr.io/fparisotto/readability-api:v0.0.1
     environment:
@@ -44,6 +46,14 @@ services:
       POSTGRES_DB: main
     volumes:
       - postgres-data:/data/postgres
+  ollama:
+    image: ollama/ollama:0.5.11
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
 volumes:
   postgres-data:
+  ollama-data:
   bookmark-hub-data:

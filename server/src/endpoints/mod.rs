@@ -5,7 +5,7 @@ use crate::{
 };
 use argon2::password_hash::SaltString;
 use argon2::{Argon2, PasswordHash};
-use axum::{async_trait, extract::FromRequestParts, http::request::Parts, RequestPartsExt};
+use axum::{extract::FromRequestParts, http::request::Parts, RequestPartsExt};
 use axum::{routing, Extension, Json, Router};
 use axum_extra::{
     headers::{authorization::Bearer, Authorization},
@@ -50,7 +50,6 @@ pub fn routers_v1() -> Router {
         .merge(bookmark_task::routes())
 }
 
-#[async_trait]
 impl<S> FromRequestParts<S> for Claim
 where
     S: Send + Sync,
@@ -88,7 +87,8 @@ fn encode_token(config: &Config, claims: &Claim) -> Result<String> {
 
 async fn hash_password(password: SecretString) -> Result<String> {
     tokio::task::spawn_blocking(move || {
-        let salt = SaltString::generate(rand::thread_rng());
+        let rng = rand::thread_rng();
+        let salt = SaltString::generate(rng);
         match PasswordHash::generate(Argon2::default(), password.expose_secret(), salt.as_salt()) {
             Ok(hash) => Ok(hash.to_string()),
             Err(error) => Err(Error::argon2(error.to_string())),

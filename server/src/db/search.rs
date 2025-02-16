@@ -35,7 +35,8 @@ struct RowSearchResultItem {
     domain: String,
     title: String,
     search_match: Option<String>,
-    tags: Vec<String>,
+    tags: Option<Vec<String>>,
+    summary: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: Option<DateTime<Utc>>,
 }
@@ -49,6 +50,7 @@ impl From<RowSearchResultItem> for Bookmark {
             title: value.title,
             user_id: value.user_id,
             tags: value.tags,
+            summary: value.summary,
             created_at: value.created_at,
             updated_at: value.updated_at,
         }

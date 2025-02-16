@@ -21,26 +21,23 @@ pub struct Props {
 #[function_component(BookmarkReader)]
 pub fn bookmark_page(props: &Props) -> Html {
     let token = props.user_session.token.clone();
-    let state = use_state_eq(|| props.bookmark.tags.clone());
+    let state = use_state_eq(|| props.bookmark.tags.clone().unwrap_or_default());
     let tags_as_string = state.clone().join(", ");
     let html_content = use_state(|| None);
     {
         let html_contentt = html_content.clone();
         let token = token.clone();
         let bookmark_id = props.bookmark.bookmark_id.clone();
-        use_effect_with_deps(
-            move |_| {
-                spawn_local(async move {
-                    match bookmarks_api::get_content(&token, &bookmark_id).await {
-                        Ok(Some(data)) => html_contentt.set(Some(data)),
-                        Ok(None) => todo!(),
-                        Err(_) => todo!(),
-                    }
-                });
-                || ()
-            },
-            (),
-        );
+        use_effect_with(bookmark_id.clone(), move |_| {
+            spawn_local(async move {
+                match bookmarks_api::get_content(&token, &bookmark_id).await {
+                    Ok(Some(data)) => html_contentt.set(Some(data)),
+                    Ok(None) => todo!(),
+                    Err(_) => todo!(),
+                }
+            });
+            || ()
+        });
     }
 
     let on_tag_change: Callback<String> = {
@@ -74,17 +71,28 @@ pub fn bookmark_page(props: &Props) -> Html {
         html! { "Loading..." }
     };
 
+    let summary = if let Some(summary) = &props.bookmark.summary {
+        html! {
+            <>
+                <h4>{"Summary"}</h4>
+                <p><em>{summary}</em></p>
+            </>
+        }
+    } else {
+        html! { <></> }
+    };
+
     html! {
       <div class="container mt-5">
           <div class="mb-3">
-              <a href="#" class="btn btn-secondary" onclick={on_goback}>{"< Back to Home"}</a>
+              <a href="#" class="btn btn-secondary" onclick={on_goback.clone()}>{"< Back to Home"}</a>
           </div>
           <div class="card">
               <div class="card-body">
-                  <div class="mb-4">
+                  <div>
                       <div class="d-flex justify-content-between align-items-center">
-                          <p class="mb-0"><strong>{"ID:"}</strong> {props.bookmark.bookmark_id.clone()}</p>
-                          <p class="mb-0"><strong>{"Created at:"}</strong> {props.bookmark.created_at}</p>
+                          <p class="mb-0"><strong>{"ID:"}</strong>{" "}{props.bookmark.bookmark_id.clone()}</p>
+                          <p class="mb-0"><strong>{"Created at:"}</strong>{" "}{props.bookmark.created_at}</p>
                       </div>
                       <p class="mb-2">
                           <strong>{"Original URL:"}</strong>
@@ -108,9 +116,21 @@ pub fn bookmark_page(props: &Props) -> Html {
               </div>
           </div>
           <br/>
-          <div class="article-content">
-              <h1 class="mb-4">{ props.bookmark.title.clone() }</h1>
-              {article}
+          <div>
+            <style>
+            {"
+                figure img {
+                  max-width: 100%;
+                  height: auto;
+                }
+            "}
+            </style>
+            {summary}
+            <h1 class="mb-4">{ props.bookmark.title.clone() }</h1>
+            {article}
+          </div>
+          <div class="mb-3">
+              <a href="#" class="btn btn-secondary" onclick={on_goback.clone()}>{"< Back to Home"}</a>
           </div>
       </div>
     }
