@@ -21,6 +21,7 @@ pub struct Props {
 #[function_component(BookmarkReader)]
 pub fn bookmark_page(props: &Props) -> Html {
     let token = props.user_session.token.clone();
+    let user_id = props.user_session.user_id;
     let state = use_state_eq(|| props.bookmark.tags.clone().unwrap_or_default());
     let tags_as_string = state.clone().join(", ");
     let html_content = use_state(|| None);
@@ -30,7 +31,7 @@ pub fn bookmark_page(props: &Props) -> Html {
         let bookmark_id = props.bookmark.bookmark_id.clone();
         use_effect_with(bookmark_id.clone(), move |_| {
             spawn_local(async move {
-                match bookmarks_api::get_content(&token, &bookmark_id).await {
+                match bookmarks_api::get_content(&token, &user_id, &bookmark_id).await {
                     Ok(Some(data)) => html_contentt.set(Some(data)),
                     Ok(None) => todo!(),
                     Err(_) => todo!(),

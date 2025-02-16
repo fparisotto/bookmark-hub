@@ -1,6 +1,7 @@
 use gloo_net::http::Request;
 use gloo_net::Error;
 use shared::{Bookmark, NewBookmarkRequest, NewBookmarkResponse, Tags};
+use uuid::Uuid;
 
 pub async fn add_bookmark(
     token: &String,
@@ -67,8 +68,8 @@ pub async fn set_tags(token: &str, id: &str, tags: Vec<String>) -> Result<Bookma
     Ok(response)
 }
 
-pub async fn get_content(token: &str, id: &str) -> Result<Option<String>, Error> {
-    let endpoint = format!("/static/{id}/index.html");
+pub async fn get_content(token: &str, user_id: &Uuid, id: &str) -> Result<Option<String>, Error> {
+    let endpoint = format!("/static/{user_id}/{id}/index.html");
     let response = Request::get(&endpoint)
         .header("Authorization", &format!("Bearer {token}"))
         .send()
