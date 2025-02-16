@@ -6,7 +6,6 @@ use reqwest::Client;
 use reqwest::Client as HttpClient;
 use shared::{Bookmark, BookmarkTask, BookmarkTaskStatus};
 use std::collections::HashMap;
-use std::time::Duration;
 use url::Url;
 use uuid::Uuid;
 
@@ -14,7 +13,8 @@ use crate::db::{self, PgPool};
 use crate::readability;
 use crate::Config;
 
-const DAEMON_IDLE_SLEEP: Duration = Duration::from_secs(300);
+use super::DAEMON_IDLE_SLEEP;
+
 const TASK_MAX_RETRIES: i16 = 5;
 
 #[derive(Debug, Clone)]
@@ -41,7 +41,6 @@ struct ProcessorOutput {
     domain: String,
     title: String,
     text_content: String,
-    tags: Vec<String>,
     images: Vec<Image>,
     html: String,
 }
@@ -53,22 +52,37 @@ pub fn should_retry(task: &BookmarkTask) -> bool {
 pub async fn run(
     pool: &PgPool,
     config: &Config,
-    mut rx: tokio::sync::watch::Receiver<()>,
+    mut new_task_rx: tokio::sync::watch::Receiver<()>,
+    new_bookmark_tx: tokio::sync::watch::Sender<()>,
 ) -> Result<()> {
     let http: HttpClient = HttpClient::new();
     let mut interval = tokio::time::interval(DAEMON_IDLE_SLEEP);
     loop {
         tokio::select! {
-            _ = rx.changed() => {
+            _ = new_task_rx.changed() => {
                 tracing::info!("Notification receive, executing...");
-                if let Err(error) = execute_step(pool, &http, config).await {
-                    tracing::error!(?error, "Fail to process tasks");
+                match execute_step(pool, &http, config).await {
+                    Ok(_) => {
+                        if let Err(error) = new_bookmark_tx.send(()) {
+                            tracing::error!(?error, "Fail to send signal on new bookmark");
+                        }
+                    },
+                    Err(error) => {
+                        tracing::error!(?error, "Fail to process tasks");
+                    },
                 }
             }
             _ = interval.tick() => {
                 tracing::info!("{DAEMON_IDLE_SLEEP:?} passed, executing...");
-                if let Err(error) = execute_step(pool, &http, config).await {
-                    tracing::error!(?error, "Fail to process tasks");
+                match execute_step(pool, &http, config).await {
+                    Ok(_) => {
+                        if let Err(error) = new_bookmark_tx.send(()) {
+                            tracing::error!(?error, "Fail to send signal on new bookmark");
+                        }
+                    },
+                    Err(error) => {
+                        tracing::error!(?error, "Fail to process tasks");
+                    },
                 }
             }
         }
@@ -139,7 +153,6 @@ async fn handle_task(
         config.readability_url.clone(),
         &task.user_id,
         &task.url,
-        &task.tags,
     )
     .await
     .with_context(|| format!("process_url: {}", &task.url))?;
@@ -150,7 +163,8 @@ async fn handle_task(
         url: output.url,
         domain: output.domain,
         title: output.title,
-        tags: output.tags,
+        tags: task.tags.to_owned(),
+        summary: task.summary.to_owned(),
         created_at: Utc::now(),
         updated_at: None,
     };
@@ -226,7 +240,6 @@ async fn process_url(
     readability_url: Url,
     user_id: &Uuid,
     original_url_str: &str,
-    tags: &Vec<String>,
 ) -> Result<ProcessorOutput> {
     let original_url = Url::parse(original_url_str)?;
     let original_url = super::clean_url(original_url)?;
@@ -278,7 +291,6 @@ async fn process_url(
         text_content: readability_response.text_content,
         images,
         html: rewrite_html,
-        tags: tags.to_owned(),
     })
 }
 

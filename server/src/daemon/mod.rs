@@ -1,9 +1,16 @@
 use anyhow::{anyhow, bail, Result};
 use murmur3::murmur3_x64_128;
 use std::io::Cursor;
+use std::time::Duration;
 use url::Url;
 
 pub mod add_bookmark;
+pub mod summary;
+pub mod tag;
+
+pub const DAEMON_IDLE_SLEEP: Duration = Duration::from_secs(300);
+pub const TOKENIZER_WINDOW_SIZE: usize = 1_000;
+pub const TOKENIZER_WINDOW_OVERLAP: usize = 100;
 
 fn clean_url(url: Url) -> Result<Url> {
     if let Some(host) = url.host_str() {

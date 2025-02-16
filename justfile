@@ -33,3 +33,22 @@ run-spa:
   pushd spa
   trunk serve
   popd
+
+run-server:
+  #!/usr/bin/env sh
+  DATA_DIR="/tmp/bookmark-hub-datadir"
+  if [[ ! -d "$DATA_DIR" ]]; then
+    mkdir -p "$DATA_DIR"
+  fi
+  RUST_BACKTRACE=full RUST_LOG=info,server=debug cargo run --bin server -- \
+    --hmac-key secret \
+    --pg-host localhost \
+    --pg-port 5432 \
+    --pg-user main \
+    --pg-password main \
+    --pg-database main \
+    --pg-max-connections 5 \
+    --readability-url "http://localhost:3001" \
+    --data-dir "$DATA_DIR" \
+    --ollama-url "http://localhost:11434" \
+    --ollama-text-model "llama3.2:latest"

@@ -48,7 +48,7 @@ fn render_bookmark_task(task: &BookmarkTask) -> Html {
             <td>{task_id_strip}</td>
             <td><a href={task.url.to_owned()} target="_blank">{&task.url}</a></td>
             <td>{task.status.as_ref()}</td>
-            <td>{&task.tags.join(", ")}</td>
+            <td>{&task.tags.to_owned().unwrap_or_default().join(", ")}</td>
             <td>{&task.created_at.to_rfc3339_opts(SecondsFormat::Secs, true)}</td>
             <td>{&task.updated_at.to_rfc3339_opts(SecondsFormat::Secs, true)}</td>
             <td>{&task.next_delivery.to_rfc3339_opts(SecondsFormat::Secs, true)}</td>

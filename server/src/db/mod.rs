@@ -46,9 +46,9 @@ pub async fn get_pool(pg: PgParams) -> anyhow::Result<PgPool> {
     let mut cfg = Config::new();
     cfg.host = Some(pg.pg_host.clone());
     cfg.port = Some(pg.pg_port);
-    cfg.user = Some(pg.pg_user.expose_secret().clone());
-    cfg.password = Some(pg.pg_password.expose_secret().clone());
-    cfg.dbname = Some(pg.pg_database.expose_secret().clone());
+    cfg.user = Some(pg.pg_user.expose_secret().to_owned());
+    cfg.password = Some(pg.pg_password.expose_secret().to_owned());
+    cfg.dbname = Some(pg.pg_database.expose_secret().to_owned());
     cfg.manager = Some(ManagerConfig {
         recycling_method: RecyclingMethod::Fast,
     });

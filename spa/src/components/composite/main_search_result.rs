@@ -14,9 +14,11 @@ fn article(callback: Callback<SearchResultItem>, item: SearchResultItem) -> Html
     let tags = item
         .bookmark
         .tags
+        .unwrap_or_default()
         .into_iter()
         .map(|tag| html! { <span class="badge bg-primary me-1">{tag}</span> })
-        .collect::<Html>();
+        .collect::<Vec<_>>();
+
     let search_match = match item.search_match.clone() {
         Some(html) => html! { <BlockquoteHtml html={html} /> },
         None => html! { <></>},
@@ -24,6 +26,13 @@ fn article(callback: Callback<SearchResultItem>, item: SearchResultItem) -> Html
     let on_click = Callback::from(move |_| {
         callback.emit(item_for_event.clone());
     });
+    let summary = if let Some(summary) = &item.bookmark.summary {
+        html! {
+            <p><em>{summary}</em></p>
+        }
+    } else {
+        html! { <></> }
+    };
 
     html! {
         <div class="card mb-3">
@@ -32,6 +41,7 @@ fn article(callback: Callback<SearchResultItem>, item: SearchResultItem) -> Html
                 <p class="card-text">{search_match}</p>
                 <div>{tags}</div>
                 <small class="text-muted">{"Created at:"} {item.bookmark.created_at}</small>
+                <small><em>{summary}</em></small>
                 <a onclick={on_click} class="btn btn-link mt-2 d-block">{"Read more..."}</a>
             </div>
         </div>
