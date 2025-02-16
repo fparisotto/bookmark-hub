@@ -6,6 +6,7 @@ use crate::{
     },
     user_session::UserSession,
 };
+use log::warn;
 use shared::Bookmark;
 use yew::platform::spawn_local;
 use yew::prelude::*;
@@ -33,11 +34,15 @@ pub fn bookmark_page(props: &Props) -> Html {
             spawn_local(async move {
                 match bookmarks_api::get_content(&token, &user_id, &bookmark_id).await {
                     Ok(Some(data)) => html_contentt.set(Some(data)),
-                    Ok(None) => todo!(),
-                    Err(_) => todo!(),
+                    Ok(None) => html_contentt.set(Some("".to_owned())),
+                    Err(error) => {
+                        warn!(
+                            "Failed to fetch static content from bookmark_id: {}, user_id: {}, error: {}",
+                            &bookmark_id, user_id, error
+                        );
+                    }
                 }
             });
-            || ()
         });
     }
 
