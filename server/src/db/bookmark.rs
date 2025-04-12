@@ -219,7 +219,7 @@ pub async fn get_text_content(
 
 pub async fn get_untagged_bookmarks(pool: &PgPool, limit: usize) -> Result<Vec<Bookmark>> {
     let sql  =
-        format!("SELECT * FROM bookmark WHERE tags IS NULL OR array_length(tags, 1) = 0 ORDER BY random() LIMIT {limit};");
+        format!("SELECT * FROM bookmark WHERE tags IS NULL OR coalesce(array_length(tags, 1), 0) = 0 ORDER BY random() LIMIT {limit};");
     let client = pool.get().await?;
     let results = client
         .query(&sql, &[])
