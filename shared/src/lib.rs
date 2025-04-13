@@ -39,13 +39,13 @@ pub struct SignInResponse {
     pub token_type: String,
 }
 
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UserProfileResponse {
     pub user_id: Uuid,
     pub email: String,
 }
 
-#[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Bookmark {
     pub bookmark_id: String,
     pub user_id: Uuid,
@@ -58,13 +58,13 @@ pub struct Bookmark {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
-#[derive(PartialEq, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NewBookmarkRequest {
     pub url: String,
     pub tags: Vec<String>,
 }
 
-#[derive(PartialEq, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NewBookmarkResponse {
     pub task_id: Uuid,
     pub url: String,
@@ -72,7 +72,7 @@ pub struct NewBookmarkResponse {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, PartialEq, Default, Clone, EnumString, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, EnumString, Serialize, Deserialize)]
 pub enum SearchType {
     #[default]
     #[strum(ascii_case_insensitive)]
@@ -92,7 +92,7 @@ pub enum TagFilterType {
     And,
 }
 
-#[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SearchResultItem {
     pub bookmark: Bookmark,
     pub search_match: Option<String>,
@@ -106,21 +106,21 @@ pub enum TagFilter {
     Untagged,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchRequest {
     pub query: Option<String>,
     pub tags_filter: Option<TagFilter>,
     pub limit: Option<i32>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchResponse {
     pub items: Vec<SearchResultItem>,
     pub tags: Vec<TagCount>,
     pub total: u64,
 }
 
-#[derive(PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TagsResponse {
     pub tags: Vec<TagCount>,
 }
@@ -131,22 +131,22 @@ pub struct TagCount {
     pub count: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TagsWithCounters {
     pub tags: Vec<TagCount>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tags {
     pub tags: Vec<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Bookmarks {
     pub bookmarks: Vec<Bookmark>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct NewBookmark {
     pub url: Url,
     pub tags: Option<Vec<String>>,
