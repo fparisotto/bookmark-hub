@@ -11,6 +11,7 @@ build-package PACKAGE *ARGS:
 
 build *ARGS:
   just build-package server {{ARGS}}
+  just build-package cli {{ARGS}}
   just build-package spa --target wasm32-unknown-unknown {{ARGS}}
 
 clippy-package PACKAGE *ARGS="--locked":
@@ -18,6 +19,7 @@ clippy-package PACKAGE *ARGS="--locked":
 
 clippy *ARGS="--locked":
   just clippy-package server {{ARGS}}
+  just clippy-package cli {{ARGS}}
   just clippy-package spa --target wasm32-unknown-unknown {{ARGS}}
 
 build-container:

@@ -69,6 +69,11 @@
           SPA_DIST = spaPackage;
         });
 
+        cliPackage = craneLib.buildPackage (nativeArgs // {
+          pname = "bookmark-hub-cli";
+          inherit cargoArtifacts;
+        });
+
         serverImage =
           let
             spaDistLayer = pkgs.runCommand "spa-dist-layer" { } ''
@@ -131,11 +136,17 @@
         packages = {
           default = serverPackage;
           containerImage = serverImage;
+          bookmark-hub-cli = cliPackage;
         };
 
         apps.default = flake-utils.lib.mkApp {
           name = "server";
           drv = serverPackage;
+        };
+
+        apps.bookmark-hub-cli = flake-utils.lib.mkApp {
+          name = "cli";
+          drv = cliPackage;
         };
 
         devShells.default = craneLib.devShell {
