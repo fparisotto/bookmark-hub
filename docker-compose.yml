@@ -50,7 +50,7 @@ services:
     image: ollama/ollama:0.5.11
     container_name: ollama
     ports:
-      - "11434:11434"
+      - 11435:11434
     volumes:
       - ollama-data:/root/.ollama
 volumes:

@@ -159,78 +159,62 @@ pub async fn search(
     user_id: Uuid,
     request: &BookmarkTaskSearchRequest,
 ) -> Result<BookmarkTaskSearchResponse> {
-    const SQL: &str = "SELECT * FROM bookmark_task bt WHERE bt.user_id = $1 AND ( ";
-    let client = pool.get().await?;
-    let mut query = SQL.to_owned();
+    let mut filters: Vec<String> = vec![];
+    let mut params: Vec<&(dyn ToSql + Sync)> = vec![];
 
-    if request.url.is_some() {
-        query.push_str(" bt.url LIKE $2 ");
-    } else {
-        query.push_str(" CAST($2 AS TEXT) IS NULL ");
+    params.push(&user_id);
+    filters.push(format!("bt.user_id = ${}", params.len()));
+
+    let url_pattern = request.url.as_ref().map(|e| format!("%{e}%"));
+    if let Some(url_pattern) = &url_pattern {
+        params.push(url_pattern);
+        filters.push(format!("bt.url LIKE ${}", params.len()));
     }
 
     if let Some(tags) = &request.tags {
         if !tags.is_empty() {
-            query.push_str(" AND bt.tags @> $3 ");
-        } else {
-            query.push_str(" AND CAST($3 AS TEXT[]) IS NULL ");
+            params.push(tags);
+            filters.push(format!("bt.tags @> ${}", params.len()));
         }
+    }
+
+    let bookmark_task_status = request.status.clone().map(ColumnBookmarkTaskStatus::from);
+    if let Some(status) = &bookmark_task_status {
+        params.push(status);
+        filters.push(format!("bt.status = ${}", params.len()));
+    }
+
+    if let Some(last_task_id) = &request.last_task_id {
+        params.push(last_task_id);
+        // This requires an ORDER BY clause for stable pagination
+        filters.push(format!("bt.task_id > ${}", params.len()));
+    }
+
+    if let Some(to_created_at) = &request.to_created_at {
+        params.push(to_created_at);
+        filters.push(format!("bt.created_at >= ${}", params.len()));
+    }
+
+    if let Some(from_created_at) = &request.from_created_at {
+        params.push(from_created_at);
+        filters.push(format!("bt.created_at <= ${}", params.len()));
+    }
+
+    let filter_clause = if !filters.is_empty() {
+        format!("WHERE {}", filters.join(" AND "))
     } else {
-        query.push_str(" AND CAST($3 AS TEXT[]) IS NULL ");
-    }
+        String::new()
+    };
 
-    if request.status.is_some() {
-        query.push_str(" AND bt.status = $4 ");
-    } else {
-        query.push_str(" AND CAST($4 AS task_status) IS NULL ");
-    }
+    let page_size = request.page_size.unwrap_or(25);
+    // Order by task_id for stable pagination using `last_task_id`
+    let sql = format!(
+        "SELECT * FROM bookmark_task bt {} ORDER BY bt.task_id ASC LIMIT {}",
+        filter_clause, page_size
+    );
 
-    if request.last_task_id.is_some() {
-        query.push_str(" AND bt.task_id > $5 ");
-    } else {
-        query.push_str(" AND CAST($5 AS UUID) IS NULL ");
-    }
-
-    match (request.to_created_at, request.from_created_at) {
-        (None, None) => {
-            query.push_str(
-                " AND CAST($6 AS TIMESTAMPTZ) IS NULL AND CAST($7 AS TIMESTAMPTZ) IS NULL ",
-            );
-        }
-        (None, Some(_)) => {
-            query.push_str(" AND CAST($6 AS TIMESTAMPTZ) IS NULL AND bt.created_at < $7 ");
-        }
-        (Some(_), None) => {
-            query.push_str(" AND bt.created_at > $6 AND CAST($7 AS TIMESTAMPTZ) IS NULL ");
-        }
-        (Some(_), Some(_)) => {
-            query.push_str(" AND bt.created_at BETWEEN $6 AND $7 ");
-        }
-    }
-
-    let bookmark_task_status = request
-        .status
-        .to_owned()
-        .map(ColumnBookmarkTaskStatus::from);
-
-    let url_pattern = request.url.to_owned().map(|e| format!("%{e}%"));
-
-    query.push_str(&format!(" ) LIMIT {}", request.page_size.unwrap_or(25)));
-
-    let rows = client
-        .query(
-            &query,
-            &[
-                &user_id,
-                &url_pattern,
-                &request.tags,
-                &bookmark_task_status,
-                &request.last_task_id,
-                &request.to_created_at,
-                &request.from_created_at,
-            ],
-        )
-        .await?;
+    let client = pool.get().await?;
+    let rows = client.query(&sql, &params).await?;
     let tasks = rows
         .iter()
         .map(|row| {
