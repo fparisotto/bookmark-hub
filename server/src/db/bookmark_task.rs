@@ -209,8 +209,7 @@ pub async fn search(
     let page_size = request.page_size.unwrap_or(25);
     // Order by task_id for stable pagination using `last_task_id`
     let sql = format!(
-        "SELECT * FROM bookmark_task bt {} ORDER BY bt.task_id ASC LIMIT {}",
-        filter_clause, page_size
+        "SELECT * FROM bookmark_task bt {filter_clause} ORDER BY bt.task_id ASC LIMIT {page_size}"
     );
 
     let client = pool.get().await?;

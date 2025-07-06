@@ -84,7 +84,7 @@ pub fn home(props: &Props) -> Html {
                         "New bookmark added, response={}",
                         serde_json::to_string(&result).unwrap()
                     ),
-                    Err(error) => log::warn!("Add bookmark failed, error: {}", error),
+                    Err(error) => log::warn!("Add bookmark failed, error: {error}"),
                 }
             })
         })
@@ -101,14 +101,14 @@ pub fn home(props: &Props) -> Html {
                 state.search_input = event.input.clone();
                 match search_api::search(&token, state.clone().into()).await {
                     Ok(result) => {
-                        log::info!("result={:?}", result);
+                        log::info!("result={result:?}");
                         state.items = result.items;
                         state.tags = result.tags;
                         state_handle.set(state);
                     }
                     Err(error) => {
                         // FIXME: notify user
-                        log::warn!("Fail to search bookmarks, error: {}", error);
+                        log::warn!("Fail to search bookmarks, error: {error}");
                     }
                 }
             })
@@ -150,10 +150,10 @@ pub fn home(props: &Props) -> Html {
                         state_handle.set(state);
                     }
                     Ok(None) => {
-                        log::warn!("Weird, bookmark not found in backend, item={:?}", event);
+                        log::warn!("Weird, bookmark not found in backend, item={event:?}");
                     }
                     Err(error) => {
-                        log::error!("Fail to fetch bookmark, item={:?}, error={error}", event);
+                        log::error!("Fail to fetch bookmark, item={event:?}, error={error}");
                     }
                 }
             });

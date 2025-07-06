@@ -131,7 +131,7 @@ async fn run_total(
     }
 
     let filter_clause = format!("WHERE {}", filters.join(" AND "));
-    let sql = format!("SELECT COUNT(1) FROM bookmark b {}", filter_clause);
+    let sql = format!("SELECT COUNT(1) FROM bookmark b {filter_clause}");
 
     debug!(?sql, "Total query");
     let row = client.query_one(&sql, &params).await?;
@@ -177,9 +177,8 @@ async fn run_aggregation(
 
     let filter_clause = format!("WHERE {}", filters.join(" AND "));
     let sql = format!(
-        "WITH tags AS (SELECT unnest(b.tags) AS tag FROM bookmark b {}) \
+        "WITH tags AS (SELECT unnest(b.tags) AS tag FROM bookmark b {filter_clause}) \
          SELECT tag, count(1) AS count FROM tags t GROUP BY tag",
-        filter_clause
     );
 
     debug!(?sql, "Aggregation query");
@@ -214,10 +213,9 @@ async fn run_search(
         params.push(query);
         let idx = params.len();
         query_param_idx = Some(idx);
-        select_clause = format!("ts_headline('english', b.text_content, websearch_to_tsquery('english', ${}), 'StartSel=<mark>, StopSel=</mark>') AS search_match, b.*", idx);
+        select_clause = format!("ts_headline('english', b.text_content, websearch_to_tsquery('english', ${idx}), 'StartSel=<mark>, StopSel=</mark>') AS search_match, b.*");
         order_by_clause = format!(
-            "ORDER BY ts_rank(b.search_tokens, websearch_to_tsquery('english', ${})) DESC",
-            idx
+            "ORDER BY ts_rank(b.search_tokens, websearch_to_tsquery('english', ${idx})) DESC",
         );
     } else {
         params.push(&none_query_param);
@@ -230,8 +228,7 @@ async fn run_search(
 
     if let Some(idx) = query_param_idx {
         filters.push(format!(
-            "b.search_tokens @@ websearch_to_tsquery('english', ${})",
-            idx
+            "b.search_tokens @@ websearch_to_tsquery('english', ${idx})",
         ));
     }
 
@@ -255,8 +252,7 @@ async fn run_search(
     let filter_clause = format!("WHERE {}", filters.join(" AND "));
     let limit_clause = format!("LIMIT {}", request.limit.unwrap_or(20));
     let sql = format!(
-        "SELECT {} FROM bookmark b {} {} {}",
-        select_clause, filter_clause, order_by_clause, limit_clause
+        "SELECT {select_clause} FROM bookmark b {filter_clause} {order_by_clause} {limit_clause}"
     );
 
     debug!(?sql, "Search query");

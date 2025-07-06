@@ -9,8 +9,8 @@ pub struct Props {
 
 fn render_fail_reason_modal(task_id: &str, fail_reason: &str) -> Html {
     let mini_text = format!("{}...", &fail_reason[0..12]);
-    let modal_id = format!("modal-id-{}", task_id);
-    let modal_id_ref = format!("#{}", modal_id);
+    let modal_id = format!("modal-id-{task_id}");
+    let modal_id_ref = format!("#{modal_id}");
     html! {
         <>
             <a href=""  data-bs-toggle="modal" data-bs-target={modal_id_ref}>{mini_text}</a>
