@@ -54,3 +54,8 @@ run-server:
     --data-dir "$DATA_DIR" \
     --ollama-url "http://localhost:11434" \
     --ollama-text-model "llama3.2:latest"
+
+run-cli *ARGS:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cargo run --bin cli {{ARGS}}
