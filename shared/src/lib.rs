@@ -8,13 +8,13 @@ use uuid::Uuid;
 #[derive(Debug, Serialize)]
 pub struct UserProfile {
     pub user_id: Uuid,
-    pub email: String,
+    pub username: String,
     pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct SignUpRequest {
-    pub email: String,
+    pub username: String,
     pub password: SecretString,
     pub password_confirmation: SecretString,
 }
@@ -22,19 +22,19 @@ pub struct SignUpRequest {
 #[derive(Debug, Serialize)]
 pub struct SignUpResponse {
     pub id: Uuid,
-    pub email: String,
+    pub username: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct SignInRequest {
-    pub email: String,
+    pub username: String,
     pub password: SecretString,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct SignInResponse {
     pub user_id: Uuid,
-    pub email: String,
+    pub username: String,
     pub access_token: String,
     pub token_type: String,
 }
@@ -42,7 +42,7 @@ pub struct SignInResponse {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UserProfileResponse {
     pub user_id: Uuid,
-    pub email: String,
+    pub username: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

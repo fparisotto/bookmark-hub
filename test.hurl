@@ -1,7 +1,7 @@
 # sign-up
 POST http://localhost:3000/api/v1/auth/sign-up
 {
-  "email": "test@gmail.com",
+  "username": "test",
   "password": "1234",
   "password_confirmation": "1234"
 }
@@ -12,7 +12,7 @@ user_id: jsonpath "$.id"
 # sign-in
 POST http://localhost:3000/api/v1/auth/sign-in
 {
-  "email": "test@gmail.com",
+  "username": "test",
   "password": "1234"
 }
 HTTP/1.1 200
@@ -24,7 +24,7 @@ GET http://localhost:3000/api/v1/auth/user-profile
 Authorization: Bearer {{token}}
 HTTP/1.1 200
 [Asserts]
-jsonpath "$.email" == "test@gmail.com"
+jsonpath "$.username" == "test"
 
 # post a bookmark
 POST http://localhost:3000/api/v1/bookmarks
