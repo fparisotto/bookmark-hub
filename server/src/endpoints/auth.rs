@@ -12,8 +12,8 @@ use super::Claim;
 
 fn validate_signup(payload: &SignUpRequest) -> Result<()> {
     let mut errors: Vec<(&'static str, &'static str)> = Vec::new();
-    if payload.email.trim().is_empty() {
-        errors.push(("email", "email must not be empty"));
+    if payload.username.trim().is_empty() {
+        errors.push(("username", "username must not be empty"));
     }
     if payload.password.expose_secret().trim().is_empty() {
         errors.push(("password", "password must not be empty"));
@@ -34,8 +34,8 @@ fn validate_signup(payload: &SignUpRequest) -> Result<()> {
 
 fn validate_signin(payload: &SignInRequest) -> Result<()> {
     let mut errors: Vec<(&'static str, &'static str)> = Vec::new();
-    if payload.email.trim().is_empty() {
-        errors.push(("email", "email must not be empty"));
+    if payload.username.trim().is_empty() {
+        errors.push(("username", "username must not be empty"));
     }
     if payload.password.expose_secret().trim().is_empty() {
         errors.push(("password", "password must not be empty"));
@@ -62,7 +62,7 @@ async fn get_user_profile(
     match user::get_by_id(&app_context.pool, &claims.user_id).await {
         Ok(Some(user)) => Ok(Json(UserProfile {
             user_id: user.user_id,
-            email: user.email,
+            username: user.username,
             created_at: user.created_at,
         })),
         Ok(None) => {
@@ -86,18 +86,19 @@ async fn sign_up(
 ) -> Result<Json<SignUpResponse>> {
     validate_signup(&payload)?;
     let hashed_password = super::hash_password(payload.password).await?;
-    let try_user = user::create(&app_context.pool, payload.email, hashed_password).await;
+    let try_user = user::create(&app_context.pool, payload.username, hashed_password).await;
     match try_user {
         Ok(user) => Ok(Json(SignUpResponse {
             id: user.user_id,
-            email: user.email,
+            username: user.username,
         })),
         Err(Error::ConstraintViolation {
             constraint,
             message: _,
-        }) if constraint.eq("unique_email") => {
-            Err(Error::bad_request([("email", "email already created")]))
-        }
+        }) if constraint.eq("unique_username") => Err(Error::bad_request([(
+            "username",
+            "username already created",
+        )])),
         Err(error) => Err(error),
     }
 }
@@ -108,7 +109,7 @@ async fn sign_in(
     Json(payload): Json<SignInRequest>,
 ) -> Result<Json<SignInResponse>> {
     validate_signin(&payload)?;
-    let maybe_user = user::get_by_email(&app_context.pool, payload.email).await?;
+    let maybe_user = user::get_by_username(&app_context.pool, payload.username).await?;
     if let Some(user) = maybe_user {
         super::verify_password(payload.password, user.password_hash.clone()).await?;
         let expiration = Utc::now()
@@ -117,14 +118,14 @@ async fn sign_in(
             .timestamp();
         let claims = Claim {
             user_id: user.user_id,
-            sub: user.email.clone(),
+            sub: user.username.clone(),
             exp: expiration,
         };
         let token = super::encode_token(&app_context.config, &claims)?;
-        tracing::info!("User authenticated, email={}", &claims.sub);
+        tracing::info!("User authenticated, username={}", &claims.sub);
         let login_response = SignInResponse {
             user_id: user.user_id,
-            email: user.email,
+            username: user.username,
             access_token: token,
             token_type: "Bearer".to_owned(),
         };

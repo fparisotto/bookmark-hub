@@ -4,7 +4,7 @@ use crate::pages::home::Page;
 
 #[derive(PartialEq, Properties)]
 pub struct Props {
-    pub email: String,
+    pub username: String,
     pub active_page: Page,
     pub on_page_change: Callback<Page>,
 }
@@ -52,7 +52,7 @@ pub fn navigation_bar(props: &Props) -> Html {
                     <button class="btn btn-sm me-2 btn-outline-primary" data-bs-toggle="modal" data-bs-target="#add-bookmark-modal">
                         {"+ Bookmark"}
                     </button>
-                    <span class="navbar-text">{&props.email}</span>
+                    <span class="navbar-text">{&props.username}</span>
                 </div>
             </div>
         </nav>

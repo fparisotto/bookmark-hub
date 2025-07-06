@@ -269,7 +269,7 @@ pub fn home(props: &Props) -> Html {
 
     html! {
         <>
-            <NavigationBar email={props.user_session.email.clone()}
+            <NavigationBar username={props.user_session.username.clone()}
                 active_page={state_handle.page.clone()}
                 on_page_change={on_page_change} />
             <div class="container mt-5">
