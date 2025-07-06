@@ -2,7 +2,7 @@
   description = "bookmark-hub";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
     crane.url = "github:ipetkov/crane";
     flake-utils.url = "github:numtide/flake-utils";
     rust-overlay = {
@@ -53,8 +53,6 @@
 
           buildInputs = [
             pkgs.openssl
-          ] ++ lib.optionals pkgs.stdenv.isDarwin [
-            pkgs.libiconv
           ];
         };
 
@@ -114,10 +112,20 @@
             mv ./dist ..
             cd ..
           '';
-          wasm-bindgen-cli = pkgs.wasm-bindgen-cli.override {
-            version = "0.2.100";
-            hash = "sha256-3RJzK7mkYFrs7C/WkhW9Rr4LdP5ofb2FdYGz1P7Uxog=";
-            cargoHash = "sha256-tD0OY2PounRqsRiFh8Js5nyknQ809ZcHMvCOLrvYHRE=";
+          wasm-bindgen-cli = pkgs.buildWasmBindgenCli rec {
+            src = pkgs.fetchCrate {
+              pname = "wasm-bindgen-cli";
+              version = "0.2.100";
+              hash = "sha256-3RJzK7mkYFrs7C/WkhW9Rr4LdP5ofb2FdYGz1P7Uxog=";
+              # hash = lib.fakeHash;
+            };
+
+            cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
+              inherit src;
+              inherit (src) pname version;
+              hash = "sha256-qsO12332HSjWCVKtf1cUePWWb9IdYUmT+8OPj/XP2WE=";
+              # hash = lib.fakeHash;
+            };
           };
         });
       in
