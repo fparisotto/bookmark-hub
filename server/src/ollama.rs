@@ -8,6 +8,7 @@ use ollama_rs::{
     Ollama,
 };
 use serde::Deserialize;
+
 use url::Url;
 
 #[derive(JsonSchema, Deserialize)]
@@ -38,11 +39,10 @@ pub async fn tags(ollama_url: &Url, ollama_model: &str, text: &str) -> anyhow::R
     Response should be in JSON format. Here's text: "#;
 
     let ollama = Ollama::from_url(ollama_url.to_owned());
+    let format = FormatType::StructuredJson(Box::new(JsonStructure::new::<TagsModelResponse>()));
     let request =
         GenerationRequest::new(ollama_model.to_owned(), format!("{PROMPT_PREFIX}\n{text}"))
-            .format(FormatType::StructuredJson(JsonStructure::new::<
-                TagsModelResponse,
-            >()))
+            .format(format)
             .system(SYSTEM_PROMPT);
     let response = ollama.generate(request).await?;
     if let Ok(parsed) = serde_json::from_str::<TagsModelResponse>(&response.response) {
@@ -71,11 +71,10 @@ pub async fn consolidate_tags(
 
     let text = tags.join(", ");
     let ollama = Ollama::from_url(ollama_url.to_owned());
+    let format = FormatType::StructuredJson(Box::new(JsonStructure::new::<TagsModelResponse>()));
     let request =
         GenerationRequest::new(ollama_model.to_owned(), format!("{PROMPT_PREFIX}\n{text}"))
-            .format(FormatType::StructuredJson(JsonStructure::new::<
-                TagsModelResponse,
-            >()))
+            .format(format)
             .system(SYSTEM_PROMPT);
     let response = ollama.generate(request).await?;
     if let Ok(parsed) = serde_json::from_str::<TagsModelResponse>(&response.response) {
@@ -99,10 +98,11 @@ pub async fn summary(ollama_url: &Url, ollama_model: &str, text: &str) -> anyhow
     Response should be in JSON format. Here's text: "#;
 
     let ollama = Ollama::from_url(ollama_url.to_owned());
+
+    let format = FormatType::StructuredJson(Box::new(JsonStructure::new::<SummaryModelResponse>()));
     let request =
-        GenerationRequest::new(ollama_model.to_owned(), format!("{PROMPT_PREFIX}\n{text}")).format(
-            FormatType::StructuredJson(JsonStructure::new::<SummaryModelResponse>()),
-        );
+        GenerationRequest::new(ollama_model.to_owned(), format!("{PROMPT_PREFIX}\n{text}"))
+            .format(format);
     let response = ollama.generate(request).await?;
     if let Ok(parsed) = serde_json::from_str::<SummaryModelResponse>(&response.response) {
         Ok(parsed.summary)
@@ -129,10 +129,10 @@ pub async fn consolidate_summary(
 
     let text = summaries.join("\n");
     let ollama = Ollama::from_url(ollama_url.to_owned());
+    let format = FormatType::StructuredJson(Box::new(JsonStructure::new::<SummaryModelResponse>()));
     let request =
-        GenerationRequest::new(ollama_model.to_owned(), format!("{PROMPT_PREFIX}\n{text}")).format(
-            FormatType::StructuredJson(JsonStructure::new::<SummaryModelResponse>()),
-        );
+        GenerationRequest::new(ollama_model.to_owned(), format!("{PROMPT_PREFIX}\n{text}"))
+            .format(format);
     let response = ollama.generate(request).await?;
     if let Ok(parsed) = serde_json::from_str::<SummaryModelResponse>(&response.response) {
         Ok(parsed.summary)

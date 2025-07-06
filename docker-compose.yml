@@ -6,6 +6,8 @@ services:
     depends_on:
       - postgres
       - readability-api
+      - ollama
+      - ollama-model-puller
     environment:
       RUST_BACKTRACE: full
       RUST_LOG: info
@@ -20,7 +22,7 @@ services:
       PG_DATABASE: main
       PG_MAX_CONNECTIONS: 5
       OLLAMA_URL: http://ollama:11434
-      OLLAMA_TEXT_MODEL: llama3.2:latest
+      OLLAMA_TEXT_MODEL: gemma3:4b
     volumes:
       - bookmark-hub-data:/data
     healthcheck:
@@ -47,12 +49,17 @@ services:
     volumes:
       - postgres-data:/data/postgres
   ollama:
-    image: ollama/ollama:0.5.11
+    image: ollama/ollama:0.9.5
     container_name: ollama
     ports:
       - 11435:11434
     volumes:
       - ollama-data:/root/.ollama
+  ollama-model-puller:
+    image: curlimages/curl:latest
+    command: ["curl", "ollama:11434/api/pull", "-d", "{\"model\":\"gemma3:4b\"}"]
+    depends_on:
+      - ollama
 volumes:
   postgres-data:
   ollama-data:
