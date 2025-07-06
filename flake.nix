@@ -166,6 +166,7 @@
             pkgs.hurl
             pkgs.just
             pkgs.trunk
+            pkgs.rust-analyzer
           ];
         };
       });

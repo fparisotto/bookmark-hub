@@ -16,6 +16,7 @@ cantrip = "0.4.0"
 chrono = { workspace = true }
 clap = { version = "4.5", features = ["derive", "env"] }
 deadpool-postgres = "0.14"
+dom_smoothie = "0.11.0"
 futures = "0.3"
 hex = { workspace = true }
 hmac = "0.12"

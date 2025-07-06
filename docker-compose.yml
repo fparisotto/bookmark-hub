@@ -5,7 +5,6 @@ services:
       - 3000:3000
     depends_on:
       - postgres
-      - readability-api
       - ollama
       - ollama-model-puller
     environment:
@@ -14,7 +13,6 @@ services:
       APP_BIND: "[::]:3000"
       APP_DATA_DIR: /data
       HMAC_KEY: secret
-      READABILITY_URL: http://readability-api:3001
       PG_HOST: postgres
       PG_PORT: 5432
       PG_USER: main
@@ -32,12 +30,6 @@ services:
       start_period: 10s
       retries: 5
     restart: on-failure # needed during startup, until pg is available
-  readability-api:
-    image: ghcr.io/fparisotto/readability-api:v0.0.1
-    environment:
-      PORT: 3001
-    ports:
-      - 3001:3001
   postgres:
     image: postgres:17
     ports:
