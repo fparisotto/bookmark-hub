@@ -27,6 +27,6 @@ pub async fn get_user_profile(token: String) -> Result<UserProfileResponse, Erro
         .await?
         .json::<UserProfileResponse>()
         .await?;
-    log::info!("Api get user profile, token={}", token);
+    log::info!("Api get user profile, token={token}");
     Ok(response)
 }

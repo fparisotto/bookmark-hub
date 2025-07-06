@@ -10,6 +10,6 @@ pub async fn get_all_tags(token: &String) -> Result<TagsResponse, Error> {
         .await?
         .json::<TagsResponse>()
         .await?;
-    log::info!("Api get all tags, token={}", token);
+    log::info!("Api get all tags, token={token}");
     Ok(response)
 }
