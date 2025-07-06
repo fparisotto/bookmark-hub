@@ -3,9 +3,9 @@ use gloo_net::Error;
 use serde_json::json;
 use shared::{SignInResponse, UserProfileResponse};
 
-pub async fn login(email: String, password: String) -> Result<SignInResponse, Error> {
+pub async fn login(username: String, password: String) -> Result<SignInResponse, Error> {
     const ENDPOINT: &str = "/api/v1/auth/sign-in";
-    let json_value = json!({"email": email, "password": password});
+    let json_value = json!({"username": username, "password": password});
     log::info!("Doing login, endpoint={ENDPOINT}");
     let request_body = serde_json::to_string(&json_value).expect("Serialize should not fail");
     let response = Request::post(ENDPOINT)
@@ -15,7 +15,7 @@ pub async fn login(email: String, password: String) -> Result<SignInResponse, Er
         .await?
         .json::<SignInResponse>()
         .await?;
-    log::info!("Api auth login, email={email}");
+    log::info!("Api auth login, username={username}");
     Ok(response)
 }
 

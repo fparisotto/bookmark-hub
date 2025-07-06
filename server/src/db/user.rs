@@ -11,7 +11,7 @@ use super::PgPool;
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct User {
     pub user_id: Uuid,
-    pub email: String,
+    pub username: String,
     pub password_hash: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -25,25 +25,25 @@ pub async fn get_by_id(pool: &PgPool, id: &Uuid) -> Result<Option<User>> {
     Ok(user)
 }
 
-pub async fn get_by_email(pool: &PgPool, email: String) -> Result<Option<User>> {
-    const SQL: &str = r#"SELECT * from "user" WHERE email = $1;"#;
+pub async fn get_by_username(pool: &PgPool, username: String) -> Result<Option<User>> {
+    const SQL: &str = r#"SELECT * from "user" WHERE username = $1;"#;
     let client = pool.get().await?;
-    let result = client.query_opt(SQL, &[&email]).await?;
+    let result = client.query_opt(SQL, &[&username]).await?;
     let user = result.map(|row| User::try_from_row(&row)).transpose()?;
     Ok(user)
 }
 
-pub async fn create(pool: &PgPool, email: String, password_hash: String) -> Result<User> {
+pub async fn create(pool: &PgPool, username: String, password_hash: String) -> Result<User> {
     const SQL: &str =
-        r#"INSERT INTO "user" (email, password_hash) VALUES ($1, $2) RETURNING "user".*;"#;
+        r#"INSERT INTO "user" (username, password_hash) VALUES ($1, $2) RETURNING "user".*;"#;
     let client = pool.get().await?;
     let row = client
-        .query_one(SQL, &[&email, &password_hash])
+        .query_one(SQL, &[&username, &password_hash])
         .await
-        .on_constraint("user_email_unique", |_| {
-            Error::constraint_violation("unique_email", "email already used")
+        .on_constraint("user_username_unique", |_| {
+            Error::constraint_violation("unique_username", "username already used")
         })?;
     let user = User::try_from_row(&row)?;
-    tracing::info!("User created, email={}", &user.email);
+    tracing::info!("User created, username={}", &user.username);
     Ok(user)
 }

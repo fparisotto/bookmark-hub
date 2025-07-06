@@ -50,17 +50,17 @@ pub fn app() -> Html {
             let storage = storage.clone();
             let logged = logged.clone();
             spawn_local(async move {
-                match auth_api::login(event.email.clone(), event.password.clone()).await {
+                match auth_api::login(event.username.clone(), event.password.clone()).await {
                     Ok(response) => {
                         storage.set(UserSession {
                             user_id: response.user_id,
                             token: response.access_token.clone(),
-                            email: response.email.clone(),
+                            username: response.username.clone(),
                         });
                         logged.set(true);
                         log::info!(
-                            "User login successful, email: {email}, user_id: {user_id}",
-                            email = &response.email,
+                            "User login successful, username: {username}, user_id: {user_id}",
+                            username = &response.username,
                             user_id = &response.user_id
                         );
                     }

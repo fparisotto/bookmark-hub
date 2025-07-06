@@ -7,7 +7,6 @@ pub enum InputType {
     #[default]
     Text,
     Password,
-    Email,
     Search,
     Url,
 }
@@ -18,7 +17,6 @@ impl InputType {
             Self::Text => "text".into(),
             Self::Search => "search".into(),
             Self::Password => "password".into(),
-            Self::Email => "email".into(),
             Self::Url => "url".into(),
         }
     }

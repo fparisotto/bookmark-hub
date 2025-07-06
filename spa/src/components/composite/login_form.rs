@@ -3,7 +3,7 @@ use yew::prelude::*;
 
 #[derive(Debug, PartialEq, Default, Clone)]
 pub struct LoginFormData {
-    pub email: String,
+    pub username: String,
     pub password: String,
 }
 
@@ -16,11 +16,11 @@ pub struct Props {
 pub fn login_form(props: &Props) -> Html {
     let state = use_state(LoginFormData::default);
 
-    let on_change_email = {
+    let on_change_username = {
         let state = state.clone();
         Callback::from(move |input_text: String| {
             let mut data: LoginFormData = (*state).clone();
-            data.email = input_text;
+            data.username = input_text;
             state.set(data);
         })
     };
@@ -40,7 +40,7 @@ pub fn login_form(props: &Props) -> Html {
         Callback::from(move |event: SubmitEvent| {
             event.prevent_default();
             let data = (*state).clone();
-            if !data.email.is_empty() && !data.password.is_empty() {
+            if !data.username.is_empty() && !data.password.is_empty() {
                 on_login.emit(data);
             }
         })
@@ -53,14 +53,14 @@ pub fn login_form(props: &Props) -> Html {
                     <h2 class="text-center mb-4">{ "Login" }</h2>
                     <form onsubmit={on_submit}>
                         <div class="mb-3">
-                            <label for="email" class="form-label">{ "Email address" }</label>
+                            <label for="username" class="form-label">{ "User name" }</label>
                             <InputText
-                                id="email"
-                                name="email"
-                                placeholder="Enter your e-mail"
+                                id="username"
+                                name="username"
+                                placeholder="Enter your user name"
                                 class={"form-control"}
-                                input_type={InputType::Email}
-                                on_change={on_change_email} />
+                                input_type={InputType::Text}
+                                on_change={on_change_username} />
                         </div>
                         <div class="mb-3">
                             <label for="password" class="form-label">{ "Password" }</label>

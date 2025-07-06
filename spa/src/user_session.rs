@@ -4,7 +4,7 @@ use uuid::Uuid;
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct UserSession {
     pub user_id: Uuid,
-    pub email: String,
+    pub username: String,
     pub token: String,
 }
 
