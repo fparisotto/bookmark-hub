@@ -148,14 +148,9 @@ async fn handle_task(
     }
 
     tracing::info!("Processing new bookmark for url={}", &task.url);
-    let output = process_url(
-        http,
-        config.readability_url.clone(),
-        &task.user_id,
-        &task.url,
-    )
-    .await
-    .with_context(|| format!("process_url: {}", &task.url))?;
+    let output = process_url(http, &task.user_id, &task.url)
+        .await
+        .with_context(|| format!("process_url: {}", &task.url))?;
 
     let bookmark = Bookmark {
         bookmark_id: output.bookmark_id,
@@ -237,7 +232,6 @@ async fn save_static_content(
 
 async fn process_url(
     http: &Client,
-    readability_url: Url,
     user_id: &Uuid,
     original_url_str: &str,
 ) -> Result<ProcessorOutput> {
@@ -245,7 +239,7 @@ async fn process_url(
     let original_url = super::clean_url(original_url)?;
     let bookmark_id: String = super::make_bookmark_id(&original_url)?;
     let raw_html = fetch_html_content(http, &original_url).await?;
-    let readability_response = readability::process(http, readability_url, raw_html).await?;
+    let readability_response = readability::process(raw_html).await?;
 
     let images_found = find_images(&original_url, &readability_response.content)?;
 

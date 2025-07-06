@@ -32,9 +32,6 @@ pub struct Config {
     #[clap(flatten)]
     pub ollama: OllamaParams,
 
-    #[arg(long, env = "READABILITY_URL")]
-    pub readability_url: Url,
-
     #[arg(long, env = "APP_BIND", default_value = "[::]:3000")]
     pub bind: SocketAddr,
 

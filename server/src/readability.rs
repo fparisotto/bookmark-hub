@@ -1,7 +1,6 @@
 use anyhow::Result;
-use reqwest::Client;
+use dom_smoothie::{Article, Config, Readability};
 use serde::{Deserialize, Serialize};
-use url::Url;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ReadabilityResponse {
@@ -11,16 +10,20 @@ pub struct ReadabilityResponse {
     pub text_content: String,
 }
 
-pub async fn process(
-    client: &Client,
-    readability_url: Url,
-    raw_content: String,
-) -> Result<ReadabilityResponse> {
-    let response = client
-        .post(readability_url)
-        .body(raw_content)
-        .send()
-        .await?;
-    let payload = response.json::<ReadabilityResponse>().await?;
-    Ok(payload)
+pub async fn process(raw_content: String) -> Result<ReadabilityResponse> {
+    let mut readability = Readability::new(
+        raw_content,
+        None,
+        Some(Config {
+            max_elements_to_parse: usize::MAX,
+            ..Default::default()
+        }),
+    )?;
+    let article: Article = readability.parse()?;
+
+    Ok(ReadabilityResponse {
+        title: article.title,
+        content: article.content.to_string(),
+        text_content: article.text_content.to_string(),
+    })
 }
