@@ -7,7 +7,7 @@ use std::fs;
 use std::path::PathBuf;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::prelude::*;
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt};
 use url::Url;
 
 #[derive(Debug, Clone, Parser)]
@@ -34,8 +34,8 @@ pub struct LoginArgs {
     #[arg(long, help = "API base URL")]
     pub url: Url,
 
-    #[arg(long, help = "Login email")]
-    pub email: String,
+    #[arg(long, help = "Username")]
+    pub username: String,
 
     #[arg(long, help = "Login password")]
     pub password: String,
@@ -83,7 +83,7 @@ async fn handle_login(args: LoginArgs) -> anyhow::Result<()> {
     let config_path = home_dir.join(".config/bookmark-hub");
     fs::create_dir_all(&config_path)?;
     let config_file = config_path.join("auth.json");
-    let auth_response = login(&args.url, &args.email, &args.password)
+    let auth_response = login(&args.url, &args.username, &args.password)
         .await
         .context("Failed to login")?;
     let stored = StoredAuth {
@@ -137,7 +137,7 @@ async fn login(base_url: &Url, email: &str, password: &str) -> anyhow::Result<Si
     let endpoint = base_url.join("/api/v1/auth/sign-in")?;
     let client = Client::new();
     let payload = serde_json::json!({
-        "email": email,
+        "username": email,
         "password": password,
     });
     let response = client
