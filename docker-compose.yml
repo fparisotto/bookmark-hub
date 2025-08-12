@@ -41,7 +41,7 @@ services:
     volumes:
       - postgres-data:/data/postgres
   ollama:
-    image: ollama/ollama:0.9.5
+    image: ollama/ollama:0.11.4
     container_name: ollama
     ports:
       - 11435:11434
