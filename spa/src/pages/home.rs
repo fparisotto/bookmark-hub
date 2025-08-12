@@ -75,6 +75,33 @@ pub fn home(props: &Props) -> Html {
 
     let state_handle = use_state(HomeState::default);
 
+    // Trigger initial search on component mount
+    {
+        let state_handle = state_handle.clone();
+        let token = token.clone();
+        use_effect_with((), move |_| {
+            let state_handle = state_handle.clone();
+            let token = token.clone();
+            spawn_local(async move {
+                let state = (*state_handle).clone();
+                // Create an empty search request (no query, no filters)
+                let search_request: SearchRequest = state.into();
+                match search_api::search(&token, search_request).await {
+                    Ok(result) => {
+                        log::info!("Initial search loaded, items count={}", result.items.len());
+                        let mut state = (*state_handle).clone();
+                        state.items = result.items;
+                        state.tags = result.tags;
+                        state_handle.set(state);
+                    }
+                    Err(error) => {
+                        log::warn!("Failed to load initial bookmarks, error: {error}");
+                    }
+                }
+            });
+        });
+    }
+
     let on_new_bookmark = {
         let token = token.clone();
         Callback::from(move |event: AddBookmarkData| {
