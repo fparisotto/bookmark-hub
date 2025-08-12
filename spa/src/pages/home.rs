@@ -11,6 +11,7 @@ use crate::{
         bookmark_reader::BookmarkReader,
         main_search_result::SearchResult,
         navigation_bar::NavigationBar,
+        pagination_controls::PaginationControls,
         search_bar::{SearchBar, SearchInputSubmit},
         tags_filter::{TagCheckedEvent, TagsFilter},
         tasks_filter::TasksFilter,
@@ -29,6 +30,7 @@ pub struct HomeState {
     pub new_bookmark_url: String,
     pub new_bookmark_tags: Vec<String>,
     pub bookmark_tasks_response: Option<BookmarkTaskSearchResponse>,
+    pub bookmark_tasks_request: BookmarkTaskSearchRequest,
     pub page: Page,
 }
 
@@ -212,28 +214,121 @@ pub fn home(props: &Props) -> Html {
         })
     };
 
+    // Pagination tracking state - keep track of all page cursors
+    let page_cursors_handle = use_state(|| vec![None::<uuid::Uuid>]);
+    let current_page_handle = use_state(|| 1usize);
+
     let on_task_filter_submit = {
         let state_handle = state_handle.clone();
         let token = token.clone();
+        let page_cursors_handle = page_cursors_handle.clone();
+        let current_page_handle = current_page_handle.clone();
         Callback::from(move |event: BookmarkTaskSearchRequest| {
             let token = token.clone();
             let state_handle = state_handle.clone();
+            let page_cursors_handle = page_cursors_handle.clone();
+            let current_page_handle = current_page_handle.clone();
+
+            // Reset pagination state when new filter is applied
+            page_cursors_handle.set(vec![None]);
+            current_page_handle.set(1);
+
             spawn_local(async move {
+                let mut state = (*state_handle).clone();
+                // Store the request for pagination
+                state.bookmark_tasks_request = event.clone();
                 match bookmark_tasks_api::search_tasks(&token, event).await {
                     Ok(response) => {
-                        let mut state = (*state_handle).clone();
                         state.bookmark_tasks_response = Some(response);
                         state_handle.set(state);
                     }
                     Err(error) => {
                         // FIXME: notify user
                         log::error!("Fail to search tasks error={error}",);
-                        let mut state = (*state_handle).clone();
                         state.bookmark_tasks_response = None;
                         state_handle.set(state);
                     }
                 }
             });
+        })
+    };
+
+    let on_previous_page = {
+        let state_handle = state_handle.clone();
+        let token = token.clone();
+        let page_cursors_handle = page_cursors_handle.clone();
+        let current_page_handle = current_page_handle.clone();
+        Callback::from(move |_| {
+            let token = token.clone();
+            let state_handle = state_handle.clone();
+            let page_cursors_handle = page_cursors_handle.clone();
+            let current_page_handle = current_page_handle.clone();
+            let current_page = *current_page_handle;
+            if current_page > 1 {
+                let new_page = current_page - 1;
+                current_page_handle.set(new_page);
+                let cursor = page_cursors_handle[new_page - 1];
+                spawn_local(async move {
+                    let state = (*state_handle).clone();
+                    let mut request = state.bookmark_tasks_request.clone();
+                    request.last_task_id = cursor;
+                    match bookmark_tasks_api::search_tasks(&token, request).await {
+                        Ok(response) => {
+                            let mut state = (*state_handle).clone();
+                            state.bookmark_tasks_response = Some(response);
+                            state_handle.set(state);
+                        }
+                        Err(error) => {
+                            log::error!("Fail to load previous page, error={error}");
+                        }
+                    }
+                });
+            }
+        })
+    };
+
+    let on_next_page = {
+        let state_handle = state_handle.clone();
+        let token = token.clone();
+        let page_cursors_handle = page_cursors_handle.clone();
+        let current_page_handle = current_page_handle.clone();
+        Callback::from(move |_| {
+            let token = token.clone();
+            let state_handle = state_handle.clone();
+            let page_cursors_handle = page_cursors_handle.clone();
+            let current_page_handle = current_page_handle.clone();
+            let state = (*state_handle).clone();
+            if let Some(response) = &state.bookmark_tasks_response {
+                if response.has_more && !response.tasks.is_empty() {
+                    let last_task = response.tasks.last().unwrap();
+                    let cursor = Some(last_task.task_id);
+
+                    // Add new cursor to the list if needed
+                    let mut cursors = (*page_cursors_handle).clone();
+                    let current_page = *current_page_handle;
+                    if cursors.len() == current_page {
+                        cursors.push(cursor);
+                        page_cursors_handle.set(cursors);
+                    }
+
+                    current_page_handle.set(current_page + 1);
+
+                    spawn_local(async move {
+                        let mut request = state.bookmark_tasks_request.clone();
+                        request.last_task_id = cursor;
+                        match bookmark_tasks_api::search_tasks(&token, request).await {
+                            Ok(response) => {
+                                let mut state = (*state_handle).clone();
+                                state.bookmark_tasks_response = Some(response);
+                                state_handle.set(state);
+                            }
+                            Err(error) => {
+                                log::error!("Fail to load next page, error={error}");
+                            }
+                        }
+                    });
+                }
+            }
         })
     };
 
@@ -258,10 +353,30 @@ pub fn home(props: &Props) -> Html {
             }
         }
         Page::Tasks => {
+            let pagination_controls = if let Some(response) = &state_handle.bookmark_tasks_response
+            {
+                let page_size =
+                    state_handle.bookmark_tasks_request.page_size.unwrap_or(25) as usize;
+                html! {
+                    <PaginationControls
+                        has_more={response.has_more}
+                        on_previous={on_previous_page}
+                        on_next={on_next_page}
+                        current_page={*current_page_handle}
+                        page_size={page_size}
+                        current_count={response.tasks.len()} />
+                }
+            } else {
+                html! {}
+            };
+
             html! {
                 <>
                     <TasksFilter on_submit={on_task_filter_submit} />
                     <TasksTable response={state_handle.bookmark_tasks_response.clone()} />
+                    <div class="mt-3">
+                        {pagination_controls}
+                    </div>
                 </>
             }
         }
