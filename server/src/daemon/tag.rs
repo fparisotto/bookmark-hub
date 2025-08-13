@@ -4,11 +4,10 @@ use anyhow::{Context, Result};
 use shared::Bookmark;
 use url::Url;
 
+use super::{DAEMON_IDLE_SLEEP, TOKENIZER_WINDOW_OVERLAP, TOKENIZER_WINDOW_SIZE};
 use crate::db::bookmark::{get_text_content, get_untagged_bookmarks, update_tags};
 use crate::db::PgPool;
 use crate::{ollama, tokenizer};
-
-use super::{DAEMON_IDLE_SLEEP, TOKENIZER_WINDOW_OVERLAP, TOKENIZER_WINDOW_SIZE};
 
 const QUERY_LIMIT: usize = 10;
 

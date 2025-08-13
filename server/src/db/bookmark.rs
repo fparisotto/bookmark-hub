@@ -6,9 +6,8 @@ use shared::{Bookmark, TagOperation};
 use tracing::debug;
 use uuid::Uuid;
 
-use crate::error::{Error, Result};
-
 use super::PgPool;
+use crate::error::{Error, Result};
 
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 struct RowBookmark {

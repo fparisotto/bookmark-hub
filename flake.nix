@@ -26,6 +26,9 @@
         };
         craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchainFor;
 
+        # Add nightly rustfmt for formatting with unstable features
+        nightlyRustfmt = pkgs.rust-bin.nightly.latest.rustfmt;
+
         unfilteredRoot = ./.;
 
         src = lib.fileset.toSource {
@@ -162,11 +165,17 @@
 
           SPA_DIST = "spa/dist";
 
+          # Override rustfmt to use nightly version
+          shellHook = ''
+            export PATH="${nightlyRustfmt}/bin:$PATH"
+          '';
+
           packages = [
             pkgs.hurl
             pkgs.just
             pkgs.trunk
             pkgs.rust-analyzer
+            nightlyRustfmt
           ];
         };
       });

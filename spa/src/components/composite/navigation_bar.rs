@@ -7,6 +7,7 @@ pub struct Props {
     pub username: String,
     pub active_page: Page,
     pub on_page_change: Callback<Page>,
+    pub on_logout: Callback<()>,
 }
 
 #[function_component(NavigationBar)]
@@ -22,6 +23,13 @@ pub fn navigation_bar(props: &Props) -> Html {
         let on_page_change = props.on_page_change.clone();
         Callback::from(move |_| {
             on_page_change.emit(Page::Tasks);
+        })
+    };
+
+    let on_logout_click = {
+        let on_logout = props.on_logout.clone();
+        Callback::from(move |_| {
+            on_logout.emit(());
         })
     };
 
@@ -52,7 +60,10 @@ pub fn navigation_bar(props: &Props) -> Html {
                     <button class="btn btn-sm me-2 btn-outline-primary" data-bs-toggle="modal" data-bs-target="#add-bookmark-modal">
                         {"+ Bookmark"}
                     </button>
-                    <span class="navbar-text">{&props.username}</span>
+                    <span class="navbar-text me-3">{&props.username}</span>
+                    <button onclick={on_logout_click} class="btn btn-sm btn-outline-secondary">
+                        {"Logout"}
+                    </button>
                 </div>
             </div>
         </nav>

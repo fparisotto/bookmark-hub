@@ -9,9 +9,8 @@ use shared::{
 use url::Url;
 use uuid::Uuid;
 
-use crate::error::{self, Error, Result};
-
 use super::PgPool;
+use crate::error::{self, Error, Result};
 
 const NEXT_DELIVERY_WINDOW: Duration = Duration::minutes(5);
 
@@ -206,15 +205,18 @@ pub async fn search(
         String::new()
     };
 
-    let page_size = request.page_size.unwrap_or(25);
+    let page_size = request.page_size.unwrap_or(25) as usize;
     // Order by task_id for stable pagination using `last_task_id`
+    // Fetch one extra row to determine if there are more results
     let sql = format!(
-        "SELECT * FROM bookmark_task bt {filter_clause} ORDER BY bt.task_id ASC LIMIT {page_size}"
+        "SELECT * FROM bookmark_task bt {filter_clause} ORDER BY bt.task_id ASC LIMIT {}",
+        page_size + 1
     );
 
     let client = pool.get().await?;
     let rows = client.query(&sql, &params).await?;
-    let tasks = rows
+
+    let mut tasks = rows
         .iter()
         .map(|row| {
             RowBookmarkTask::try_from_row(row)
@@ -223,5 +225,16 @@ pub async fn search(
         })
         .collect::<Result<Vec<_>>>()?;
 
-    Ok(BookmarkTaskSearchResponse { tasks })
+    // Check if we have more results
+    let has_more = tasks.len() > page_size;
+    if has_more {
+        // Remove the extra row
+        tasks.truncate(page_size);
+    }
+
+    Ok(BookmarkTaskSearchResponse {
+        tasks,
+        has_more,
+        total_count: None, // Could add a COUNT query if needed
+    })
 }

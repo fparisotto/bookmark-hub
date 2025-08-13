@@ -1,6 +1,7 @@
-use crate::components::atoms::input_text::{InputText, InputType};
 use shared::NewBookmarkRequest;
 use yew::prelude::*;
+
+use crate::components::atoms::input_text::{InputText, InputType};
 
 #[derive(Debug, PartialEq, Default, Clone)]
 pub struct AddBookmarkData {

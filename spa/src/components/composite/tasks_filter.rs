@@ -17,6 +17,7 @@ pub struct Props {
 pub fn tasks_filter(props: &Props) -> Html {
     let state_handle = use_state(|| BookmarkTaskSearchRequest {
         status: Some(Default::default()),
+        page_size: Some(25),
         ..Default::default()
     });
 
@@ -106,6 +107,27 @@ pub fn tasks_filter(props: &Props) -> Html {
         })
     };
 
+    let on_page_size_change = {
+        let state_handle = state_handle.clone();
+        Callback::from(move |text: String| {
+            let mut state = (*state_handle).clone();
+            if let Ok(page_size) = text.parse::<u8>() {
+                state.page_size = Some(page_size);
+                // Reset pagination when page size changes
+                state.last_task_id = None;
+            }
+            state_handle.set(state);
+        })
+    };
+
+    let page_size_options: Vec<String> = vec![
+        "10".to_string(),
+        "25".to_string(),
+        "50".to_string(),
+        "100".to_string(),
+    ];
+    let selected_page_size = state_handle.page_size.unwrap_or(25).to_string();
+
     html! {
         <form class="row g-3 align-items-end mb-4" onsubmit={on_submit}>
           <div class="col-md-1">
@@ -139,7 +161,7 @@ pub fn tasks_filter(props: &Props) -> Html {
                 class="form-control form-control-sm" />
           </div>
 
-          <div class="col-md-3">
+          <div class="col-md-2">
             <label for="url_search" class="form-label mb-1">{"URL"}</label>
             <InputText
                 id="url_search"
@@ -151,7 +173,7 @@ pub fn tasks_filter(props: &Props) -> Html {
                 value={state_handle.url.clone()} />
           </div>
 
-          <div class="col-md-3">
+          <div class="col-md-2">
             <label for="tags_search" class="form-label mb-1">{"Tags"}</label>
             <InputText
                 id="tags_search"
@@ -161,6 +183,17 @@ pub fn tasks_filter(props: &Props) -> Html {
                 input_type={InputType::Text}
                 on_change={on_tag_change}
                 value={tags_as_string} />
+          </div>
+
+          <div class="col-md-1">
+            <label for="page_size" class="form-label mb-1">{"Page Size"}</label>
+            <Select
+                id="page_size"
+                name="page_size"
+                class="form-select form-select-sm"
+                options={page_size_options}
+                selected={Some(selected_page_size)}
+                on_change={on_page_size_change} />
           </div>
 
           <div class="col-md-1">

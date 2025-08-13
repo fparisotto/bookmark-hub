@@ -1,14 +1,9 @@
 use anyhow::bail;
-use ollama_rs::{
-    generation::{
-        completion::request::GenerationRequest,
-        embeddings::request::{EmbeddingsInput, GenerateEmbeddingsRequest},
-        parameters::{FormatType, JsonSchema, JsonStructure},
-    },
-    Ollama,
-};
+use ollama_rs::generation::completion::request::GenerationRequest;
+use ollama_rs::generation::embeddings::request::{EmbeddingsInput, GenerateEmbeddingsRequest};
+use ollama_rs::generation::parameters::{FormatType, JsonSchema, JsonStructure};
+use ollama_rs::Ollama;
 use serde::Deserialize;
-
 use url::Url;
 
 #[derive(JsonSchema, Deserialize)]

@@ -111,6 +111,7 @@ pub struct SearchRequest {
     pub query: Option<String>,
     pub tags_filter: Option<TagFilter>,
     pub limit: Option<i32>,
+    pub offset: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -181,7 +182,7 @@ pub struct BookmarkTask {
     pub fail_reason: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct BookmarkTaskSearchRequest {
     pub url: Option<String>,
     pub status: Option<BookmarkTaskStatus>,
@@ -195,4 +196,6 @@ pub struct BookmarkTaskSearchRequest {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BookmarkTaskSearchResponse {
     pub tasks: Vec<BookmarkTask>,
+    pub has_more: bool,
+    pub total_count: Option<usize>,
 }

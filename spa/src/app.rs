@@ -2,12 +2,10 @@ use yew::platform::spawn_local;
 use yew::prelude::*;
 use yew_hooks::prelude::*;
 
-use crate::{
-    api::auth_api,
-    components::composite::login_form::{LoginForm, LoginFormData},
-    pages::home::Home,
-    user_session::UserSession,
-};
+use crate::api::auth_api;
+use crate::components::composite::login_form::{LoginForm, LoginFormData};
+use crate::pages::home::Home;
+use crate::user_session::UserSession;
 
 #[function_component(App)]
 pub fn app() -> Html {
@@ -74,9 +72,20 @@ pub fn app() -> Html {
         })
     };
 
+    let on_logout = {
+        let storage = storage.clone();
+        let logged = logged.clone();
+        Callback::from(move |_| {
+            log::info!("User logged out");
+            storage.delete();
+            logged.set(false);
+        })
+    };
+
     html! {
         if *logged {
-            <Home user_session={storage.as_ref().expect("if logged is true, user session is some").clone()} />
+            <Home user_session={storage.as_ref().expect("if logged is true, user session is some").clone()}
+                  on_logout={on_logout} />
         } else {
             <main>
                 <LoginForm on_login={on_login_event}/>

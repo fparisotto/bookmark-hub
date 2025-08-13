@@ -1,6 +1,9 @@
+use std::net::SocketAddr;
+use std::path::PathBuf;
+use std::sync::Arc;
+
 use clap::{Args, Parser};
 use secrecy::SecretString;
-use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use url::Url;
 
 use self::db::PgPool;

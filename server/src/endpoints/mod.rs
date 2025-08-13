@@ -1,21 +1,18 @@
-use crate::{
-    db,
-    error::{Error, Result},
-    AppContext, Config,
-};
 use argon2::password_hash::SaltString;
 use argon2::{Argon2, PasswordHash};
-use axum::{extract::FromRequestParts, http::request::Parts, RequestPartsExt};
-use axum::{routing, Extension, Json, Router};
-use axum_extra::{
-    headers::{authorization::Bearer, Authorization},
-    TypedHeader,
-};
-use jsonwebtoken::{decode, encode, Header, Validation};
-use jsonwebtoken::{DecodingKey, EncodingKey};
+use axum::extract::FromRequestParts;
+use axum::http::request::Parts;
+use axum::{routing, Extension, Json, RequestPartsExt, Router};
+use axum_extra::headers::authorization::Bearer;
+use axum_extra::headers::Authorization;
+use axum_extra::TypedHeader;
+use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+
+use crate::error::{Error, Result};
+use crate::{db, AppContext, Config};
 
 mod auth;
 mod bookmark;
