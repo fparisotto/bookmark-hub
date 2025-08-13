@@ -165,6 +165,11 @@
 
           SPA_DIST = "spa/dist";
 
+          # Override rustfmt to use nightly version
+          shellHook = ''
+            export PATH="${nightlyRustfmt}/bin:$PATH"
+          '';
+
           packages = [
             pkgs.hurl
             pkgs.just
