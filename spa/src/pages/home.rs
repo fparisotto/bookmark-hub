@@ -313,8 +313,7 @@ pub fn home(props: &Props) -> Html {
             let state_handle = state_handle.clone();
             let token = token.clone();
             let state = (*state_handle).clone();
-            let total_pages =
-                (state.total_results as usize + state.page_size - 1) / state.page_size;
+            let total_pages = (state.total_results as usize).div_ceil(state.page_size);
             if state.current_search_page < total_pages {
                 spawn_local(async move {
                     let mut state = (*state_handle).clone();
