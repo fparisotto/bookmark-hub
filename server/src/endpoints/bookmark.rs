@@ -1,20 +1,18 @@
 use axum::extract::Path;
 use axum::http::StatusCode;
-use axum::Json;
-use axum::{routing::get, routing::post, Extension, Router};
+use axum::routing::{get, post};
+use axum::{Extension, Json, Router};
 use axum_macros::debug_handler;
 use shared::{
     Bookmark, BookmarkTask, Bookmarks, NewBookmark, TagCount, TagOperation, Tags, TagsWithCounters,
 };
 use tracing::error;
 
-use crate::db::bookmark;
-use crate::db::bookmark_task;
+use super::Claim;
+use crate::db::{bookmark, bookmark_task};
 use crate::endpoints::Error;
 use crate::error::Result;
 use crate::AppContext;
-
-use super::Claim;
 
 pub fn routes() -> Router {
     Router::new()

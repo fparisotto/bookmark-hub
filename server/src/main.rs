@@ -1,20 +1,22 @@
+use std::future::pending;
+use std::io;
+use std::sync::Arc;
+
 use anyhow::bail;
 use axum::{Extension, Router};
 use axum_otel_metrics::HttpMetricsLayerBuilder;
 use clap::Parser;
 use server::db::PgPool;
 use server::{daemon, db, endpoints, AppContext, Config};
-use std::future::pending;
-use std::io;
-use std::sync::Arc;
 use tokio::signal::unix::SignalKind;
 use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 use tracing::level_filters::LevelFilter;
 use tracing::warn;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

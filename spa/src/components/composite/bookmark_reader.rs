@@ -1,15 +1,12 @@
-use crate::{
-    api::bookmarks_api,
-    components::atoms::{
-        input_text::{InputText, InputType},
-        safe_html::ArticleHtml,
-    },
-    user_session::UserSession,
-};
 use log::warn;
 use shared::Bookmark;
 use yew::platform::spawn_local;
 use yew::prelude::*;
+
+use crate::api::bookmarks_api;
+use crate::components::atoms::input_text::{InputText, InputType};
+use crate::components::atoms::safe_html::ArticleHtml;
+use crate::user_session::UserSession;
 
 #[derive(Debug, Clone, PartialEq, Properties)]
 pub struct Props {

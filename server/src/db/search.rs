@@ -9,9 +9,8 @@ use tokio::try_join;
 use tracing::{debug, warn};
 use uuid::Uuid;
 
-use crate::error::{Error, Result};
-
 use super::PgPool;
+use crate::error::{Error, Result};
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
 struct RowTagCount {

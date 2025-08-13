@@ -4,9 +4,8 @@ use postgres_from_row::FromRow;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::db::{Error, Result, ResultExt};
-
 use super::PgPool;
+use crate::db::{Error, Result, ResultExt};
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct User {

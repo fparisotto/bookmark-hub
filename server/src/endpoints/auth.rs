@@ -1,14 +1,14 @@
-use axum::{routing::get, routing::post, Extension, Json, Router};
+use axum::routing::{get, post};
+use axum::{Extension, Json, Router};
 use axum_macros::debug_handler;
 use chrono::{Duration, Utc};
 use secrecy::ExposeSecret;
 use shared::{SignInRequest, SignInResponse, SignUpRequest, SignUpResponse, UserProfile};
 
+use super::Claim;
 use crate::db::user;
 use crate::error::{Error, Result};
 use crate::AppContext;
-
-use super::Claim;
 
 fn validate_signup(payload: &SignUpRequest) -> Result<()> {
     let mut errors: Vec<(&'static str, &'static str)> = Vec::new();

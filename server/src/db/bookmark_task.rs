@@ -9,9 +9,8 @@ use shared::{
 use url::Url;
 use uuid::Uuid;
 
-use crate::error::{self, Error, Result};
-
 use super::PgPool;
+use crate::error::{self, Error, Result};
 
 const NEXT_DELIVERY_WINDOW: Duration = Duration::minutes(5);
 

@@ -1,14 +1,13 @@
-use axum::Json;
-use axum::{routing::post, Extension, Router};
+use axum::routing::post;
+use axum::{Extension, Json, Router};
 use axum_macros::debug_handler;
 use shared::{BookmarkTaskSearchRequest, BookmarkTaskSearchResponse};
 use tracing::info;
 
+use super::Claim;
 use crate::db::bookmark_task::search;
 use crate::error::Result;
 use crate::AppContext;
-
-use super::Claim;
 
 pub fn routes() -> Router {
     Router::new().route("/tasks", post(search_tasks))

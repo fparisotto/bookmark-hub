@@ -2,23 +2,20 @@ use shared::{
     Bookmark, BookmarkTaskSearchRequest, BookmarkTaskSearchResponse, SearchRequest,
     SearchResultItem, TagCount, TagFilter,
 };
-use yew::{platform::spawn_local, prelude::*};
+use yew::platform::spawn_local;
+use yew::prelude::*;
 
-use crate::{
-    api::{bookmark_tasks_api, bookmarks_api, search_api},
-    components::composite::{
-        add_bookmark_modal::{AddBookmarkData, AddBookmarkModal},
-        bookmark_reader::BookmarkReader,
-        main_search_result::SearchResult,
-        navigation_bar::NavigationBar,
-        pagination_controls::PaginationControls,
-        search_bar::{SearchBar, SearchInputSubmit},
-        tags_filter::{TagCheckedEvent, TagsFilter},
-        tasks_filter::TasksFilter,
-        tasks_table::TasksTable,
-    },
-    user_session::UserSession,
-};
+use crate::api::{bookmark_tasks_api, bookmarks_api, search_api};
+use crate::components::composite::add_bookmark_modal::{AddBookmarkData, AddBookmarkModal};
+use crate::components::composite::bookmark_reader::BookmarkReader;
+use crate::components::composite::main_search_result::SearchResult;
+use crate::components::composite::navigation_bar::NavigationBar;
+use crate::components::composite::pagination_controls::PaginationControls;
+use crate::components::composite::search_bar::{SearchBar, SearchInputSubmit};
+use crate::components::composite::tags_filter::{TagCheckedEvent, TagsFilter};
+use crate::components::composite::tasks_filter::TasksFilter;
+use crate::components::composite::tasks_table::TasksTable;
+use crate::user_session::UserSession;
 
 #[derive(Clone, PartialEq, Default, Debug)]
 pub struct HomeState {
@@ -172,13 +169,15 @@ pub fn home(props: &Props) -> Html {
                 TagCheckedEvent::Checked(tag) => {
                     if !state.tags_filter.contains(&tag.tag) {
                         state.tags_filter.push(tag.tag);
-                        state.current_search_page = 1; // Reset to first page on filter change
+                        state.current_search_page = 1; // Reset to first page on
+                                                       // filter change
                     }
                 }
                 TagCheckedEvent::Unchecked(tag) => {
                     if let Some(index_of) = state.tags_filter.iter().position(|e| e == &tag.tag) {
                         state.tags_filter.remove(index_of);
-                        state.current_search_page = 1; // Reset to first page on filter change
+                        state.current_search_page = 1; // Reset to first page on
+                                                       // filter change
                     }
                 }
             }

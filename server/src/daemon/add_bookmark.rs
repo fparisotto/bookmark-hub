@@ -1,19 +1,17 @@
+use std::collections::HashMap;
+
 use anyhow::{Context, Result};
 use chrono::Utc;
 use futures::future::join_all;
 use lol_html::{element, rewrite_str, RewriteStrSettings};
-use reqwest::Client;
-use reqwest::Client as HttpClient;
+use reqwest::{Client, Client as HttpClient};
 use shared::{Bookmark, BookmarkTask, BookmarkTaskStatus};
-use std::collections::HashMap;
 use url::Url;
 use uuid::Uuid;
 
-use crate::db::{self, PgPool};
-use crate::readability;
-use crate::Config;
-
 use super::DAEMON_IDLE_SLEEP;
+use crate::db::{self, PgPool};
+use crate::{readability, Config};
 
 const TASK_MAX_RETRIES: i16 = 5;
 
