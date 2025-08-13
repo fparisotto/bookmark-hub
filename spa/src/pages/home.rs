@@ -32,6 +32,9 @@ pub struct HomeState {
     pub bookmark_tasks_response: Option<BookmarkTaskSearchResponse>,
     pub bookmark_tasks_request: BookmarkTaskSearchRequest,
     pub page: Page,
+    pub current_search_page: usize,
+    pub page_size: usize,
+    pub total_results: u64,
 }
 
 #[derive(Clone, PartialEq, Default, Debug)]
@@ -56,10 +59,16 @@ impl From<HomeState> for SearchRequest {
         } else {
             Some(TagFilter::Or(value.tags_filter))
         };
+        let offset = if value.current_search_page > 1 {
+            Some(((value.current_search_page - 1) * value.page_size) as i32)
+        } else {
+            None
+        };
         SearchRequest {
             query,
             tags_filter,
-            limit: Some(20),
+            limit: Some(value.page_size as i32),
+            offset,
         }
     }
 }
@@ -73,7 +82,11 @@ pub struct Props {
 pub fn home(props: &Props) -> Html {
     let token = props.user_session.token.clone();
 
-    let state_handle = use_state(HomeState::default);
+    let state_handle = use_state(|| HomeState {
+        page_size: 20,
+        current_search_page: 1,
+        ..Default::default()
+    });
 
     // Trigger initial search on component mount
     {
@@ -92,6 +105,7 @@ pub fn home(props: &Props) -> Html {
                         let mut state = (*state_handle).clone();
                         state.items = result.items;
                         state.tags = result.tags;
+                        state.total_results = result.total;
                         state_handle.set(state);
                     }
                     Err(error) => {
@@ -128,11 +142,13 @@ pub fn home(props: &Props) -> Html {
             spawn_local(async move {
                 let mut state = (*state_handle).clone();
                 state.search_input = event.input.clone();
+                state.current_search_page = 1; // Reset to first page on new search
                 match search_api::search(&token, state.clone().into()).await {
                     Ok(result) => {
                         log::info!("result={result:?}");
                         state.items = result.items;
                         state.tags = result.tags;
+                        state.total_results = result.total;
                         state_handle.set(state);
                     }
                     Err(error) => {
@@ -146,22 +162,42 @@ pub fn home(props: &Props) -> Html {
 
     let on_tag_checked = {
         let state_handle = state_handle.clone();
-        Callback::from(move |event: TagCheckedEvent| match event {
-            TagCheckedEvent::Checked(tag) => {
-                if !state_handle.tags_filter.contains(&tag.tag) {
-                    let mut state = (*state_handle).clone();
-                    state.tags_filter.push(tag.tag);
-                    state_handle.set(state);
+        let token = token.clone();
+        Callback::from(move |event: TagCheckedEvent| {
+            let state_handle = state_handle.clone();
+            let token = token.clone();
+            let mut state = (*state_handle).clone();
+            match event {
+                TagCheckedEvent::Checked(tag) => {
+                    if !state.tags_filter.contains(&tag.tag) {
+                        state.tags_filter.push(tag.tag);
+                        state.current_search_page = 1; // Reset to first page on filter change
+                    }
+                }
+                TagCheckedEvent::Unchecked(tag) => {
+                    if let Some(index_of) = state.tags_filter.iter().position(|e| e == &tag.tag) {
+                        state.tags_filter.remove(index_of);
+                        state.current_search_page = 1; // Reset to first page on filter change
+                    }
                 }
             }
-            TagCheckedEvent::Unchecked(tag) => {
-                if let Some(index_of) = state_handle.tags_filter.iter().position(|e| e == &tag.tag)
-                {
-                    let mut state = (*state_handle).clone();
-                    state.tags_filter.remove(index_of);
-                    state_handle.set(state);
+            let state_clone = state.clone();
+            state_handle.set(state);
+            // Trigger search with new filters
+            spawn_local(async move {
+                match search_api::search(&token, state_clone.into()).await {
+                    Ok(result) => {
+                        let mut state = (*state_handle).clone();
+                        state.items = result.items;
+                        state.tags = result.tags;
+                        state.total_results = result.total;
+                        state_handle.set(state);
+                    }
+                    Err(error) => {
+                        log::warn!("Fail to search bookmarks with new filter, error: {error}");
+                    }
                 }
-            }
+            });
         })
     };
 
@@ -238,6 +274,63 @@ pub fn home(props: &Props) -> Html {
             let mut state = (*state_handle).clone();
             state.page = event;
             state_handle.set(state);
+        })
+    };
+
+    // Pagination callbacks for search page
+    let on_search_previous_page = {
+        let state_handle = state_handle.clone();
+        let token = token.clone();
+        Callback::from(move |_| {
+            let state_handle = state_handle.clone();
+            let token = token.clone();
+            let current_page = state_handle.current_search_page;
+            if current_page > 1 {
+                spawn_local(async move {
+                    let mut state = (*state_handle).clone();
+                    state.current_search_page = current_page - 1;
+                    match search_api::search(&token, state.clone().into()).await {
+                        Ok(result) => {
+                            state.items = result.items;
+                            state.tags = result.tags;
+                            state.total_results = result.total;
+                            state_handle.set(state);
+                        }
+                        Err(error) => {
+                            log::error!("Fail to load previous page, error={error}");
+                        }
+                    }
+                });
+            }
+        })
+    };
+
+    let on_search_next_page = {
+        let state_handle = state_handle.clone();
+        let token = token.clone();
+        Callback::from(move |_| {
+            let state_handle = state_handle.clone();
+            let token = token.clone();
+            let state = (*state_handle).clone();
+            let total_pages =
+                (state.total_results as usize + state.page_size - 1) / state.page_size;
+            if state.current_search_page < total_pages {
+                spawn_local(async move {
+                    let mut state = (*state_handle).clone();
+                    state.current_search_page += 1;
+                    match search_api::search(&token, state.clone().into()).await {
+                        Ok(result) => {
+                            state.items = result.items;
+                            state.tags = result.tags;
+                            state.total_results = result.total;
+                            state_handle.set(state);
+                        }
+                        Err(error) => {
+                            log::error!("Fail to load next page, error={error}");
+                        }
+                    }
+                });
+            }
         })
     };
 
@@ -361,11 +454,22 @@ pub fn home(props: &Props) -> Html {
 
     let content = match &state_handle.page {
         Page::Search => {
+            let has_more = state_handle.current_search_page * state_handle.page_size
+                < state_handle.total_results as usize;
             html! {
                 <>
                     <SearchBar on_submit={on_search_submit} />
                     <TagsFilter tags={state_handle.tags.clone()} on_tag_checked={on_tag_checked} />
                     <SearchResult on_item_selected={on_item_selected} results={state_handle.items.clone()} />
+                    <div class="mt-3">
+                        <PaginationControls
+                            has_more={has_more}
+                            on_previous={on_search_previous_page}
+                            on_next={on_search_next_page}
+                            current_page={state_handle.current_search_page}
+                            page_size={state_handle.page_size}
+                            current_count={state_handle.items.len()} />
+                    </div>
                     <AddBookmarkModal on_submit={on_new_bookmark} />
                 </>
             }

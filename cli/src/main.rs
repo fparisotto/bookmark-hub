@@ -7,7 +7,7 @@ use std::fs;
 use std::path::PathBuf;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::prelude::*;
-use tracing_subscriber::{EnvFilter, fmt};
+use tracing_subscriber::{fmt, EnvFilter};
 use url::Url;
 
 #[derive(Debug, Clone, Parser)]

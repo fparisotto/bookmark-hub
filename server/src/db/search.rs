@@ -251,8 +251,13 @@ async fn run_search(
 
     let filter_clause = format!("WHERE {}", filters.join(" AND "));
     let limit_clause = format!("LIMIT {}", request.limit.unwrap_or(20));
+    let offset_clause = if let Some(offset) = request.offset {
+        format!("OFFSET {}", offset)
+    } else {
+        String::new()
+    };
     let sql = format!(
-        "SELECT {select_clause} FROM bookmark b {filter_clause} {order_by_clause} {limit_clause}"
+        "SELECT {select_clause} FROM bookmark b {filter_clause} {order_by_clause} {limit_clause} {offset_clause}"
     );
 
     debug!(?sql, "Search query");

@@ -111,6 +111,7 @@ pub struct SearchRequest {
     pub query: Option<String>,
     pub tags_filter: Option<TagFilter>,
     pub limit: Option<i32>,
+    pub offset: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
