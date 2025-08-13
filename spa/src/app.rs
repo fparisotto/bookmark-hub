@@ -74,9 +74,20 @@ pub fn app() -> Html {
         })
     };
 
+    let on_logout = {
+        let storage = storage.clone();
+        let logged = logged.clone();
+        Callback::from(move |_| {
+            log::info!("User logged out");
+            storage.delete();
+            logged.set(false);
+        })
+    };
+
     html! {
         if *logged {
-            <Home user_session={storage.as_ref().expect("if logged is true, user session is some").clone()} />
+            <Home user_session={storage.as_ref().expect("if logged is true, user session is some").clone()}
+                  on_logout={on_logout} />
         } else {
             <main>
                 <LoginForm on_login={on_login_event}/>

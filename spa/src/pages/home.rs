@@ -76,6 +76,7 @@ impl From<HomeState> for SearchRequest {
 #[derive(Debug, Clone, PartialEq, Properties)]
 pub struct Props {
     pub user_session: UserSession,
+    pub on_logout: Callback<()>,
 }
 
 #[function_component(Home)]
@@ -517,7 +518,8 @@ pub fn home(props: &Props) -> Html {
         <>
             <NavigationBar username={props.user_session.username.clone()}
                 active_page={state_handle.page.clone()}
-                on_page_change={on_page_change} />
+                on_page_change={on_page_change}
+                on_logout={props.on_logout.clone()} />
             <div class="container mt-5">
                 {content}
             </div>
