@@ -1,10 +1,10 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 
-use axum::Json;
 use axum::http::header::WWW_AUTHENTICATE;
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
+use axum::Json;
 use tracing::{debug, error, warn};
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;

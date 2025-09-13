@@ -1,7 +1,7 @@
 use std::io::Cursor;
 use std::time::Duration;
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{anyhow, bail, Result};
 use murmur3::murmur3_x64_128;
 use tracing::info;
 use url::Url;

@@ -6,8 +6,8 @@ use tracing::{debug, error, info};
 use url::Url;
 
 use super::{DAEMON_IDLE_SLEEP, TOKENIZER_WINDOW_OVERLAP, TOKENIZER_WINDOW_SIZE};
-use crate::db::PgPool;
 use crate::db::bookmark::{get_text_content, get_untagged_bookmarks, update_tags};
+use crate::db::PgPool;
 use crate::{ollama, tokenizer};
 
 const QUERY_LIMIT: usize = 10;

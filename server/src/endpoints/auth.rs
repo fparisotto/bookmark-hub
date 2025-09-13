@@ -7,9 +7,9 @@ use shared::{SignInRequest, SignInResponse, SignUpRequest, SignUpResponse, UserP
 use tracing::{debug, error, info, warn};
 
 use super::Claim;
-use crate::AppContext;
 use crate::db::user;
 use crate::error::{Error, Result};
+use crate::AppContext;
 
 fn validate_signup(payload: &SignUpRequest) -> Result<()> {
     let mut errors: Vec<(&'static str, &'static str)> = Vec::new();

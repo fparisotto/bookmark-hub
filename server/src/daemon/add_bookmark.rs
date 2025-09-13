@@ -6,7 +6,7 @@ use chrono::Utc;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use futures::future::join_all;
-use lol_html::{RewriteStrSettings, element, rewrite_str};
+use lol_html::{element, rewrite_str, RewriteStrSettings};
 use reqwest::{Client, Client as HttpClient};
 use shared::{Bookmark, BookmarkTask, BookmarkTaskStatus};
 use tracing::{debug, error, info, warn};
@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use super::DAEMON_IDLE_SLEEP;
 use crate::db::{self, PgPool};
-use crate::{Config, readability};
+use crate::{readability, Config};
 
 const TASK_MAX_RETRIES: i16 = 5;
 
