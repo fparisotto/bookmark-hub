@@ -29,19 +29,18 @@ fn render_tag(on_tag_checked: Callback<TagCheckedEvent>, tag: TagCount) -> Html 
     };
 
     html! {
-        <li>
-            <div class="form-check">
-                <InputCheckbox
-                    id={tag.tag.clone()}
-                    name={tag.tag.clone()}
-                    value={tag.tag.clone()}
-                    class={classes!("form-check-input")}
-                    on_change={on_change} />
-                <label class="form-check-label" for={tag.tag.clone()}>
-                    {tag.tag.clone()} <span class="badge bg-secondary">{tag.count}</span>
-                </label>
-            </div>
-        </li>
+        <div class="form-check">
+            <InputCheckbox
+                id={tag.tag.clone()}
+                name={tag.tag.clone()}
+                value={tag.tag.clone()}
+                class={classes!("form-check-input")}
+                on_change={on_change} />
+            <label class="form-check-label d-flex justify-content-between align-items-center" for={tag.tag.clone()}>
+                <span class="text-truncate">{tag.tag.clone()}</span>
+                <span class="badge bg-secondary ms-2">{tag.count}</span>
+            </label>
+        </div>
     }
 }
 
@@ -55,8 +54,11 @@ pub fn tags_filter(props: &Props) -> Html {
         .collect::<Html>();
 
     html! {
-        <ul class="list-unstyled d-flex flex-wrap gap-3">
-            {tags}
-        </ul>
+        <div class="tags-filter-panel bg-body-secondary border-end p-3 h-100">
+            <h6 class="mb-3 text-muted fw-bold">{"Filter by Tags"}</h6>
+            <div class="d-flex flex-column gap-2">
+                {tags}
+            </div>
+        </div>
     }
 }
