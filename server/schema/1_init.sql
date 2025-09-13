@@ -13,7 +13,7 @@ CREATE UNIQUE INDEX user_username_unique ON "user" (LOWER(username));
 CREATE TABLE bookmark (
     bookmark_id VARCHAR(512) UNIQUE NOT NULL,
     user_id UUID NOT NULL,
-    url TEXT NOT NULL UNIQUE,
+    url TEXT NOT NULL,
     domain text NOT NULL,
     title TEXT NOT NULL,
     text_content TEXT NOT NULL,
@@ -22,7 +22,8 @@ CREATE TABLE bookmark (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (bookmark_id, user_id),
-    CONSTRAINT fk_user FOREIGN KEY(user_id) REFERENCES "user"(user_id) ON DELETE CASCADE
+    CONSTRAINT fk_user FOREIGN KEY(user_id) REFERENCES "user"(user_id) ON DELETE CASCADE,
+    CONSTRAINT bookmark_url_user_unique UNIQUE (url, user_id)
 );
 ALTER TABLE bookmark ADD COLUMN search_tokens TSVECTOR GENERATED ALWAYS AS (
     setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
@@ -42,7 +43,7 @@ CREATE TABLE bookmark_task (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     next_delivery TIMESTAMPTZ NOT NULL DEFAULT now(),
-    retries SMALLINT DEFAULT 0,
+    retries SMALLINT,
     fail_reason TEXT,
     PRIMARY KEY (task_id),
     CONSTRAINT fk_user FOREIGN KEY(user_id) REFERENCES "user"(user_id) ON DELETE CASCADE

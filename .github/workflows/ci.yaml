@@ -22,9 +22,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@v4
+        uses: DeterminateSystems/nix-installer-action@v17
       - name: Magic Nix Cache
-        uses: DeterminateSystems/magic-nix-cache-action@v2
+        uses: DeterminateSystems/magic-nix-cache-action@v13
       - name: Build on ${{ matrix.host }}
         run: nix flake check -L .#
     strategy:
@@ -42,9 +42,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@v4
+        uses: DeterminateSystems/nix-installer-action@v17
       - name: Magic Nix Cache
-        uses: DeterminateSystems/magic-nix-cache-action@v2
+        uses: DeterminateSystems/magic-nix-cache-action@v13
       - name: Cargo Cache
         uses: actions/cache@v3
         with:
@@ -52,3 +52,22 @@ jobs:
           path: ~/.cargo
       - name: Clippy
         run: nix develop .# --command just clippy
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v17
+      - name: Magic Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@v13
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Cargo Cache
+        uses: actions/cache@v3
+        with:
+          key: ${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          path: ~/.cargo
+      - name: Run Integration Tests
+        run: |
+          nix develop .# --command cargo test -p server --features integration-tests -- --test-threads=1 --nocapture
