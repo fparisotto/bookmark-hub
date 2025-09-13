@@ -17,28 +17,42 @@ pub async fn run(
 ) -> Result<()> {
     let mut interval = tokio::time::interval(DAEMON_IDLE_SLEEP);
     loop {
-        tokio::select! {
-            _ = new_bookmark_rx.changed() => {
-                tracing::info!("Notification receive, executing...");
-                if let Err(error) = execute_step(pool, ollama_url, ollama_text_model).await {
+        // Process all available tasks continuously
+        loop {
+            match execute_step(pool, ollama_url, ollama_text_model).await {
+                Ok(has_tasks) => {
+                    if !has_tasks {
+                        // No more tasks, exit inner loop
+                        break;
+                    }
+                    // Continue processing if there were tasks
+                }
+                Err(error) => {
                     tracing::error!(?error, "Fail to process tasks");
+                    break; // Exit on error to avoid infinite loop
                 }
             }
+        }
+
+        // Wait for notification or timeout when no tasks remain
+        tokio::select! {
+            _ = new_bookmark_rx.changed() => {
+                tracing::info!("Notification received, checking for tasks...");
+                // Reset interval to avoid immediate timeout after notification
+                interval.reset();
+            }
             _ = interval.tick() => {
-                tracing::info!("{DAEMON_IDLE_SLEEP:?} passed, executing...");
-                if let Err(error) = execute_step(pool, ollama_url, ollama_text_model).await {
-                    tracing::error!(?error, "Fail to process tasks");
-                }
+                tracing::info!("{DAEMON_IDLE_SLEEP:?} passed, checking for tasks...");
             }
         }
     }
 }
 
-async fn execute_step(pool: &PgPool, ollama_url: &Url, ollama_text_model: &str) -> Result<()> {
+async fn execute_step(pool: &PgPool, ollama_url: &Url, ollama_text_model: &str) -> Result<bool> {
     let tasks: Vec<Bookmark> = get_bookmarks_without_summary(pool, QUERY_LIMIT).await?;
     if tasks.is_empty() {
         tracing::info!("No new task");
-        return Ok(());
+        return Ok(false);
     }
     tracing::info!("New tasks found: {}", tasks.len());
     for task in tasks {
@@ -52,7 +66,7 @@ async fn execute_step(pool: &PgPool, ollama_url: &Url, ollama_text_model: &str) 
             }
         }
     }
-    Ok(())
+    Ok(true)
 }
 
 async fn handle_task(
