@@ -59,42 +59,51 @@ pub async fn run(
     let http: HttpClient = HttpClient::new();
     let mut interval = tokio::time::interval(DAEMON_IDLE_SLEEP);
     loop {
-        tokio::select! {
-            _ = new_task_rx.changed() => {
-                tracing::info!("Notification receive, executing...");
-                match execute_step(pool, &http, config).await {
-                    Ok(_) => {
-                        if let Err(error) = new_bookmark_tx.send(()) {
-                            tracing::error!(?error, "Fail to send signal on new bookmark");
-                        }
-                    },
-                    Err(error) => {
-                        tracing::error!(?error, "Fail to process tasks");
-                    },
+        // Process all available tasks continuously
+        let mut any_processed = false;
+        loop {
+            match execute_step(pool, &http, config).await {
+                Ok(has_tasks) => {
+                    if !has_tasks {
+                        // No more tasks, exit inner loop
+                        break;
+                    }
+                    any_processed = true;
+                    // Continue processing if there were tasks
+                }
+                Err(error) => {
+                    tracing::error!(?error, "Fail to process tasks");
+                    break; // Exit on error to avoid infinite loop
                 }
             }
+        }
+
+        // Send signal if any tasks were processed
+        if any_processed {
+            if let Err(error) = new_bookmark_tx.send(()) {
+                tracing::error!(?error, "Fail to send signal on new bookmark");
+            }
+        }
+
+        // Wait for notification or timeout when no tasks remain
+        tokio::select! {
+            _ = new_task_rx.changed() => {
+                tracing::info!("Notification received, checking for tasks...");
+                // Reset interval to avoid immediate timeout after notification
+                interval.reset();
+            }
             _ = interval.tick() => {
-                tracing::info!("{DAEMON_IDLE_SLEEP:?} passed, executing...");
-                match execute_step(pool, &http, config).await {
-                    Ok(_) => {
-                        if let Err(error) = new_bookmark_tx.send(()) {
-                            tracing::error!(?error, "Fail to send signal on new bookmark");
-                        }
-                    },
-                    Err(error) => {
-                        tracing::error!(?error, "Fail to process tasks");
-                    },
-                }
+                tracing::info!("{DAEMON_IDLE_SLEEP:?} passed, checking for tasks...");
             }
         }
     }
 }
 
-async fn execute_step(pool: &PgPool, http: &HttpClient, config: &Config) -> Result<()> {
+async fn execute_step(pool: &PgPool, http: &HttpClient, config: &Config) -> Result<bool> {
     let tasks: Vec<BookmarkTask> = db::bookmark_task::peek(pool, Utc::now()).await?;
     if tasks.is_empty() {
         tracing::info!("No new task");
-        return Ok(());
+        return Ok(false);
     }
     tracing::info!("New tasks found: {}", tasks.len());
     for task in tasks {
@@ -131,7 +140,7 @@ async fn execute_step(pool: &PgPool, http: &HttpClient, config: &Config) -> Resu
             }
         }
     }
-    Ok(())
+    Ok(true)
 }
 
 async fn handle_task(
