@@ -456,21 +456,29 @@ pub fn home(props: &Props) -> Html {
             let has_more = state_handle.current_search_page * state_handle.page_size
                 < state_handle.total_results as usize;
             html! {
-                <>
-                    <SearchBar on_submit={on_search_submit} />
-                    <TagsFilter tags={state_handle.tags.clone()} on_tag_checked={on_tag_checked} />
-                    <SearchResult on_item_selected={on_item_selected} results={state_handle.items.clone()} />
-                    <div class="mt-3">
-                        <PaginationControls
-                            has_more={has_more}
-                            on_previous={on_search_previous_page}
-                            on_next={on_search_next_page}
-                            current_page={state_handle.current_search_page}
-                            page_size={state_handle.page_size}
-                            current_count={state_handle.items.len()} />
+                <div class="row g-0 h-100">
+                    // Left side panel for tags filter
+                    <div class="col-12 col-md-3 col-lg-2">
+                        <TagsFilter tags={state_handle.tags.clone()} on_tag_checked={on_tag_checked} />
                     </div>
-                    <AddBookmarkModal on_submit={on_new_bookmark} />
-                </>
+                    // Main content area
+                    <div class="col-12 col-md-9 col-lg-10 ps-md-3">
+                        <SearchBar on_submit={on_search_submit} />
+                        <div class="mt-3">
+                            <SearchResult on_item_selected={on_item_selected} results={state_handle.items.clone()} />
+                        </div>
+                        <div class="mt-3">
+                            <PaginationControls
+                                has_more={has_more}
+                                on_previous={on_search_previous_page}
+                                on_next={on_search_next_page}
+                                current_page={state_handle.current_search_page}
+                                page_size={state_handle.page_size}
+                                current_count={state_handle.items.len()} />
+                        </div>
+                        <AddBookmarkModal on_submit={on_new_bookmark} />
+                    </div>
+                </div>
             }
         }
         Page::Read { bookmark } => {
