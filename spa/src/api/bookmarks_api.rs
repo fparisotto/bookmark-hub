@@ -72,6 +72,7 @@ pub async fn get_content(token: &str, user_id: &Uuid, id: &str) -> Result<Option
     let endpoint = format!("/static/{user_id}/{id}/index.html");
     let response = Request::get(&endpoint)
         .header("Authorization", &format!("Bearer {token}"))
+        .header("Accept-Encoding", "gzip, deflate")
         .send()
         .await?;
     log::info!("Get static content, id={id}");

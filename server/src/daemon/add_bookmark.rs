@@ -1,7 +1,10 @@
 use std::collections::HashMap;
+use std::io::Write;
 
 use anyhow::{Context, Result};
 use chrono::Utc;
+use flate2::write::GzEncoder;
+use flate2::Compression;
 use futures::future::join_all;
 use lol_html::{element, rewrite_str, RewriteStrSettings};
 use reqwest::{Client, Client as HttpClient};
@@ -214,8 +217,24 @@ async fn save_static_content(
     if !bookmark_dir.exists() {
         tokio::fs::create_dir_all(&bookmark_dir).await?;
     }
-    let index = bookmark_dir.join("index.html");
-    tokio::fs::write(&index, content).await?;
+
+    // Compress HTML content using gzip
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+    encoder.write_all(content.as_bytes())?;
+    let compressed_content = encoder.finish()?;
+
+    let original_size = content.len();
+    let compressed_size = compressed_content.len();
+
+    let index = bookmark_dir.join("index.html.gz");
+    tokio::fs::write(&index, compressed_content).await?;
+
+    tracing::info!(
+        "Compressed HTML from {} bytes to {} bytes ({}% reduction)",
+        original_size,
+        compressed_size,
+        100 - (compressed_size * 100 / original_size)
+    );
     for image in images.iter() {
         let image_path = bookmark_dir.join(&image.id);
         if image_path.exists() {
