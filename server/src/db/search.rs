@@ -123,7 +123,9 @@ async fn run_total(
                 filters.push(format!("b.tags && ${}", params.len()));
             }
             TagFilter::Untagged => {
-                filters.push("(b.tags IS NULL OR coalesce(array_length(b.tags, 1), 0) = 0)".to_string());
+                filters.push(
+                    "(b.tags IS NULL OR coalesce(array_length(b.tags, 1), 0) = 0)".to_string(),
+                );
             }
             TagFilter::Any => { /* No filter */ }
         }
@@ -168,7 +170,9 @@ async fn run_aggregation(
                 filters.push(format!("b.tags && ${}", params.len()));
             }
             TagFilter::Untagged => {
-                filters.push("(b.tags IS NULL OR coalesce(array_length(b.tags, 1), 0) = 0)".to_string());
+                filters.push(
+                    "(b.tags IS NULL OR coalesce(array_length(b.tags, 1), 0) = 0)".to_string(),
+                );
             }
             TagFilter::Any => { /* No filter */ }
         }
@@ -242,7 +246,9 @@ async fn run_search(
                 filters.push(format!("b.tags && ${}", params.len()));
             }
             TagFilter::Untagged => {
-                filters.push("(b.tags IS NULL OR coalesce(array_length(b.tags, 1), 0) = 0)".to_string());
+                filters.push(
+                    "(b.tags IS NULL OR coalesce(array_length(b.tags, 1), 0) = 0)".to_string(),
+                );
             }
             TagFilter::Any => {}
         }

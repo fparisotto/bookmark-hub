@@ -18,12 +18,7 @@ async fn test_db_database_migrations() -> anyhow::Result<()> {
         .context("Failed to run database migrations on the newly created database")?;
 
     // Verify that essential tables exist
-    let tables = vec![
-        "user",
-        "bookmark", 
-        "bookmark_task",
-        "schema_version",
-    ];
+    let tables = vec!["user", "bookmark", "bookmark_task", "schema_version"];
 
     for table in tables {
         let sql = format!(
