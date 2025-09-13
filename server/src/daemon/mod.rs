@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use anyhow::{anyhow, bail, Result};
 use murmur3::murmur3_x64_128;
+use tracing::info;
 use url::Url;
 
 pub mod add_bookmark;
@@ -17,7 +18,7 @@ fn clean_url(url: Url) -> Result<Url> {
     if let Some(host) = url.host_str() {
         let path = &url.path();
         let clean_url = format!("{scheme}://{host}{path}", scheme = &url.scheme());
-        tracing::info!("Clean url={clean_url}");
+        info!("Clean url={clean_url}");
         let clean = Url::parse(&clean_url)?;
         return Ok(clean);
     }
@@ -31,7 +32,7 @@ fn make_bookmark_id(url: &Url) -> Result<String> {
         let mut source = Cursor::new(source.as_str());
         let hash = murmur3_x64_128(&mut source, 0)?;
         let id = base64_url::encode(&hash.to_be_bytes());
-        tracing::info!(id = &id, url = format!("{url}"), "Making url id");
+        info!(id = &id, url = format!("{url}"), "Making url id");
         return Ok(id);
     }
     bail!("Invalid url={url}")

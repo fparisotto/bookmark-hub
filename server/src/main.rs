@@ -13,7 +13,7 @@ use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 use tracing::level_filters::LevelFilter;
-use tracing::warn;
+use tracing::{debug, error, info, warn};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
@@ -31,12 +31,30 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    let pool = db::get_pool(config.pg.clone()).await?;
-    db::run_migrations(&pool).await?;
+    info!(?config, "Starting Bookmark Hub Server");
 
+    let ollama_enabled =
+        config.ollama.ollama_url.is_some() && config.ollama.ollama_text_model.is_some();
+    info!(ollama_enabled = %ollama_enabled, "Ollama AI features configuration");
+    if ollama_enabled {
+        debug!(
+            ollama_url = ?config.ollama.ollama_url.as_ref().map(|u| u.to_string()),
+            ollama_model = ?config.ollama.ollama_text_model,
+            "Ollama URL configured"
+        );
+    }
+
+    info!("Initializing database connection pool");
+    let pool = db::get_pool(config.pg.clone()).await?;
+    info!("Running database migrations");
+    db::run_migrations(&pool).await?;
+    info!("Database initialization complete");
+
+    debug!("Creating inter-daemon communication channels");
     let (new_task_tx, new_task_rx) = tokio::sync::watch::channel(());
     let (new_bookmark_tx, new_bookmark_rx) = tokio::sync::watch::channel(());
 
+    info!("Spawning background daemons");
     let add_bookmark_daemon = tokio::spawn(setup_add_bookmark_daemon(
         config.clone(),
         pool.clone(),
@@ -54,52 +72,61 @@ async fn main() -> anyhow::Result<()> {
         new_bookmark_rx.clone(),
     ));
 
+    info!("Setting up HTTP server");
     let app_server = setup_app(&config, pool.clone(), new_task_tx);
 
+    info!("All services started successfully");
     tokio::select! {
         result = app_server => {
             if let Err(error) = result {
-                tracing::error!(?error, "App server error");
+                error!(?error, "App server error");
                 std::process::exit(1);
             }
+            info!("App server stopped");
         },
         result = add_bookmark_daemon => {
             match result {
                 Ok(Err(error)) => {
-                    tracing::error!(?error, "Add bookmark daemon error");
+                    error!(?error, "Add bookmark daemon error");
                     std::process::exit(1);
                 },
                 Err(error) => {
-                    tracing::error!(?error, "Join error in add bookmark daemon");
+                    error!(?error, "Join error in add bookmark daemon");
                     std::process::exit(1);
                 },
-                Ok(Ok(_)) => {}
+                Ok(Ok(_)) => {
+                    info!("Add bookmark daemon stopped");
+                }
             }
         },
         result = tags_daemon => {
             match result {
                 Ok(Err(error)) => {
-                    tracing::error!(?error, "Tags daemon error");
+                    error!(?error, "Tags daemon error");
                     std::process::exit(1);
                 },
                 Err(error) => {
-                    tracing::error!(?error, "Join error in tags daemon");
+                    error!(?error, "Join error in tags daemon");
                     std::process::exit(1);
                 },
-                Ok(Ok(_)) => {}
+                Ok(Ok(_)) => {
+                    info!("Tags daemon stopped");
+                }
             }
         }
         result = summary_daemon => {
             match result {
                 Ok(Err(error)) => {
-                    tracing::error!(?error, "Summary daemon error");
+                    error!(?error, "Summary daemon error");
                     std::process::exit(1);
                 },
                 Err(error) => {
-                    tracing::error!(?error, "Join error in summary daemon");
+                    error!(?error, "Join error in summary daemon");
                     std::process::exit(1);
                 },
-                Ok(Ok(_)) => {}
+                Ok(Ok(_)) => {
+                    info!("Summary daemon stopped");
+                }
             }
         }
     }
@@ -117,7 +144,7 @@ async fn shutdown_signal() {
         _ = terminate() => {},
         _ = tokio::signal::ctrl_c() => {},
     }
-    tracing::debug!("signal received, starting graceful shutdown")
+    info!("Shutdown signal received, starting graceful shutdown")
 }
 
 async fn setup_app(
@@ -142,10 +169,11 @@ async fn setup_app(
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http());
     let listener = tokio::net::TcpListener::bind(&config.bind).await?;
-    tracing::info!("Listening on {}", &config.bind);
+    info!(bind_address = %config.bind, "HTTP server listening");
     axum::serve(listener, app.into_make_service())
         .with_graceful_shutdown(shutdown_signal())
         .await?;
+    info!("HTTP server shutdown complete");
     Ok(())
 }
 
@@ -170,9 +198,9 @@ async fn setup_add_bookmark_daemon(
         test_file.push("test.txt");
         std::fs::write(&test_file, "test data")?;
         std::fs::remove_file(&test_file)?;
-        tracing::info!("Data dir is valid");
+        debug!(data_dir = ?data_dir, "Data directory validation successful");
     }
-    tracing::info!("Spawn add bookmark daemon");
+    info!(data_dir = ?config.data_dir, "Starting add bookmark daemon");
     daemon::add_bookmark::run(&pool, &config, new_task_rx, new_bookmark_tx).await
 }
 
@@ -183,7 +211,7 @@ async fn setup_tags_daemon(
 ) -> anyhow::Result<()> {
     match (config.ollama.ollama_url, config.ollama.ollama_text_model) {
         (Some(url), Some(text_model)) => {
-            tracing::info!("Spawn tags daemon");
+            info!(model = %text_model, "Starting tags daemon");
             daemon::tag::run(&pool, new_bookmark_rx, &url, &text_model).await
         }
         (None, None) => {
@@ -203,7 +231,7 @@ async fn setup_summary_daemon(
 ) -> anyhow::Result<()> {
     match (config.ollama.ollama_url, config.ollama.ollama_text_model) {
         (Some(url), Some(text_model)) => {
-            tracing::info!("Spawn summary daemon");
+            info!(model = %text_model, "Starting summary daemon");
             daemon::summary::run(&pool, new_bookmark_rx, &url, &text_model).await
         }
         (None, None) => {

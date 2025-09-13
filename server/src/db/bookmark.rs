@@ -3,7 +3,7 @@ use deadpool_postgres::GenericClient;
 use postgres_from_row::FromRow;
 use serde::{Deserialize, Serialize};
 use shared::{Bookmark, TagOperation};
-use tracing::debug;
+use tracing::{debug, info};
 use uuid::Uuid;
 
 use super::PgPool;
@@ -47,6 +47,7 @@ pub async fn get_tag_count_by_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<(
     )
     SELECT tag, count(1) AS counter FROM tags GROUP BY tag;
     "#;
+    debug!(user_id = %user_id, "Fetching tag counts");
     let client = pool.get().await?;
     let rows = client.query(SQL, &[&user_id]).await?;
     let result = rows
@@ -58,11 +59,13 @@ pub async fn get_tag_count_by_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<(
                 .map_err(Error::from)
         })
         .collect::<Result<Vec<_>>>()?;
+    debug!(user_id = %user_id, tag_count = %result.len(), "Found unique tags");
     Ok(result)
 }
 
 pub async fn get_by_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<Bookmark>> {
     const SQL: &str = "SELECT * FROM bookmark b WHERE b.user_id = $1 ORDER BY b.created_at ASC;";
+    debug!(user_id = %user_id, "Fetching all bookmarks");
     let client = pool.get().await?;
     let results = client
         .query(SQL, &[&user_id])
@@ -74,12 +77,14 @@ pub async fn get_by_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<Bookmark>> 
                 .map_err(Error::from)
         })
         .collect::<Result<Vec<_>>>()?;
+    info!(user_id = %user_id, bookmark_count = %results.len(), "Retrieved bookmarks");
     Ok(results)
 }
 
 pub async fn get_by_tag(pool: &PgPool, user_id: Uuid, tag: &str) -> Result<Vec<Bookmark>> {
     const SQL: &str =
         "SELECT * FROM bookmark b WHERE b.user_id = $1 AND b.tags @> $2 ORDER BY b.created_at ASC;";
+    debug!(user_id = %user_id, tag = %tag, "Fetching bookmarks with tag");
     let client = pool.get().await?;
     let results = client
         .query(SQL, &[&user_id, &[&tag]])
@@ -91,6 +96,7 @@ pub async fn get_by_tag(pool: &PgPool, user_id: Uuid, tag: &str) -> Result<Vec<B
                 .map_err(Error::from)
         })
         .collect::<Result<Vec<_>>>()?;
+    info!(user_id = %user_id, tag = %tag, bookmark_count = %results.len(), "Found bookmarks with tag");
     Ok(results)
 }
 
@@ -100,6 +106,7 @@ pub async fn get_by_url_and_user_id(
     user_id: Uuid,
 ) -> Result<Option<Bookmark>> {
     const SQL: &str = "SELECT * FROM bookmark WHERE url = $1 AND user_id = $2;";
+    debug!(url = %url, user_id = %user_id, "Checking for existing bookmark");
     let client = pool.get().await?;
     let result = client
         .query_opt(SQL, &[&url, &user_id])
@@ -110,6 +117,12 @@ pub async fn get_by_url_and_user_id(
                 .map_err(Error::from)
         })
         .transpose()?;
+    match &result {
+        Some(bookmark) => {
+            debug!(bookmark_id = %bookmark.bookmark_id, url = %url, "Found existing bookmark")
+        }
+        None => debug!(url = %url, "No existing bookmark found"),
+    }
     Ok(result)
 }
 
@@ -119,6 +132,7 @@ pub async fn get_with_user_data(
     bookmark_id: &str,
 ) -> Result<Option<Bookmark>> {
     const SQL: &str = "SELECT * FROM bookmark b WHERE b.user_id = $1 AND b.bookmark_id = $2;";
+    debug!(bookmark_id = %bookmark_id, user_id = %user_id, "Fetching bookmark");
     let client = pool.get().await?;
     let result = client
         .query_opt(SQL, &[&user_id, &bookmark_id])
@@ -129,6 +143,10 @@ pub async fn get_with_user_data(
                 .map_err(Error::from)
         })
         .transpose()?;
+    match &result {
+        Some(_) => debug!(bookmark_id = %bookmark_id, "Found bookmark"),
+        None => debug!(bookmark_id = %bookmark_id, "Bookmark not found for user"),
+    }
     Ok(result)
 }
 
@@ -152,7 +170,13 @@ pub async fn update_tags(
     let result = RowBookmark::try_from_row(&row)
         .map(Bookmark::from)
         .map_err(Error::from)?;
-    debug!(?operation, %bookmark_id, "Updated tags for bookmark");
+    info!(
+        bookmark_id = %bookmark_id,
+        user_id = %user_id,
+        operation = ?operation,
+        new_tag_count = %result.tags.as_ref().map(|t| t.len()).unwrap_or(0),
+        "Updated tags for bookmark"
+    );
     Ok(result)
 }
 
@@ -179,7 +203,13 @@ pub async fn save(pool: &PgPool, bookmark: &Bookmark, text_content: &str) -> Res
     let result = RowBookmark::try_from_row(&row)
         .map(Bookmark::from)
         .map_err(Error::from)?;
-    debug!(id = bookmark.bookmark_id, "Bookmark safe");
+    info!(
+        bookmark_id = %result.bookmark_id,
+        user_id = %result.user_id,
+        url = %result.url,
+        title = %result.title,
+        "Bookmark saved"
+    );
     Ok(result)
 }
 
@@ -197,7 +227,12 @@ pub async fn update_summary(
     let result = RowBookmark::try_from_row(&row)
         .map(Bookmark::from)
         .map_err(Error::from)?;
-    debug!(%bookmark_id, "Updated summary for bookmark");
+    info!(
+        bookmark_id = %bookmark_id,
+        user_id = %user_id,
+        summary_length = %summary.len(),
+        "Updated summary for bookmark"
+    );
     Ok(result)
 }
 
@@ -207,12 +242,19 @@ pub async fn get_text_content(
     bookmark_id: &str,
 ) -> Result<Option<String>> {
     const SQL: &str = "SELECT text_content FROM bookmark WHERE bookmark_id = $1 AND user_id = $2";
+    debug!(bookmark_id = %bookmark_id, user_id = %user_id, "Fetching text content");
     let client = pool.get().await?;
     let result: Option<String> = client
         .query_opt(SQL, &[&bookmark_id, &user_id])
         .await?
         .map(|row| row.try_get(0))
         .transpose()?;
+    match &result {
+        Some(content) => {
+            debug!(bookmark_id = %bookmark_id, content_length = %content.len(), "Found text content")
+        }
+        None => debug!(bookmark_id = %bookmark_id, "No text content found"),
+    }
     Ok(result)
 }
 
@@ -220,6 +262,7 @@ pub async fn get_untagged_bookmarks(pool: &PgPool, limit: usize) -> Result<Vec<B
     let sql = format!(
         "SELECT * FROM bookmark WHERE tags IS NULL OR coalesce(array_length(tags, 1), 0) = 0 ORDER BY random() LIMIT {limit};"
     );
+    debug!(limit = %limit, "Fetching untagged bookmarks");
     let client = pool.get().await?;
     let results = client
         .query(&sql, &[])
@@ -231,6 +274,7 @@ pub async fn get_untagged_bookmarks(pool: &PgPool, limit: usize) -> Result<Vec<B
                 .map_err(Error::from)
         })
         .collect::<Result<Vec<_>>>()?;
+    info!(found_count = %results.len(), limit = %limit, "Found untagged bookmarks");
     Ok(results)
 }
 
@@ -240,6 +284,7 @@ pub async fn get_bookmarks_without_summary(
 ) -> anyhow::Result<Vec<Bookmark>> {
     let sql =
         format!("SELECT * FROM bookmark WHERE summary IS NULL ORDER BY random() LIMIT {limit};");
+    debug!(limit = %limit, "Fetching bookmarks without summaries");
     let client = pool.get().await?;
     let results = client
         .query(&sql, &[])
@@ -251,5 +296,6 @@ pub async fn get_bookmarks_without_summary(
                 .map_err(Error::from)
         })
         .collect::<Result<Vec<_>>>()?;
+    info!(found_count = %results.len(), limit = %limit, "Found bookmarks without summaries");
     Ok(results)
 }

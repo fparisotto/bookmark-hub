@@ -42,7 +42,14 @@ const SCHEMAS: [(i32, &str); 1] = [(
 )];
 
 pub async fn get_pool(pg: PgParams) -> anyhow::Result<PgPool> {
-    info!("Creating postgres pool with {pg:?}");
+    info!(
+        pg_host = %pg.pg_host,
+        pg_port = %pg.pg_port,
+        max_connections = %pg.pg_max_connections,
+        "Creating postgres pool"
+    );
+    debug!(user = "[REDACTED]", database = "[REDACTED]", "Pool config");
+
     let mut cfg = Config::new();
     cfg.host = Some(pg.pg_host.clone());
     cfg.port = Some(pg.pg_port);
@@ -56,36 +63,66 @@ pub async fn get_pool(pg: PgParams) -> anyhow::Result<PgPool> {
         max_size: pg.pg_max_connections as usize,
         ..Default::default()
     });
+
     let pool = cfg
         .create_pool(Some(Runtime::Tokio1), tokio_postgres::NoTls)
         .with_context(|| format!("Failure creating postgres pool with params: {pg:?}"))?;
-    debug!("Created postgres pool with {pg:?}");
+
+    info!(max_connections = %pg.pg_max_connections, "Postgres pool created successfully");
     Ok(pool)
 }
 
 async fn get_schema_version(pool: &PgPool) -> Result<i32> {
+    debug!("Fetching current database schema version");
     let client = pool.get().await?;
     client.execute(CREATE_GET_SCHEMA_FUNCTION, &[]).await?;
     let schema_version = client.query_one("SELECT get_schema_version()", &[]).await?;
     let schema_version: i32 = schema_version.get(0);
+    debug!(schema_version = %schema_version, "Current schema version retrieved");
     Ok(schema_version)
 }
 
 pub async fn run_migrations(pool: &PgPool) -> Result<()> {
+    info!("Starting database migrations check");
+    let mut migrations_applied = 0;
+
     for (version, statement) in SCHEMAS {
         let schema_version: i32 = get_schema_version(pool).await?;
-        debug!("Current schema version: {schema_version}");
         if version > schema_version {
-            debug!("Applying schema version: {version}");
+            info!(
+                from_version = %schema_version,
+                to_version = %version,
+                "Applying migration"
+            );
+            let start = std::time::Instant::now();
             pool.get().await?.batch_execute(statement).await?;
+            let elapsed = start.elapsed();
+            info!(
+                version = %version,
+                elapsed = ?elapsed,
+                "Migration applied successfully"
+            );
+            migrations_applied += 1;
+        } else {
+            debug!(version = %version, "Migration already applied, skipping");
         }
+    }
+
+    if migrations_applied > 0 {
+        info!(migrations_applied = %migrations_applied, "Applied migrations successfully");
+    } else {
+        info!("Database schema is up to date");
     }
     Ok(())
 }
 
 pub async fn run_health_check(pool: &PgPool) -> Result<()> {
+    debug!("Running database health check");
+    let start = std::time::Instant::now();
     let client = pool.get().await?;
     let _ = client.query_one("SELECT 1", &[]).await?;
+    let elapsed = start.elapsed();
+    debug!(elapsed = ?elapsed, "Database health check completed");
     Ok(())
 }
 

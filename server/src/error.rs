@@ -5,6 +5,7 @@ use axum::http::header::WWW_AUTHENTICATE;
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
+use tracing::{debug, error, warn};
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -118,18 +119,28 @@ impl Error {
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
         match self {
-            Self::BadRequest { errors } => {
-                let t = (StatusCode::BAD_REQUEST, Json(ErrorsPayload { errors }));
+            Self::BadRequest { ref errors } => {
+                warn!(errors = ?errors, "Bad request");
+                let t = (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorsPayload {
+                        errors: errors.clone(),
+                    }),
+                );
                 return t.into_response();
             }
-            Self::UnprocessableEntity { errors } => {
+            Self::UnprocessableEntity { ref errors } => {
+                warn!(errors = ?errors, "Unprocessable entity");
                 let t = (
                     StatusCode::UNPROCESSABLE_ENTITY,
-                    Json(ErrorsPayload { errors }),
+                    Json(ErrorsPayload {
+                        errors: errors.clone(),
+                    }),
                 );
                 return t.into_response();
             }
             Self::Unauthorized => {
+                warn!("Unauthorized access attempt");
                 let t = (
                     self.status_code(),
                     [(WWW_AUTHENTICATE, HeaderValue::from_static("Token"))]
@@ -139,16 +150,46 @@ impl IntoResponse for Error {
                 );
                 return t.into_response();
             }
+            Self::Forbidden => {
+                warn!("Forbidden access attempt");
+            }
+            Self::NotFound => {
+                debug!("Resource not found");
+            }
+            Self::WrongCredentials => {
+                warn!("Authentication failed - wrong credentials");
+            }
+            Self::MissingCredentials => {
+                warn!("Authentication failed - missing credentials");
+            }
+            Self::InvalidToken => {
+                warn!("Authentication failed - invalid token");
+            }
             Self::DatabaseError(ref e) => {
-                tracing::error!("Database error: {}", e);
+                error!(error = %e, "Database error occurred");
             }
             Self::DatabasePool(ref e) => {
-                tracing::error!("Database pool error: {}", e);
+                error!(error = %e, "Database pool error occurred");
+            }
+            Self::ConstraintViolation {
+                ref constraint,
+                ref message,
+            } => {
+                warn!(
+                    constraint = %constraint,
+                    message = %message,
+                    "Database constraint violation"
+                );
             }
             Self::Anyhow(ref e) => {
-                tracing::error!("Generic error: {}", e);
+                error!(error = %e, "Internal server error");
             }
-            _ => (),
+            Self::Jwt(ref e) => {
+                error!(error = %e, "JWT processing error");
+            }
+            Self::Argon2 { ref details } => {
+                error!(details = %details, "Password hashing error");
+            }
         }
 
         (self.status_code(), self.to_string()).into_response()

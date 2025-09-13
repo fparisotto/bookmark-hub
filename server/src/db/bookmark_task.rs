@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use shared::{
     BookmarkTask, BookmarkTaskSearchRequest, BookmarkTaskSearchResponse, BookmarkTaskStatus,
 };
+use tracing::{debug, info};
 use url::Url;
 use uuid::Uuid;
 
@@ -98,7 +99,13 @@ pub async fn create(
     let task = RowBookmarkTask::try_from_row(&row)
         .map(BookmarkTask::from)
         .map_err(anyhow::Error::from)?;
-    tracing::debug!(?task, "Task created");
+    info!(
+        task_id = %task.task_id,
+        user_id = %task.user_id,
+        url = %task.url,
+        tags_count = %tags.len(),
+        "Bookmark task created"
+    );
     Ok(task)
 }
 
@@ -106,6 +113,7 @@ pub async fn peek(pool: &PgPool, now: DateTime<Utc>) -> Result<Vec<BookmarkTask>
     const QUERY: &str = r#"SELECT * FROM bookmark_task WHERE next_delivery <= $1
     AND status = 'pending' FOR UPDATE SKIP LOCKED LIMIT 10;"#;
 
+    debug!(next_delivery = %now, "Peeking for pending tasks");
     let mut client = pool.get().await?;
     let tx = client.transaction().await?;
 
@@ -126,12 +134,17 @@ pub async fn peek(pool: &PgPool, now: DateTime<Utc>) -> Result<Vec<BookmarkTask>
     let rows_affected = tx.execute(UPDATE, &[&next_delivery, &ids]).await?;
     tx.commit().await?;
 
-    tracing::debug!(
-        ?ids,
-        ?next_delivery,
-        %rows_affected,
-        "Peek tasks, schedule for next delivery",
-    );
+    if !tasks.is_empty() {
+        info!(
+            task_count = %tasks.len(),
+            next_delivery = %next_delivery,
+            rows_affected = %rows_affected,
+            "Found pending tasks, rescheduled"
+        );
+        debug!(task_ids = ?ids, "Task IDs processed");
+    } else {
+        debug!("No pending tasks found");
+    }
     Ok(tasks)
 }
 
@@ -149,7 +162,16 @@ pub async fn update(
     let row_count = client
         .execute(SQL, &[&status, &retries, &fail_reason, &task.task_id])
         .await?;
-    tracing::info!("Task updated, rows affected = {row_count}");
+    info!(
+        task_id = %task.task_id,
+        status = ?status,
+        retries = ?retries,
+        rows_affected = %row_count,
+        "Task updated"
+    );
+    if let Some(reason) = &fail_reason {
+        debug!(task_id = %task.task_id, reason = %reason, "Task failure reason");
+    }
     Ok(())
 }
 
@@ -158,6 +180,7 @@ pub async fn search(
     user_id: Uuid,
     request: &BookmarkTaskSearchRequest,
 ) -> Result<BookmarkTaskSearchResponse> {
+    debug!(user_id = %user_id, filters = ?request, "Searching bookmark tasks");
     let mut filters: Vec<String> = vec![];
     let mut params: Vec<&(dyn ToSql + Sync)> = vec![];
 
@@ -231,6 +254,13 @@ pub async fn search(
         // Remove the extra row
         tasks.truncate(page_size);
     }
+
+    info!(
+        user_id = %user_id,
+        task_count = %tasks.len(),
+        has_more = %has_more,
+        "Task search completed"
+    );
 
     Ok(BookmarkTaskSearchResponse {
         tasks,
