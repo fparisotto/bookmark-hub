@@ -23,3 +23,8 @@ thiserror = "1"
 url = { version = "2.5", features = ["serde"] }
 uuid = { version = "1.10", features = ["serde", "v4", "js"] }
 secrecy = { version = "0.10", features = ["serde"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = "z"
