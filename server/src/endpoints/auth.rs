@@ -4,11 +4,12 @@ use axum_macros::debug_handler;
 use chrono::{Duration, Utc};
 use secrecy::ExposeSecret;
 use shared::{SignInRequest, SignInResponse, SignUpRequest, SignUpResponse, UserProfile};
+use tracing::{debug, error, info, warn};
 
 use super::Claim;
+use crate::AppContext;
 use crate::db::user;
 use crate::error::{Error, Result};
-use crate::AppContext;
 
 fn validate_signup(payload: &SignUpRequest) -> Result<()> {
     let mut errors: Vec<(&'static str, &'static str)> = Vec::new();
@@ -59,21 +60,37 @@ async fn get_user_profile(
     claims: Claim,
     Extension(app_context): Extension<AppContext>,
 ) -> Result<Json<UserProfile>> {
+    debug!(
+        user_id = %claims.user_id,
+        username = %claims.sub,
+        "Getting user profile"
+    );
     match user::get_by_id(&app_context.pool, &claims.user_id).await {
-        Ok(Some(user)) => Ok(Json(UserProfile {
-            user_id: user.user_id,
-            username: user.username,
-            created_at: user.created_at,
-        })),
+        Ok(Some(user)) => {
+            info!(
+                user_id = %claims.user_id,
+                "User profile retrieved successfully"
+            );
+            Ok(Json(UserProfile {
+                user_id: user.user_id,
+                username: user.username,
+                created_at: user.created_at,
+            }))
+        }
         Ok(None) => {
-            tracing::error!(
-                "Fail to fetch user, not found for given claim, user_id={}",
-                &claims.user_id
+            error!(
+                user_id = %claims.user_id,
+                username = %claims.sub,
+                "User profile not found for valid JWT claim"
             );
             Err(Error::bad_request([("user", "user not found")]))
         }
         Err(error) => {
-            tracing::error!("Fail to fetch user, error={}", error);
+            error!(
+                user_id = %claims.user_id,
+                error = %error,
+                "Database error fetching user profile"
+            );
             Err(Error::bad_request([("user", "user not found")]))
         }
     }
@@ -84,22 +101,41 @@ async fn sign_up(
     Extension(app_context): Extension<AppContext>,
     Json(payload): Json<SignUpRequest>,
 ) -> Result<Json<SignUpResponse>> {
+    info!(username = %payload.username, "User signup attempt");
     validate_signup(&payload)?;
+    debug!(username = %payload.username, "Signup validation passed");
+
     let hashed_password = super::hash_password(payload.password).await?;
-    let try_user = user::create(&app_context.pool, payload.username, hashed_password).await;
+    let try_user = user::create(&app_context.pool, payload.username.clone(), hashed_password).await;
     match try_user {
-        Ok(user) => Ok(Json(SignUpResponse {
-            id: user.user_id,
-            username: user.username,
-        })),
+        Ok(user) => {
+            info!(
+                user_id = %user.user_id,
+                username = %user.username,
+                "User successfully created"
+            );
+            Ok(Json(SignUpResponse {
+                id: user.user_id,
+                username: user.username,
+            }))
+        }
         Err(Error::ConstraintViolation {
             constraint,
             message: _,
-        }) if constraint.eq("unique_username") => Err(Error::bad_request([(
-            "username",
-            "username already created",
-        )])),
-        Err(error) => Err(error),
+        }) if constraint.eq("unique_username") => {
+            warn!(
+                username = %payload.username,
+                "Signup failed - username already exists"
+            );
+            Err(Error::bad_request([(
+                "username",
+                "username already created",
+            )]))
+        }
+        Err(error) => {
+            error!(username = %payload.username, error = %error, "Signup failed");
+            Err(error)
+        }
     }
 }
 
@@ -108,10 +144,19 @@ async fn sign_in(
     Extension(app_context): Extension<AppContext>,
     Json(payload): Json<SignInRequest>,
 ) -> Result<Json<SignInResponse>> {
+    info!(username = %payload.username, "User signin attempt");
     validate_signin(&payload)?;
-    let maybe_user = user::get_by_username(&app_context.pool, payload.username).await?;
+    debug!(username = %payload.username, "Signin validation passed");
+
+    let maybe_user = user::get_by_username(&app_context.pool, payload.username.clone()).await?;
     if let Some(user) = maybe_user {
+        debug!(username = %user.username, "User found for signin");
         super::verify_password(payload.password, user.password_hash.clone()).await?;
+        debug!(
+            username = %user.username,
+            "Password verification successful"
+        );
+
         let expiration = Utc::now()
             .checked_add_signed(Duration::weeks(2))
             .expect("Not overflow")
@@ -122,7 +167,12 @@ async fn sign_in(
             exp: expiration,
         };
         let token = super::encode_token(&app_context.config, &claims)?;
-        tracing::info!("User authenticated, username={}", &claims.sub);
+        info!(
+            user_id = %user.user_id,
+            username = %claims.sub,
+            "User successfully authenticated"
+        );
+
         let login_response = SignInResponse {
             user_id: user.user_id,
             username: user.username,
@@ -131,5 +181,10 @@ async fn sign_in(
         };
         return Ok(Json(login_response));
     }
+
+    warn!(
+        username = %payload.username,
+        "Signin failed - user not found or wrong credentials"
+    );
     Err(Error::WrongCredentials)
 }

@@ -1,10 +1,11 @@
 use anyhow::{Context, Result};
 use shared::Bookmark;
+use tracing::{debug, error, info};
 use url::Url;
 
 use super::{DAEMON_IDLE_SLEEP, TOKENIZER_WINDOW_OVERLAP, TOKENIZER_WINDOW_SIZE};
-use crate::db::bookmark::{get_bookmarks_without_summary, get_text_content, update_summary};
 use crate::db::PgPool;
+use crate::db::bookmark::{get_bookmarks_without_summary, get_text_content, update_summary};
 use crate::{ollama, tokenizer};
 
 const QUERY_LIMIT: usize = 10;
@@ -28,7 +29,7 @@ pub async fn run(
                     // Continue processing if there were tasks
                 }
                 Err(error) => {
-                    tracing::error!(?error, "Fail to process tasks");
+                    error!(?error, "Fail to process tasks");
                     break; // Exit on error to avoid infinite loop
                 }
             }
@@ -37,12 +38,12 @@ pub async fn run(
         // Wait for notification or timeout when no tasks remain
         tokio::select! {
             _ = new_bookmark_rx.changed() => {
-                tracing::info!("Notification received, checking for tasks...");
+                info!("Notification received, checking for tasks...");
                 // Reset interval to avoid immediate timeout after notification
                 interval.reset();
             }
             _ = interval.tick() => {
-                tracing::info!("{DAEMON_IDLE_SLEEP:?} passed, checking for tasks...");
+                info!("{DAEMON_IDLE_SLEEP:?} passed, checking for tasks...");
             }
         }
     }
@@ -51,18 +52,18 @@ pub async fn run(
 async fn execute_step(pool: &PgPool, ollama_url: &Url, ollama_text_model: &str) -> Result<bool> {
     let tasks: Vec<Bookmark> = get_bookmarks_without_summary(pool, QUERY_LIMIT).await?;
     if tasks.is_empty() {
-        tracing::info!("No new task");
+        info!("No new task");
         return Ok(false);
     }
-    tracing::info!("New tasks found: {}", tasks.len());
+    info!("New tasks found: {}", tasks.len());
     for task in tasks {
-        tracing::info!(?task, "Executing task");
+        info!(?task, "Executing task");
         match handle_task(pool, ollama_url, ollama_text_model, &task).await {
             Ok(_) => {
-                tracing::info!(id = task.bookmark_id, "Task executed")
+                info!(id = task.bookmark_id, "Task executed")
             }
             Err(error) => {
-                tracing::error!(?task, ?error, "Task failed");
+                error!(?task, ?error, "Task failed");
             }
         }
     }
@@ -75,6 +76,13 @@ async fn handle_task(
     ollama_text_model: &str,
     bookmark: &Bookmark,
 ) -> Result<()> {
+    info!(
+        bookmark_id = %bookmark.bookmark_id,
+        title = %bookmark.title,
+        user_id = %bookmark.user_id,
+        "Starting summary generation"
+    );
+
     let text_content = get_text_content(pool, bookmark.user_id, &bookmark.bookmark_id)
         .await?
         .ok_or_else(|| {
@@ -90,6 +98,12 @@ async fn handle_task(
             )
         })?;
 
+    debug!(
+        bookmark_id = %bookmark.bookmark_id,
+        content_length = %text_content.len(),
+        "Retrieved text content for summarization"
+    );
+
     let chunks = tokenizer::windowed_chunks(
         TOKENIZER_WINDOW_SIZE,
         TOKENIZER_WINDOW_OVERLAP,
@@ -102,28 +116,83 @@ async fn handle_task(
         )
     })?;
 
+    info!(
+        bookmark_id = %bookmark.bookmark_id,
+        chunks_count = %chunks.len(),
+        window_size = %TOKENIZER_WINDOW_SIZE,
+        overlap = %TOKENIZER_WINDOW_OVERLAP,
+        "Text chunked for summarization"
+    );
+
     let mut summaries: Vec<String> = Vec::with_capacity(chunks.len());
-    for chunk in chunks {
-        let summary = ollama::summary(ollama_url, ollama_text_model, &chunk)
+    let total_chunks = chunks.len();
+
+    for (chunk_idx, chunk) in chunks.iter().enumerate() {
+        debug!(
+            chunk_number = %(chunk_idx + 1),
+            total_chunks = %total_chunks,
+            bookmark_id = %bookmark.bookmark_id,
+            chunk_length = %chunk.len(),
+            "Summarizing chunk"
+        );
+
+        let start = std::time::Instant::now();
+        let summary = ollama::summary(ollama_url, ollama_text_model, chunk)
             .await
             .with_context(|| {
                 format!(
-                    "Failed to get summary from ollama from chunk: '{chunk}', bookmark_id: {}",
+                    "Failed to get summary from ollama for chunk {}/{}, bookmark_id: {}",
+                    chunk_idx + 1,
+                    total_chunks,
                     bookmark.bookmark_id
                 )
             })?;
+
+        let elapsed = start.elapsed();
+        debug!(
+            chunk_number = %(chunk_idx + 1),
+            total_chunks = %total_chunks,
+            elapsed = ?elapsed,
+            bookmark_id = %bookmark.bookmark_id,
+            summary_length = %summary.len(),
+            "Chunk summarized"
+        );
+
         summaries.push(summary);
     }
 
+    info!(
+        chunk_summaries_count = %summaries.len(),
+        bookmark_id = %bookmark.bookmark_id,
+        "Consolidating chunk summaries"
+    );
+    debug!(
+        summary_lengths = ?summaries.iter().map(|s| s.len()).collect::<Vec<_>>(),
+        "Individual summary lengths"
+    );
+
+    let start = std::time::Instant::now();
     let consolidated_summary =
         ollama::consolidate_summary(ollama_url, ollama_text_model, &summaries)
             .await
             .with_context(|| {
                 format!(
-                    "Failed to get consolidate summary from ollama, bookmark_id: {}",
+                    "Failed to consolidate summary from ollama, bookmark_id: {}",
                     bookmark.bookmark_id
                 )
             })?;
+
+    let elapsed = start.elapsed();
+    info!(
+        elapsed = ?elapsed,
+        bookmark_id = %bookmark.bookmark_id,
+        final_length = %consolidated_summary.len(),
+        "Summary consolidation completed"
+    );
+    debug!(
+        summary_preview = %consolidated_summary.chars().take(100).collect::<String>(),
+        "Final consolidated summary preview"
+    );
 
     update_summary(
         pool,
@@ -138,6 +207,12 @@ async fn handle_task(
             bookmark.bookmark_id
         )
     })?;
+
+    info!(
+        bookmark_id = %bookmark.bookmark_id,
+        final_summary_length = %consolidated_summary.len(),
+        "Summary successfully updated"
+    );
 
     Ok(())
 }

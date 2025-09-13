@@ -6,15 +6,16 @@ use chrono::Utc;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use futures::future::join_all;
-use lol_html::{element, rewrite_str, RewriteStrSettings};
+use lol_html::{RewriteStrSettings, element, rewrite_str};
 use reqwest::{Client, Client as HttpClient};
 use shared::{Bookmark, BookmarkTask, BookmarkTaskStatus};
+use tracing::{debug, error, info, warn};
 use url::Url;
 use uuid::Uuid;
 
 use super::DAEMON_IDLE_SLEEP;
 use crate::db::{self, PgPool};
-use crate::{readability, Config};
+use crate::{Config, readability};
 
 const TASK_MAX_RETRIES: i16 = 5;
 
@@ -72,7 +73,7 @@ pub async fn run(
                     // Continue processing if there were tasks
                 }
                 Err(error) => {
-                    tracing::error!(?error, "Fail to process tasks");
+                    error!(?error, "Fail to process tasks");
                     break; // Exit on error to avoid infinite loop
                 }
             }
@@ -81,19 +82,19 @@ pub async fn run(
         // Send signal if any tasks were processed
         if any_processed {
             if let Err(error) = new_bookmark_tx.send(()) {
-                tracing::error!(?error, "Fail to send signal on new bookmark");
+                error!(?error, "Fail to send signal on new bookmark");
             }
         }
 
         // Wait for notification or timeout when no tasks remain
         tokio::select! {
             _ = new_task_rx.changed() => {
-                tracing::info!("Notification received, checking for tasks...");
+                info!("Notification received, checking for tasks...");
                 // Reset interval to avoid immediate timeout after notification
                 interval.reset();
             }
             _ = interval.tick() => {
-                tracing::info!("{DAEMON_IDLE_SLEEP:?} passed, checking for tasks...");
+                info!("{DAEMON_IDLE_SLEEP:?} passed, checking for tasks...");
             }
         }
     }
@@ -102,17 +103,17 @@ pub async fn run(
 async fn execute_step(pool: &PgPool, http: &HttpClient, config: &Config) -> Result<bool> {
     let tasks: Vec<BookmarkTask> = db::bookmark_task::peek(pool, Utc::now()).await?;
     if tasks.is_empty() {
-        tracing::info!("No new task");
+        info!("No new task");
         return Ok(false);
     }
-    tracing::info!("New tasks found: {}", tasks.len());
+    info!("New tasks found: {}", tasks.len());
     for task in tasks {
-        tracing::info!(?task, "Executing task");
+        info!(?task, "Executing task");
         match handle_task(pool, http, config, &task).await {
             Ok(_) => {
                 db::bookmark_task::update(pool, task.clone(), BookmarkTaskStatus::Done, None, None)
                     .await?;
-                tracing::info!(task_uuid = format!("{}", task.task_id), "Task executed")
+                info!(task_uuid = format!("{}", task.task_id), "Task executed")
             }
             Err(error) => {
                 if should_retry(&task) {
@@ -125,7 +126,7 @@ async fn execute_step(pool: &PgPool, http: &HttpClient, config: &Config) -> Resu
                         None,
                     )
                     .await?;
-                    tracing::warn!(?task, ?error, "Task failed, retying",)
+                    warn!(?task, ?error, "Task failed, retying",)
                 } else {
                     db::bookmark_task::update(
                         pool,
@@ -135,7 +136,7 @@ async fn execute_step(pool: &PgPool, http: &HttpClient, config: &Config) -> Resu
                         Some(format!("{error}")),
                     )
                     .await?;
-                    tracing::error!(?task, ?error, "Task failed");
+                    error!(?task, ?error, "Task failed");
                 }
             }
         }
@@ -153,11 +154,11 @@ async fn handle_task(
         .await?
         .is_some()
     {
-        tracing::info!(?task, "Duplicated bookmark");
+        info!(?task, "Duplicated bookmark");
         return Ok(());
     }
 
-    tracing::info!("Processing new bookmark for url={}", &task.url);
+    info!("Processing new bookmark for url={}", &task.url);
     let output = process_url(http, &task.user_id, &task.url)
         .await
         .with_context(|| format!("process_url: {}", &task.url))?;
@@ -198,7 +199,7 @@ async fn handle_task(
         )
     })?;
 
-    tracing::info!(
+    info!(
         url = task.url,
         bookmark_id = format!("{}", &bookmark_saved.bookmark_id),
         "Bookmark created",
@@ -213,17 +214,21 @@ async fn save_static_content(
     content: &str,
     user_id: &Uuid,
 ) -> Result<()> {
-    tracing::info!(
-        "Saving bookmark, id={}, user_id={}",
-        &bookmark.bookmark_id,
-        user_id
+    info!(
+        bookmark_id = %bookmark.bookmark_id,
+        user_id = %user_id,
+        images_count = %images.len(),
+        html_size = %content.len(),
+        "Saving static content"
     );
+
     let bookmark_dir = config
         .data_dir
         .join(user_id.to_string())
         .join(&bookmark.bookmark_id);
 
     if !bookmark_dir.exists() {
+        debug!(bookmark_dir = ?bookmark_dir, "Creating bookmark directory");
         tokio::fs::create_dir_all(&bookmark_dir).await?;
     }
 
@@ -244,15 +249,31 @@ async fn save_static_content(
         compressed_size,
         100 - (compressed_size * 100 / original_size)
     );
+
+    let mut saved_images = 0;
+    let mut skipped_images = 0;
     for image in images.iter() {
         let image_path = bookmark_dir.join(&image.id);
         if image_path.exists() {
-            tracing::info!(?image_path, "Image is already there");
+            debug!(image_path = ?image_path, "Image already exists, skipping");
+            skipped_images += 1;
             continue;
         }
         tokio::fs::write(&image_path, &image.bytes).await?;
-        tracing::info!(?image_path, "Image file saved");
+        debug!(
+            image_path = ?image_path,
+            size_bytes = %image.bytes.len(),
+            "Image saved"
+        );
+        saved_images += 1;
     }
+
+    info!(
+        bookmark_id = %bookmark.bookmark_id,
+        saved_images = %saved_images,
+        skipped_images = %skipped_images,
+        "Static content saved successfully"
+    );
     Ok(())
 }
 
@@ -261,13 +282,32 @@ async fn process_url(
     user_id: &Uuid,
     original_url_str: &str,
 ) -> Result<ProcessorOutput> {
+    info!(
+        url = %original_url_str,
+        user_id = %user_id,
+        "Starting URL processing"
+    );
     let original_url = Url::parse(original_url_str)?;
     let original_url = super::clean_url(original_url)?;
+    debug!(url = %original_url, "URL cleaned");
+
     let bookmark_id: String = super::make_bookmark_id(&original_url)?;
+    debug!(bookmark_id = %bookmark_id, "Generated bookmark_id");
+
+    debug!(url = %original_url, "Fetching HTML content");
     let raw_html = fetch_html_content(http, &original_url).await?;
+    info!(url = %original_url, size_bytes = %raw_html.len(), "HTML content fetched");
+
+    debug!("Processing content with readability");
     let readability_response = readability::process(raw_html).await?;
+    info!(
+        title = %readability_response.title,
+        text_length = %readability_response.text_content.len(),
+        "Content processed"
+    );
 
     let images_found = find_images(&original_url, &readability_response.content)?;
+    info!(image_count = %images_found.len(), "Found images to process");
 
     let processed_images = join_all(
         images_found
@@ -276,17 +316,22 @@ async fn process_url(
     )
     .await;
 
+    debug!(
+        processed_count = %processed_images.len(),
+        "Finished processing image downloads"
+    );
+
     let (images_ok, images_err): (Vec<_>, Vec<_>) =
         processed_images.into_iter().partition(|e| e.is_ok());
 
-    tracing::info!(
-        "Images with success: {}, failure: {}",
-        images_ok.len(),
-        images_err.len()
+    info!(
+        success_count = %images_ok.len(),
+        failure_count = %images_err.len(),
+        "Image processing completed"
     );
 
     images_err.into_iter().for_each(|error| {
-        tracing::warn!("Images with error, they will be ignored, error={:?}", error);
+        warn!("Images with error, they will be ignored, error={:?}", error);
     });
 
     let images_index: HashMap<String, Image> = images_ok
@@ -328,13 +373,11 @@ async fn rewrite_images(
                     "/static/{user_id}/{bookmark_id}/{image_found_id}",
                     image_found_id = image_found.id
                 );
-                tracing::info!("Rewriting image from={img_src}, to={src}");
+                info!("Rewriting image from={img_src}, to={src}");
                 src
             }
             None => {
-                tracing::warn!(
-                    "Something weird happened, processed image not found, img_src={img_src}"
-                );
+                warn!("Something weird happened, processed image not found, img_src={img_src}");
                 img_src
             }
         };
@@ -355,18 +398,33 @@ async fn rewrite_images(
 }
 
 async fn process_image_found(http: &Client, image_found: &ImageFound) -> Result<Image> {
+    let start = std::time::Instant::now();
+    debug!(url = %image_found.url, "Downloading image");
+
     let response = http
         .get(image_found.url.to_string())
         .send()
         .await?
         .error_for_status()?;
+
     let content_type = response
         .headers()
         .get("Content-Type")
         .map(|v| v.to_str().unwrap_or("application/octet-stream"))
         .unwrap_or("application/octet-stream")
         .to_string();
+
     let bytes = response.bytes().await?.to_vec();
+    let elapsed = start.elapsed();
+
+    info!(
+        elapsed = ?elapsed,
+        url = %image_found.url,
+        size_bytes = %bytes.len(),
+        content_type = %content_type,
+        "Image downloaded"
+    );
+
     Ok(Image {
         id: image_found.id.clone(),
         original_url: image_found.url.to_string(),
@@ -384,7 +442,7 @@ fn find_images(base_url: &Url, content: &str) -> Result<Vec<ImageFound>> {
         let parsed_img_src = match Url::parse(&img_src) {
             Ok(parsed) => Ok(parsed),
             Err(url::ParseError::RelativeUrlWithoutBase) => {
-                tracing::info!("Found relative URL, img_src={img_src}");
+                info!("Found relative URL, img_src={img_src}");
                 base_url.join(&img_src)
             }
             Err(error) => Err(error),
@@ -392,7 +450,7 @@ fn find_images(base_url: &Url, content: &str) -> Result<Vec<ImageFound>> {
         match parsed_img_src {
             Ok(parsed) => {
                 let image_id: String = super::make_bookmark_id(&parsed)?;
-                tracing::info!("Image found, original_url={parsed}");
+                info!("Image found, original_url={parsed}");
                 images_found.push(ImageFound {
                     id: image_id,
                     url: parsed,
@@ -400,7 +458,7 @@ fn find_images(base_url: &Url, content: &str) -> Result<Vec<ImageFound>> {
                 });
             }
             Err(error) => {
-                tracing::warn!(
+                warn!(
                     img_src = img_src,
                     "Fail to parse URL from img_src, skipping this image, error={error}"
                 );
@@ -421,5 +479,18 @@ fn find_images(base_url: &Url, content: &str) -> Result<Vec<ImageFound>> {
 }
 
 async fn fetch_html_content(client: &Client, url: &Url) -> Result<String> {
-    Ok(client.get(url.to_string()).send().await?.text().await?)
+    let start = std::time::Instant::now();
+    let response = client.get(url.to_string()).send().await?;
+    let status = response.status();
+    debug!(status = %status, url = %url, "HTTP response");
+
+    let content = response.text().await?;
+    let elapsed = start.elapsed();
+    info!(
+        elapsed = ?elapsed,
+        size_bytes = %content.len(),
+        url = %url,
+        "HTML fetched"
+    );
+    Ok(content)
 }
