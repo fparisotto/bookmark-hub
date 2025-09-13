@@ -191,12 +191,12 @@ pub async fn search(
 
     if let Some(to_created_at) = &request.to_created_at {
         params.push(to_created_at);
-        filters.push(format!("bt.created_at >= ${}", params.len()));
+        filters.push(format!("bt.created_at <= ${}", params.len()));
     }
 
     if let Some(from_created_at) = &request.from_created_at {
         params.push(from_created_at);
-        filters.push(format!("bt.created_at <= ${}", params.len()));
+        filters.push(format!("bt.created_at >= ${}", params.len()));
     }
 
     let filter_clause = if !filters.is_empty() {

@@ -59,3 +59,8 @@ run-cli *ARGS:
   #!/usr/bin/env bash
   set -euo pipefail
   cargo run --bin cli {{ARGS}}
+
+test-integration: build
+  #!/usr/bin/env bash
+  set -euo pipefail
+  RUST_BACKTRACE=1 RUST_LOG=info cargo test -p server --features integration-tests -- --nocapture --test-threads=1

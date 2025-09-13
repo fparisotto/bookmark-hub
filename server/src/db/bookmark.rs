@@ -9,7 +9,7 @@ use uuid::Uuid;
 use super::PgPool;
 use crate::error::{Error, Result};
 
-#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 struct RowBookmark {
     bookmark_id: String,
     user_id: Uuid,
@@ -217,8 +217,9 @@ pub async fn get_text_content(
 }
 
 pub async fn get_untagged_bookmarks(pool: &PgPool, limit: usize) -> Result<Vec<Bookmark>> {
-    let sql  =
-        format!("SELECT * FROM bookmark WHERE tags IS NULL OR coalesce(array_length(tags, 1), 0) = 0 ORDER BY random() LIMIT {limit};");
+    let sql = format!(
+        "SELECT * FROM bookmark WHERE tags IS NULL OR coalesce(array_length(tags, 1), 0) = 0 ORDER BY random() LIMIT {limit};"
+    );
     let client = pool.get().await?;
     let results = client
         .query(&sql, &[])
