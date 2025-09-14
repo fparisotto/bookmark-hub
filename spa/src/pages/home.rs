@@ -42,6 +42,8 @@ pub enum Page {
         bookmark: Bookmark,
     },
     Tasks,
+    RAG,
+    RagHistory,
 }
 
 impl From<HomeState> for SearchRequest {
@@ -516,6 +518,16 @@ pub fn home(props: &Props) -> Html {
                         {pagination_controls}
                     </div>
                 </>
+            }
+        }
+        Page::RAG => {
+            html! {
+                <crate::pages::rag::RagPage user_session={props.user_session.clone()} />
+            }
+        }
+        Page::RagHistory => {
+            html! {
+                <crate::pages::rag_history::RagHistoryPage user_session={props.user_session.clone()} />
             }
         }
     };

@@ -10,9 +10,10 @@ use super::{create_postgres_container, create_postgres_pool, generate_test_db_na
 
 /// The Docker image to use for the PostgreSQL container.
 /// Can be overridden by the `TEST_DB_CONTAINER_IMAGE` environment variable.
+/// Using pgvector image for RAG functionality tests.
 const CONTAINER_IMAGE: &str = match option_env!("TEST_DB_CONTAINER_IMAGE") {
     Some(image) => image,
-    None => "postgres:17-alpine",
+    None => "pgvector/pgvector:pg17",
 };
 
 /// An isolated database instance for a single test.

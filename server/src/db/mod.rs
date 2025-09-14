@@ -10,6 +10,8 @@ use crate::PgParams;
 
 pub mod bookmark;
 pub mod bookmark_task;
+pub mod chunks;
+pub mod rag;
 pub mod search;
 pub mod user;
 
@@ -38,7 +40,7 @@ $$ LANGUAGE plpgsql;";
 
 const SCHEMAS: [(i32, &str); 1] = [(
     1,
-    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/schema/1_init.sql")),
+    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/schema/1_unified.sql")),
 )];
 
 pub async fn get_pool(pg: PgParams) -> anyhow::Result<PgPool> {

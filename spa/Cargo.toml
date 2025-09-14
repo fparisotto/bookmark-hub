@@ -9,6 +9,7 @@ chrono = { workspace = true }
 getrandom = { version = "0.2", features = ["js"] }
 gloo-net = "0.6"
 log = "0.4"
+pulldown-cmark = "0.12"
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }

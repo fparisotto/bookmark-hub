@@ -71,6 +71,11 @@ async fn main() -> anyhow::Result<()> {
         pool.clone(),
         new_bookmark_rx.clone(),
     ));
+    let embeddings_daemon = tokio::spawn(setup_embeddings_daemon(
+        config.clone(),
+        pool.clone(),
+        new_bookmark_rx.clone(),
+    ));
 
     info!("Setting up HTTP server");
     let app_server = setup_app(&config, pool.clone(), new_task_tx);
@@ -126,6 +131,21 @@ async fn main() -> anyhow::Result<()> {
                 },
                 Ok(Ok(_)) => {
                     info!("Summary daemon stopped");
+                }
+            }
+        }
+        result = embeddings_daemon => {
+            match result {
+                Ok(Err(error)) => {
+                    error!(?error, "Embeddings daemon error");
+                    std::process::exit(1);
+                },
+                Err(error) => {
+                    error!(?error, "Join error in embeddings daemon");
+                    std::process::exit(1);
+                },
+                Ok(Ok(_)) => {
+                    info!("Embeddings daemon stopped");
                 }
             }
         }
@@ -240,6 +260,27 @@ async fn setup_summary_daemon(
         }
         args => {
             bail!("Invalid args for Ollama, {args:?}")
+        }
+    }
+}
+
+async fn setup_embeddings_daemon(
+    config: Config,
+    pool: PgPool,
+    new_bookmark_rx: tokio::sync::watch::Receiver<()>,
+) -> anyhow::Result<()> {
+    match &config.ollama.ollama_url {
+        Some(url) => {
+            let embedding_model = config.ollama.ollama_embedding_model.as_deref();
+            info!(
+                embedding_model = ?embedding_model,
+                "Starting embeddings daemon"
+            );
+            daemon::embeddings::run(&pool, new_bookmark_rx, url, embedding_model).await
+        }
+        None => {
+            warn!("No Ollama URL configured, disabling embeddings daemon");
+            pending::<anyhow::Result<()>>().await
         }
     }
 }
