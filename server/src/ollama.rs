@@ -140,15 +140,14 @@ pub async fn consolidate_summary(
     }
 }
 
-#[allow(dead_code)]
 pub async fn embeddings(
-    ollama_url: Url,
-    ollama_model: String,
-    text: String,
+    ollama_url: &Url,
+    ollama_model: &str,
+    text: &str,
 ) -> anyhow::Result<Vec<f32>> {
-    let ollama = Ollama::from_url(ollama_url);
-    let input = EmbeddingsInput::Single(text);
-    let request = GenerateEmbeddingsRequest::new(ollama_model, input);
+    let ollama = Ollama::from_url(ollama_url.to_owned());
+    let input = EmbeddingsInput::Single(text.to_string());
+    let request = GenerateEmbeddingsRequest::new(ollama_model.to_owned(), input);
     let response = ollama.generate_embeddings(request).await?;
     if response.embeddings.len() > 1 {
         bail!("More than one embeddings returned from ollama, not expected")
@@ -159,4 +158,106 @@ pub async fn embeddings(
             bail!("No embeddings returned from ollama")
         }
     }
+}
+
+pub async fn generate_similar_questions(
+    ollama_url: &Url,
+    ollama_model: &str,
+    question: &str,
+) -> anyhow::Result<Vec<String>> {
+    const PROMPT_PREFIX: &str = r#"Given the following question, generate 4 additional similar questions that would help find the same or related information. The questions should be variations with different phrasings, perspectives, or levels of specificity.
+
+Original question: "#;
+
+    #[derive(JsonSchema, Deserialize)]
+    struct QuestionsResponse {
+        questions: Vec<String>,
+    }
+
+    let ollama = Ollama::from_url(ollama_url.to_owned());
+    let format = FormatType::StructuredJson(Box::new(JsonStructure::new::<QuestionsResponse>()));
+    let request = GenerationRequest::new(
+        ollama_model.to_owned(),
+        format!("{PROMPT_PREFIX}\n{question}"),
+    )
+    .format(format)
+    .system(SYSTEM_PROMPT);
+    let response = ollama.generate(request).await?;
+    if let Ok(parsed) = serde_json::from_str::<QuestionsResponse>(&response.response) {
+        Ok(parsed.questions)
+    } else {
+        bail!(
+            "Ollama failed to generate similar questions, question: {}, response: {}",
+            question,
+            response.response
+        )
+    }
+}
+
+pub async fn assess_chunk_relevance(
+    ollama_url: &Url,
+    ollama_model: &str,
+    question: &str,
+    chunk_text: &str,
+) -> anyhow::Result<(bool, String)> {
+    const PROMPT_PREFIX: &str = r#"Assess whether the given text chunk is relevant to answering the question. 
+
+Question: {question}
+
+Text chunk: {chunk}
+
+Evaluate if this chunk contains information that would help answer the question. Respond with:
+- relevant: true/false
+- explanation: brief explanation of why it is or isn't relevant"#;
+
+    #[derive(JsonSchema, Deserialize)]
+    struct RelevanceResponse {
+        relevant: bool,
+        explanation: String,
+    }
+
+    let ollama = Ollama::from_url(ollama_url.to_owned());
+    let format = FormatType::StructuredJson(Box::new(JsonStructure::new::<RelevanceResponse>()));
+    let prompt = PROMPT_PREFIX
+        .replace("{question}", question)
+        .replace("{chunk}", chunk_text);
+    let request = GenerationRequest::new(ollama_model.to_owned(), prompt)
+        .format(format)
+        .system(SYSTEM_PROMPT);
+    let response = ollama.generate(request).await?;
+    if let Ok(parsed) = serde_json::from_str::<RelevanceResponse>(&response.response) {
+        Ok((parsed.relevant, parsed.explanation))
+    } else {
+        bail!(
+            "Ollama failed to assess chunk relevance, question: {}, chunk: {}, response: {}",
+            question,
+            chunk_text,
+            response.response
+        )
+    }
+}
+
+pub async fn answer_with_context(
+    ollama_url: &Url,
+    ollama_model: &str,
+    question: &str,
+    context_chunks: &[String],
+) -> anyhow::Result<String> {
+    let context = context_chunks.join("\n\n");
+    let prompt = format!(
+        r#"Given this context information, answer the following question. If the context doesn't contain enough information to answer the question, say so clearly.
+
+Context:
+{}
+
+Question: {}
+
+Provide a clear, accurate answer based on the context provided. If you cannot answer based on the context, explain what information would be needed."#,
+        context, question
+    );
+
+    let ollama = Ollama::from_url(ollama_url.to_owned());
+    let request = GenerationRequest::new(ollama_model.to_owned(), prompt).system(SYSTEM_PROMPT);
+    let response = ollama.generate(request).await?;
+    Ok(response.response)
 }

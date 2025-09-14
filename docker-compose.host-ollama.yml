@@ -5,21 +5,20 @@ services:
       - 3000:3000
     depends_on:
       - postgres
-      - ollama
-      - ollama-model-puller
+    network_mode: host
     environment:
       RUST_BACKTRACE: full
       RUST_LOG: info
       APP_BIND: "[::]:3000"
       APP_DATA_DIR: /data
       HMAC_KEY: secret
-      PG_HOST: postgres
+      PG_HOST: localhost
       PG_PORT: 5432
       PG_USER: main
       PG_PASSWORD: main
       PG_DATABASE: main
       PG_MAX_CONNECTIONS: 5
-      OLLAMA_URL: http://ollama:11434
+      OLLAMA_URL: http://localhost:11434
       OLLAMA_TEXT_MODEL: gemma3:4b
       OLLAMA_EMBEDDING_MODEL: nomic-embed-text:v1.5
     volumes:
@@ -41,27 +40,6 @@ services:
       POSTGRES_DB: main
     volumes:
       - postgres-data:/var/lib/postgresql/data
-  ollama:
-    image: ollama/ollama:0.11.4
-    container_name: ollama
-    ports:
-      - 11435:11434
-    volumes:
-      - ollama-data:/root/.ollama
-  ollama-model-puller:
-    image: curlimages/curl:latest
-    command: 
-      - /bin/sh
-      - -c
-      - |
-        echo "Pulling text model..."
-        curl ollama:11434/api/pull -d '{"model":"gemma3:4b"}' || exit 1
-        echo "Pulling embedding model..."
-        curl ollama:11434/api/pull -d '{"model":"nomic-embed-text:v1.5"}' || exit 1
-        echo "All models pulled successfully"
-    depends_on:
-      - ollama
 volumes:
   postgres-data:
-  ollama-data:
   bookmark-hub-data:

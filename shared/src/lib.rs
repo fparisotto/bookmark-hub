@@ -199,3 +199,63 @@ pub struct BookmarkTaskSearchResponse {
     pub has_more: bool,
     pub total_count: Option<usize>,
 }
+
+// RAG (Retrieval-Augmented Generation) types
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BookmarkChunk {
+    pub chunk_id: Uuid,
+    pub bookmark_id: String,
+    pub user_id: Uuid,
+    pub chunk_text: String,
+    pub chunk_index: i32,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RagSession {
+    pub session_id: Uuid,
+    pub user_id: Uuid,
+    pub question: String,
+    pub answer: Option<String>,
+    pub relevant_chunks: Vec<Uuid>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RagQueryRequest {
+    pub question: String,
+    pub max_chunks: Option<usize>,
+    pub similarity_threshold: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RagQueryResponse {
+    pub session_id: Uuid,
+    pub question: String,
+    pub answer: String,
+    pub relevant_chunks: Vec<RagChunkMatch>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RagChunkMatch {
+    pub chunk: BookmarkChunk,
+    pub bookmark: Bookmark,
+    pub similarity_score: f64,
+    pub relevance_explanation: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RagHistoryRequest {
+    pub limit: Option<usize>,
+    pub offset: Option<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RagHistoryResponse {
+    pub sessions: Vec<RagSession>,
+    pub total_count: usize,
+}

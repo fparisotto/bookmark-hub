@@ -6,6 +6,7 @@ A self-hosted bookmark management application that helps you organize, search, a
 
 - **Offline-First**: Store and manage bookmarks entirely on your own infrastructure
 - **AI-Powered Organization**: Automatic tagging and summarization using Ollama integration
+- **RAG-Enhanced Search**: Intelligent search using Retrieval-Augmented Generation to find relevant bookmarks based on semantic similarity
 - **Full-Text Search**: Search through bookmark titles, URLs, content, and AI-generated summaries
 - **Tag Management**: Organize bookmarks with manual and AI-suggested tags
 - **Content Extraction**: Automatically extract and store readable content from web pages
@@ -31,6 +32,24 @@ This will start:
 - PostgreSQL database on port 5432
 - Bookmark Hub server on port 3000
 - Web interface accessible at http://localhost:3000
+
+#### Using with Host Ollama
+
+If you already have Ollama running on your host machine, use the alternative compose file:
+
+```bash
+# Build the application container
+$ just build-container
+
+# Start with host Ollama integration
+$ docker compose -f docker-compose.host-ollama.yml up
+```
+
+This configuration:
+- Uses `network_mode: host` for direct access to host services
+- Connects to Ollama running at `localhost:11434`
+- Uses `pgvector/pgvector:pg17` for vector embedding storage
+- Configures embedding model as `nomic-embed-text:v1.5` for RAG features
 
 ### Development Setup
 
@@ -78,6 +97,7 @@ export APP_DATA_DIR=/path/to/data
 # Optional: AI Features
 export OLLAMA_URL=http://localhost:11434
 export OLLAMA_TEXT_MODEL=gemma3:4b
+export OLLAMA_EMBEDDING_MODEL=nomic-embed-text:v1.5
 ```
 
 ### CLI Usage
@@ -105,6 +125,7 @@ $ hurl --verbose --test test.hurl
 
 - **Server**: Axum-based REST API with background processing daemons
 - **Frontend**: Yew WebAssembly application for modern web experience  
-- **Database**: PostgreSQL for reliable data storage
-- **AI Integration**: Ollama for content summarization and tag generation
+- **Database**: PostgreSQL for reliable data storage with vector embeddings
+- **AI Integration**: Ollama for content summarization, tag generation, and embedding creation
+- **RAG System**: Vector similarity search using embeddings for intelligent bookmark discovery
 - **Content Processing**: dom_smoothie for web page content extraction

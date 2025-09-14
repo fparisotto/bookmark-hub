@@ -7,6 +7,7 @@ use tracing::info;
 use url::Url;
 
 pub mod add_bookmark;
+pub mod embeddings;
 pub mod summary;
 pub mod tag;
 

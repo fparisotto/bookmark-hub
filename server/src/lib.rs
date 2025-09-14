@@ -13,6 +13,7 @@ pub mod db;
 pub mod endpoints;
 pub mod error;
 pub mod ollama;
+pub mod rag;
 pub mod readability;
 pub mod tokenizer;
 
@@ -52,6 +53,9 @@ pub struct OllamaParams {
 
     #[arg(long, env = "OLLAMA_TEXT_MODEL")]
     pub ollama_text_model: Option<String>,
+
+    #[arg(long, env = "OLLAMA_EMBEDDING_MODEL")]
+    pub ollama_embedding_model: Option<String>,
 }
 
 #[derive(Debug, Clone, Args)]

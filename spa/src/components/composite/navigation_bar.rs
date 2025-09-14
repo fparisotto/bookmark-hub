@@ -26,6 +26,20 @@ pub fn navigation_bar(props: &Props) -> Html {
         })
     };
 
+    let on_rag_click = {
+        let on_page_change = props.on_page_change.clone();
+        Callback::from(move |_| {
+            on_page_change.emit(Page::RAG);
+        })
+    };
+
+    let on_rag_history_click = {
+        let on_page_change = props.on_page_change.clone();
+        Callback::from(move |_| {
+            on_page_change.emit(Page::RagHistory);
+        })
+    };
+
     let on_logout_click = {
         let on_logout = props.on_logout.clone();
         Callback::from(move |_| {
@@ -44,6 +58,18 @@ pub fn navigation_bar(props: &Props) -> Html {
         classes!("nav-link")
     };
 
+    let rag_classes = if props.active_page == Page::RAG {
+        classes!("nav-link", "active")
+    } else {
+        classes!("nav-link")
+    };
+
+    let rag_history_classes = if props.active_page == Page::RagHistory {
+        classes!("nav-link", "active")
+    } else {
+        classes!("nav-link")
+    };
+
     html! {
         <nav class="navbar navbar-expand-lg bg-body-tertiary">
             <div class="container-fluid">
@@ -55,6 +81,12 @@ pub fn navigation_bar(props: &Props) -> Html {
                         </li>
                         <li class="nav-item">
                             <a onclick={on_tasks_click} class={task_classes}>{"Tasks"}</a>
+                        </li>
+                        <li class="nav-item">
+                            <a onclick={on_rag_click} class={rag_classes}>{"AI Search"}</a>
+                        </li>
+                        <li class="nav-item">
+                            <a onclick={on_rag_history_click} class={rag_history_classes}>{"AI History"}</a>
                         </li>
                     </ul>
                     <button class="btn btn-sm me-2 btn-outline-primary" data-bs-toggle="modal" data-bs-target="#add-bookmark-modal">
