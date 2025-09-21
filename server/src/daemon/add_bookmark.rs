@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::io::Write;
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use chrono::Utc;
@@ -14,6 +15,7 @@ use url::Url;
 use uuid::Uuid;
 
 use super::DAEMON_IDLE_SLEEP;
+use crate::chrome_client::{ChromeClient, ChromeConnection};
 use crate::db::{self, PgPool};
 use crate::{readability, Config};
 
@@ -58,12 +60,21 @@ pub async fn run(
     new_bookmark_tx: tokio::sync::watch::Sender<()>,
 ) -> Result<()> {
     let http: HttpClient = HttpClient::new();
+    let chrome_connection = match &config.chrome {
+        Some(chrome_params) => ChromeConnection::Remote {
+            host: chrome_params.chrome_host.clone(),
+            port: chrome_params.chrome_port,
+        },
+        None => ChromeConnection::Local,
+    };
+
+    let chrome_client = Arc::new(ChromeClient::new(chrome_connection));
     let mut interval = tokio::time::interval(DAEMON_IDLE_SLEEP);
     loop {
         // Process all available tasks continuously
         let mut any_processed = false;
         loop {
-            match execute_step(pool, &http, config).await {
+            match execute_step(pool, &http, &chrome_client, config).await {
                 Ok(has_tasks) => {
                     if !has_tasks {
                         // No more tasks, exit inner loop
@@ -100,7 +111,12 @@ pub async fn run(
     }
 }
 
-async fn execute_step(pool: &PgPool, http: &HttpClient, config: &Config) -> Result<bool> {
+async fn execute_step(
+    pool: &PgPool,
+    http: &HttpClient,
+    chrome_client: &Arc<ChromeClient>,
+    config: &Config,
+) -> Result<bool> {
     let tasks: Vec<BookmarkTask> = db::bookmark_task::peek(pool, Utc::now()).await?;
     if tasks.is_empty() {
         info!("No new task");
@@ -109,7 +125,7 @@ async fn execute_step(pool: &PgPool, http: &HttpClient, config: &Config) -> Resu
     info!("New tasks found: {}", tasks.len());
     for task in tasks {
         info!(?task, "Executing task");
-        match handle_task(pool, http, config, &task).await {
+        match handle_task(pool, http, chrome_client, config, &task).await {
             Ok(_) => {
                 db::bookmark_task::update(pool, task.clone(), BookmarkTaskStatus::Done, None, None)
                     .await?;
@@ -147,6 +163,7 @@ async fn execute_step(pool: &PgPool, http: &HttpClient, config: &Config) -> Resu
 async fn handle_task(
     pool: &PgPool,
     http: &HttpClient,
+    chrome_client: &Arc<ChromeClient>,
     config: &Config,
     task: &BookmarkTask,
 ) -> Result<()> {
@@ -159,7 +176,7 @@ async fn handle_task(
     }
 
     info!("Processing new bookmark for url={}", &task.url);
-    let output = process_url(http, &task.user_id, &task.url)
+    let output = process_url(http, chrome_client, &task.user_id, &task.url)
         .await
         .with_context(|| format!("process_url: {}", &task.url))?;
 
@@ -279,6 +296,7 @@ async fn save_static_content(
 
 async fn process_url(
     http: &Client,
+    chrome_client: &Arc<ChromeClient>,
     user_id: &Uuid,
     original_url_str: &str,
 ) -> Result<ProcessorOutput> {
@@ -294,9 +312,9 @@ async fn process_url(
     let bookmark_id: String = super::make_bookmark_id(&original_url)?;
     debug!(bookmark_id = %bookmark_id, "Generated bookmark_id");
 
-    debug!(url = %original_url, "Fetching HTML content");
-    let raw_html = fetch_html_content(http, &original_url).await?;
-    info!(url = %original_url, size_bytes = %raw_html.len(), "HTML content fetched");
+    debug!(url = %original_url, "Fetching HTML content using Chrome");
+    let raw_html = fetch_html_content(chrome_client, &original_url).await?;
+    info!(url = %original_url, size_bytes = %raw_html.len(), "HTML content fetched from Chrome");
 
     debug!("Processing content with readability");
     let readability_response = readability::process(raw_html).await?;
@@ -478,19 +496,18 @@ fn find_images(base_url: &Url, content: &str) -> Result<Vec<ImageFound>> {
     Ok(images_found)
 }
 
-async fn fetch_html_content(client: &Client, url: &Url) -> Result<String> {
+async fn fetch_html_content(chrome_client: &Arc<ChromeClient>, url: &Url) -> Result<String> {
     let start = std::time::Instant::now();
-    let response = client.get(url.to_string()).send().await?;
-    let status = response.status();
-    debug!(status = %status, url = %url, "HTTP response");
-
-    let content = response.text().await?;
+    let content = chrome_client
+        .fetch_rendered_html(url)
+        .await
+        .with_context(|| format!("Failed to fetch HTML from Chrome for URL: {}", url))?;
     let elapsed = start.elapsed();
     info!(
         elapsed = ?elapsed,
         size_bytes = %content.len(),
         url = %url,
-        "HTML fetched"
+        "HTML fetched via Chrome"
     );
     Ok(content)
 }

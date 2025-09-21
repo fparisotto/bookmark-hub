@@ -7,9 +7,10 @@ services:
       - postgres
       - ollama
       - ollama-model-puller
+      - chrome
     environment:
       RUST_BACKTRACE: full
-      RUST_LOG: info
+      RUST_LOG: info,server=debug
       APP_BIND: "[::]:3000"
       APP_DATA_DIR: /data
       HMAC_KEY: secret
@@ -22,6 +23,8 @@ services:
       OLLAMA_URL: http://ollama:11434
       OLLAMA_TEXT_MODEL: gemma3:4b
       OLLAMA_EMBEDDING_MODEL: nomic-embed-text:v1.5
+      CHROME_HOST: chrome
+      CHROME_PORT: 3001
     volumes:
       - bookmark-hub-data:/data
     healthcheck:
@@ -50,7 +53,7 @@ services:
       - ollama-data:/root/.ollama
   ollama-model-puller:
     image: curlimages/curl:latest
-    command: 
+    command:
       - /bin/sh
       - -c
       - |
@@ -61,6 +64,14 @@ services:
         echo "All models pulled successfully"
     depends_on:
       - ollama
+  chrome:
+    image: browserless/chrome:latest
+    ports:
+      - 3001:3001
+    environment:
+      - PORT=3001
+      - CONCURRENT=10
+      - ENABLE_DEBUGGER=true
 volumes:
   postgres-data:
   ollama-data:

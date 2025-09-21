@@ -56,6 +56,7 @@
 
           buildInputs = [
             pkgs.openssl
+            pkgs.chromium
           ];
         };
 
@@ -84,7 +85,7 @@
           in
           pkgs.dockerTools.buildLayeredImage {
             name = "bookmark-hub";
-            contents = [ serverPackage spaDistLayer pkgs.coreutils pkgs.bash pkgs.cacert ];
+            contents = [ serverPackage spaDistLayer pkgs.coreutils pkgs.bash pkgs.cacert pkgs.chromium pkgs.curl ];
             config = {
               Env = [
                 "SPA_DIST=/data"
