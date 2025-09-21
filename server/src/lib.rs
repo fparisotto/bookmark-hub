@@ -8,6 +8,7 @@ use url::Url;
 
 use self::db::PgPool;
 
+pub mod chrome_client;
 pub mod daemon;
 pub mod db;
 pub mod endpoints;
@@ -36,6 +37,9 @@ pub struct Config {
     #[clap(flatten)]
     pub ollama: OllamaParams,
 
+    #[clap(flatten)]
+    pub chrome: Option<ChromeParams>,
+
     #[arg(long, env = "APP_BIND", default_value = "[::]:3000")]
     pub bind: SocketAddr,
 
@@ -56,6 +60,15 @@ pub struct OllamaParams {
 
     #[arg(long, env = "OLLAMA_EMBEDDING_MODEL")]
     pub ollama_embedding_model: Option<String>,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct ChromeParams {
+    #[arg(long, env = "CHROME_HOST")]
+    pub chrome_host: String,
+
+    #[arg(long, env = "CHROME_PORT", default_value = "9222")]
+    pub chrome_port: u16,
 }
 
 #[derive(Debug, Clone, Args)]
