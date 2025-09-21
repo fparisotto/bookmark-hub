@@ -108,14 +108,14 @@ export CHROME_PORT=3001
 ### CLI Usage
 
 ```bash
-# Import bookmarks
-$ just run-cli import --file bookmarks.html
+# Login (required first)
+$ just run-cli login --url http://localhost:3000 --username your_user --password your_password
 
-# Export bookmarks
-$ just run-cli export --format json > bookmarks.json
+# Add a single bookmark
+$ just run-cli add --url https://example.com
 
-# Add a bookmark
-$ just run-cli add --url https://example.com --tags "rust,webdev"
+# Add multiple bookmarks from a file (one URL per line)
+$ just run-cli add-batch --file urls.txt
 ```
 
 ## Testing
