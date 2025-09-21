@@ -30,6 +30,7 @@ $ docker compose up
 
 This will start:
 - PostgreSQL database on port 5432
+- Browserless Chrome automation service on port 3001
 - Bookmark Hub server on port 3000
 - Web interface accessible at http://localhost:3000
 
@@ -98,6 +99,10 @@ export APP_DATA_DIR=/path/to/data
 export OLLAMA_URL=http://localhost:11434
 export OLLAMA_TEXT_MODEL=gemma3:4b
 export OLLAMA_EMBEDDING_MODEL=nomic-embed-text:v1.5
+
+# Optional: Chrome Automation
+export CHROME_HOST=localhost
+export CHROME_PORT=3001
 ```
 
 ### CLI Usage
@@ -129,3 +134,4 @@ $ hurl --verbose --test test.hurl
 - **AI Integration**: Ollama for content summarization, tag generation, and embedding creation
 - **RAG System**: Vector similarity search using embeddings for intelligent bookmark discovery
 - **Content Processing**: dom_smoothie for web page content extraction
+- **Browser Automation**: Browserless Chrome for reliable web page rendering and content extraction
