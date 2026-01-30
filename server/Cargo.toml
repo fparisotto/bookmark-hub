@@ -8,31 +8,31 @@ anyhow = { workspace = true }
 argon2 = "0.5"
 async-trait = "0.1"
 axum = { version = "0.8" }
-axum-extra = { version = "0.10", features = ["typed-header"] }
+axum-extra = { version = "0.12", features = ["typed-header"] }
 axum-macros = "0.5"
-axum-otel-metrics = "0.10"
+axum-otel-metrics = "0.12"
 base64-url = { workspace = true }
-cantrip = "0.4.0"
+cantrip = "0.5"
 chrono = { workspace = true }
 clap = { version = "4.5", features = ["derive", "env"] }
 deadpool-postgres = "0.14"
-dom_smoothie = "0.11.0"
+dom_smoothie = "0.15"
 flate2 = "1.0"
 futures = "0.3"
 headless_chrome = "1.0"
 hex = { workspace = true }
 hmac = "0.12"
-jsonwebtoken = "9.3"
+jsonwebtoken = "10"
 lol_html = "2.2"
 metrics = "0.24"
-metrics-exporter-prometheus = "0.16"
+metrics-exporter-prometheus = "0.18"
 murmur3 = "0.5"
 ollama-rs = { version = "0.3.2", features = ["macros"] }
-opentelemetry_sdk = "0.28.0"
+opentelemetry_sdk = "0.31"
 postgres-from-row = "0.5.2"
 postgres-types = { version = "0.2.9", features = ["derive"] }
 rand = "0.8"
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.13", features = ["json"] }
 schemars = "1.0.4"
 secrecy = { workspace = true }
 serde = { workspace = true }
@@ -42,7 +42,7 @@ shared = { path = "../shared/" }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 thiserror = { workspace = true }
-tokenizers = { version = "0.21.0", features = ["http"] }
+tokenizers = { version = "0.22", features = ["http"] }
 tokio = { version = "1", features = ["full"] }
 tokio-postgres = { version = "0.7", features = [
   "array-impls",
@@ -59,7 +59,7 @@ url = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
-testcontainers = { version = "0.24" }
+testcontainers = { version = "0.26" }
 
 [features]
 integration-tests = []

@@ -8,7 +8,7 @@ anyhow = { workspace = true }
 chrono = { workspace = true }
 clap = { version = "4.5", features = ["derive", "env"] }
 home = "0.5"
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.13", features = ["json"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 shared = { path = "../shared/" }
@@ -17,3 +17,4 @@ tracing = { version = "0.1", features = ["log"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = { workspace = true }
 uuid = { workspace = true }
+scraper = "0.25"
