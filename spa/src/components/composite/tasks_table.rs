@@ -61,10 +61,11 @@ fn render_bookmark_task(task: &BookmarkTask) -> Html {
 #[function_component(TasksTable)]
 pub fn tasks_table(props: &Props) -> Html {
     let content = match &props.response {
-        Some(response) => {
-            let bookmark_tasks_html = response.tasks.iter().map(render_bookmark_task);
-            html! { for bookmark_tasks_html }
-        }
+        Some(response) => response
+            .tasks
+            .iter()
+            .map(render_bookmark_task)
+            .collect::<Html>(),
         None => {
             html! {
                 <tr>

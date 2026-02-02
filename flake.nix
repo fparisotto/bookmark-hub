@@ -2,7 +2,7 @@
   description = "bookmark-hub";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
     crane.url = "github:ipetkov/crane";
     flake-utils.url = "github:numtide/flake-utils";
     rust-overlay = {
@@ -119,16 +119,14 @@
           wasm-bindgen-cli = pkgs.buildWasmBindgenCli rec {
             src = pkgs.fetchCrate {
               pname = "wasm-bindgen-cli";
-              version = "0.2.101";
-              hash = "sha256-txpbTzlrPSEktyT9kSpw4RXQoiSZHm9t3VxeRn//9JI=";
-              # hash = lib.fakeHash;
+              version = "0.2.108";
+              hash = "sha256-UsuxILm1G6PkmVw0I/JF12CRltAfCJQFOaT4hFwvR8E=";
             };
 
             cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
               inherit src;
               inherit (src) pname version;
-              hash = "sha256-J+F9SqTpH3T0MbvlNKVyKnMachgn8UXeoTF0Pk3Xtnc=";
-              # hash = lib.fakeHash;
+              hash = "sha256-iqQiWbsKlLBiJFeqIYiXo3cqxGLSjNM8SOWXGM9u43E=";
             };
           };
         });
