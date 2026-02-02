@@ -5,8 +5,8 @@ use std::path::PathBuf;
 
 use anyhow::Context;
 use clap::{Args, Parser, Subcommand};
-use scraper::{Html, Selector};
 use reqwest::Client;
+use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use shared::{NewBookmarkRequest, NewBookmarkResponse, SignInResponse};
 use tracing::level_filters::LevelFilter;
@@ -212,14 +212,15 @@ async fn handle_import_firefox(args: ImportFirefoxArgs) -> anyhow::Result<()> {
     }
 
     let total_found = urls.len();
-    tracing::info!("Found {} bookmarks in folder '{}'", total_found, args.folder);
+    tracing::info!(
+        "Found {} bookmarks in folder '{}'",
+        total_found,
+        args.folder
+    );
 
     // Load previously imported URLs
     let imported = load_imported_urls()?;
-    let new_urls: Vec<_> = urls
-        .into_iter()
-        .filter(|u| !imported.contains(u))
-        .collect();
+    let new_urls: Vec<_> = urls.into_iter().filter(|u| !imported.contains(u)).collect();
 
     let total_skipped = total_found - new_urls.len();
     if total_skipped > 0 {
@@ -321,10 +322,7 @@ fn parse_firefox_bookmarks(html: &str, folder_name: &str) -> anyhow::Result<Vec<
     let dl_id = dl.id();
     for dt in dl.select(&dt_selector) {
         // Check if this DT is a direct child of the target DL
-        let is_direct_child = dt
-            .parent()
-            .map(|p| p.id() == dl_id)
-            .unwrap_or(false);
+        let is_direct_child = dt.parent().map(|p| p.id() == dl_id).unwrap_or(false);
         if !is_direct_child {
             continue;
         }
@@ -367,10 +365,7 @@ fn load_imported_urls() -> anyhow::Result<HashSet<String>> {
 
 fn save_imported_url(url: &str) -> anyhow::Result<()> {
     let path = get_imported_urls_path()?;
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)?;
+    let mut file = OpenOptions::new().create(true).append(true).open(&path)?;
     writeln!(file, "{}", url)?;
     Ok(())
 }
