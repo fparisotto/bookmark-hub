@@ -5,6 +5,7 @@ services:
       - 3000:3000
     depends_on:
       - postgres
+      - chrome
     network_mode: host
     environment:
       RUST_BACKTRACE: full
@@ -21,6 +22,8 @@ services:
       OLLAMA_URL: http://localhost:11434
       OLLAMA_TEXT_MODEL: gemma3:4b
       OLLAMA_EMBEDDING_MODEL: nomic-embed-text:v1.5
+      CHROME_HOST: localhost
+      CHROME_PORT: 3001
     volumes:
       - bookmark-hub-data:/data
     healthcheck:
@@ -40,6 +43,14 @@ services:
       POSTGRES_DB: main
     volumes:
       - postgres-data:/var/lib/postgresql/data
+  chrome:
+    image: browserless/chrome:latest
+    ports:
+      - 3001:3001
+    environment:
+      - PORT=3001
+      - CONCURRENT=10
+      - ENABLE_DEBUGGER=true
 volumes:
   postgres-data:
   bookmark-hub-data:

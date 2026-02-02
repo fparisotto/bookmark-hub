@@ -9,7 +9,7 @@ use crate::db::rag::{create_rag_session, update_rag_session};
 use crate::db::PgPool;
 use crate::ollama;
 
-const DEFAULT_MAX_CHUNKS: usize = 10;
+const DEFAULT_MAX_CHUNKS: usize = 6;
 const DEFAULT_SIMILARITY_THRESHOLD: f64 = 0.3;
 const EMBEDDING_MODEL: &str = "nomic-embed-text:v1.5";
 
