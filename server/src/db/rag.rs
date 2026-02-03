@@ -1,10 +1,15 @@
+use std::collections::HashMap;
+
 use chrono::{DateTime, Utc};
 use deadpool_postgres::GenericClient;
 use postgres_from_row::FromRow;
-use shared::{RagHistoryRequest, RagHistoryResponse, RagSession};
+use shared::{
+    RagChunkInfo, RagHistoryRequest, RagHistoryResponse, RagSession, RagSessionWithSources,
+};
 use tracing::debug;
 use uuid::Uuid;
 
+use super::chunks::get_chunks_with_bookmarks_by_ids;
 use super::PgPool;
 use crate::error::{Error, Result};
 
@@ -143,7 +148,7 @@ pub async fn get_rag_history(
         .query(
             r#"
             SELECT session_id, user_id, question, answer, relevant_chunks, created_at, updated_at
-            FROM rag_session 
+            FROM rag_session
             WHERE user_id = $1
             ORDER BY created_at DESC
             LIMIT $2 OFFSET $3
@@ -160,15 +165,62 @@ pub async fn get_rag_history(
         })
         .collect();
 
+    let sessions = sessions?;
+
+    // Collect all chunk IDs across all sessions
+    let all_chunk_ids: Vec<Uuid> = sessions
+        .iter()
+        .flat_map(|s| s.relevant_chunks.iter().copied())
+        .collect();
+
+    // Batch-fetch all chunks with their bookmarks
+    let chunks_with_bookmarks =
+        get_chunks_with_bookmarks_by_ids(pool, user_id, &all_chunk_ids).await?;
+
+    // Build a map for quick lookup
+    let chunk_map: HashMap<Uuid, _> = chunks_with_bookmarks
+        .into_iter()
+        .map(|(chunk, bookmark)| (chunk.chunk_id, (chunk, bookmark)))
+        .collect();
+
+    // Build sessions with full source details
+    let sessions_with_sources: Vec<RagSessionWithSources> = sessions
+        .into_iter()
+        .map(|session| {
+            let sources: Vec<RagChunkInfo> = session
+                .relevant_chunks
+                .iter()
+                .filter_map(|chunk_id| {
+                    chunk_map
+                        .get(chunk_id)
+                        .map(|(chunk, bookmark)| RagChunkInfo {
+                            chunk: chunk.clone(),
+                            bookmark: bookmark.clone(),
+                        })
+                })
+                .collect();
+
+            RagSessionWithSources {
+                session_id: session.session_id,
+                user_id: session.user_id,
+                question: session.question,
+                answer: session.answer,
+                sources,
+                created_at: session.created_at,
+                updated_at: session.updated_at,
+            }
+        })
+        .collect();
+
     debug!(
         user_id = %user_id,
-        sessions_count = sessions.as_ref().map(|s| s.len()).unwrap_or(0),
+        sessions_count = sessions_with_sources.len(),
         total_count,
-        "Retrieved RAG history"
+        "Retrieved RAG history with sources"
     );
 
     Ok(RagHistoryResponse {
-        sessions: sessions?,
+        sessions: sessions_with_sources,
         total_count: total_count as usize,
     })
 }

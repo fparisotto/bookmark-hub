@@ -222,6 +222,70 @@ pub async fn has_chunks_for_bookmark(
     Ok(count > 0)
 }
 
+pub async fn get_chunks_with_bookmarks_by_ids(
+    pool: &PgPool,
+    user_id: Uuid,
+    chunk_ids: &[Uuid],
+) -> Result<Vec<(BookmarkChunk, Bookmark)>> {
+    if chunk_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let client = pool.get().await?;
+
+    let rows = client
+        .query(
+            r#"
+            SELECT
+                c.chunk_id, c.bookmark_id, c.user_id, c.chunk_text,
+                c.chunk_index, c.created_at, c.updated_at,
+                b.url, b.domain, b.title, b.tags, b.summary,
+                b.created_at as bookmark_created_at, b.updated_at as bookmark_updated_at
+            FROM bookmark_chunk c
+            INNER JOIN bookmark b ON c.bookmark_id = b.bookmark_id AND c.user_id = b.user_id
+            WHERE c.user_id = $1 AND c.chunk_id = ANY($2)
+            ORDER BY c.chunk_index
+            "#,
+            &[&user_id, &chunk_ids],
+        )
+        .await?;
+
+    let mut results = Vec::new();
+    for row in rows {
+        let chunk = BookmarkChunk {
+            chunk_id: row.get("chunk_id"),
+            bookmark_id: row.get("bookmark_id"),
+            user_id: row.get("user_id"),
+            chunk_text: row.get("chunk_text"),
+            chunk_index: row.get("chunk_index"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+        };
+
+        let bookmark = Bookmark {
+            bookmark_id: row.get("bookmark_id"),
+            user_id: row.get("user_id"),
+            url: row.get("url"),
+            domain: row.get("domain"),
+            title: row.get("title"),
+            tags: row.get("tags"),
+            summary: row.get("summary"),
+            created_at: row.get("bookmark_created_at"),
+            updated_at: row.get("bookmark_updated_at"),
+        };
+
+        results.push((chunk, bookmark));
+    }
+
+    debug!(
+        user_id = %user_id,
+        chunks_found = results.len(),
+        "Fetched chunks with bookmarks by IDs"
+    );
+
+    Ok(results)
+}
+
 pub async fn get_bookmarks_without_chunks(
     pool: &PgPool,
     limit: usize,

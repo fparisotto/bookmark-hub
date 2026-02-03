@@ -249,6 +249,23 @@ pub struct RagChunkMatch {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RagChunkInfo {
+    pub chunk: BookmarkChunk,
+    pub bookmark: Bookmark,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RagSessionWithSources {
+    pub session_id: Uuid,
+    pub user_id: Uuid,
+    pub question: String,
+    pub answer: Option<String>,
+    pub sources: Vec<RagChunkInfo>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RagHistoryRequest {
     pub limit: Option<usize>,
     pub offset: Option<usize>,
@@ -256,6 +273,6 @@ pub struct RagHistoryRequest {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RagHistoryResponse {
-    pub sessions: Vec<RagSession>,
+    pub sessions: Vec<RagSessionWithSources>,
     pub total_count: usize,
 }

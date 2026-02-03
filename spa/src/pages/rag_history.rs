@@ -1,5 +1,5 @@
 use chrono::{DateTime, Local};
-use shared::{RagHistoryRequest, RagSession};
+use shared::{RagChunkInfo, RagHistoryRequest, RagSessionWithSources};
 use yew::platform::spawn_local;
 use yew::prelude::*;
 
@@ -10,7 +10,7 @@ use crate::user_session::UserSession;
 #[derive(Clone, PartialEq, Default, Debug)]
 pub struct RagHistoryState {
     pub user_session: UserSession,
-    pub history: Vec<RagSession>,
+    pub history: Vec<RagSessionWithSources>,
     pub is_loading: bool,
     pub error_message: Option<String>,
 }
@@ -19,7 +19,7 @@ pub struct RagHistoryState {
 pub enum RagHistoryMessage {
     SetUserSession(UserSession),
     LoadHistory,
-    HistoryLoaded(Result<Vec<RagSession>, String>),
+    HistoryLoaded(Result<Vec<RagSessionWithSources>, String>),
     ClearError,
 }
 
@@ -116,7 +116,7 @@ pub fn rag_history_page(props: &RagHistoryPageProps) -> Html {
     }
 }
 
-fn render_session(session: &RagSession, index: usize) -> Html {
+fn render_session(session: &RagSessionWithSources, index: usize) -> Html {
     let local_time: DateTime<Local> = session.created_at.into();
     let formatted_time = local_time.format("%Y-%m-%d %H:%M").to_string();
     let item_id = format!("item-{}", index);
@@ -137,8 +137,8 @@ fn render_session(session: &RagSession, index: usize) -> Html {
                     <div class="w-100 d-flex justify-content-between align-items-start me-3">
                         <div class="flex-grow-1">
                             <strong>{&session.question}</strong>
-                            if !session.relevant_chunks.is_empty() {
-                                <span class="badge bg-secondary ms-2">{session.relevant_chunks.len()}{" sources"}</span>
+                            if !session.sources.is_empty() {
+                                <span class="badge bg-secondary ms-2">{session.sources.len()}{" sources"}</span>
                             }
                         </div>
                         <small class="text-muted">{formatted_time}</small>
@@ -152,17 +152,69 @@ fn render_session(session: &RagSession, index: usize) -> Html {
                 data-bs-parent="#historyAccordion">
                 <div class="accordion-body">
                     if let Some(ref answer) = session.answer {
-                        <div class="border-start border-primary border-3 ps-3">
+                        <div class="border-start border-primary border-3 ps-3 mb-3">
                             <MarkdownRender content={answer.clone()} />
                         </div>
                     } else {
-                        <div class="d-flex align-items-center text-muted">
+                        <div class="d-flex align-items-center text-muted mb-3">
                             <div class="spinner-border spinner-border-sm me-2" role="status"></div>
                             <em>{"This question is still being processed..."}</em>
                         </div>
                     }
+
+                    // Display sources
+                    if !session.sources.is_empty() {
+                        <div class="mt-3">
+                            <h6 class="text-muted mb-2">{"Sources"}</h6>
+                            {
+                                session.sources.iter().enumerate().map(|(idx, source)| {
+                                    render_source(idx, source)
+                                }).collect::<Html>()
+                            }
+                        </div>
+                    }
                 </div>
             </div>
+        </div>
+    }
+}
+
+fn render_source(index: usize, source: &RagChunkInfo) -> Html {
+    html! {
+        <div class="border rounded mb-2 p-2">
+            <div class="d-flex justify-content-between align-items-start mb-1">
+                <div class="flex-grow-1">
+                    <div class="d-flex align-items-center mb-1">
+                        <span class="badge bg-primary me-2">
+                            {"Source " }{index + 1}
+                        </span>
+                    </div>
+                    <h6 class="mb-1">
+                        <a href={source.bookmark.url.clone()} target="_blank" rel="noopener noreferrer" class="text-decoration-none">
+                            {&source.bookmark.title}
+                        </a>
+                    </h6>
+                    <small class="text-muted">{&source.bookmark.domain}</small>
+                </div>
+            </div>
+
+            <div class="border-start border-primary border-3 ps-2 mb-2">
+                <MarkdownRender content={source.chunk.chunk_text.clone()} class={Some("small".to_string())} />
+            </div>
+
+            if let Some(ref tags) = source.bookmark.tags {
+                if !tags.is_empty() {
+                    <div>
+                        {
+                            tags.iter().map(|tag| html! {
+                                <span class="badge bg-secondary me-1">
+                                    {tag}
+                                </span>
+                            }).collect::<Html>()
+                        }
+                    </div>
+                }
+            }
         </div>
     }
 }
