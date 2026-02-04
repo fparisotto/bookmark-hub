@@ -53,7 +53,7 @@ run-server:
     --readability-url "http://localhost:3001" \
     --data-dir "$DATA_DIR" \
     --ollama-url "http://localhost:11434" \
-    --ollama-text-model "gemma3:4b"
+    --ollama-text-model "qwen3:14b"
 
 run-cli *ARGS:
   #!/usr/bin/env bash

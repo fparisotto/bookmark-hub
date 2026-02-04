@@ -25,13 +25,13 @@ const SYSTEM_PROMPT: &str = r#"You are an expert researcher. Follow these instru
 "#;
 
 pub async fn tags(ollama_url: &Url, ollama_model: &str, text: &str) -> anyhow::Result<Vec<String>> {
-    const PROMPT_PREFIX: &str = r#"The given the following text is a slice of a bigger article.
-    I'm asking you to indentify a set of tags that better describe this slice of text.
-    Each tag should be a preferably word or short description of the subject related on this text.
-    Most of the text will be related to programming and technology, so be focus on that.
-    Avoid tags that is too broad or generic, try to focus on what will make this piece distinct.
-    Is ok to not provide any tag if you think there's nothing relevant to point out.
-    Response should be in JSON format. Here's text: "#;
+    const PROMPT_PREFIX: &str = r#"Extract up to 5 tags from this text slice.
+    Each tag must be 1-2 words maximum (e.g., "rust", "async runtime", "postgresql").
+    Focus on programming and technology topics.
+    Avoid generic terms like "programming", "technology", "software", or "code".
+    Only include tags that are specific and meaningful to this content.
+    It's ok to return fewer tags or none if nothing specific stands out.
+    Here's the text: "#;
 
     let ollama = Ollama::from_url(ollama_url.to_owned());
     let format = FormatType::StructuredJson(Box::new(JsonStructure::new::<TagsModelResponse>()));
@@ -56,13 +56,11 @@ pub async fn consolidate_tags(
     ollama_model: &str,
     tags: Vec<String>,
 ) -> anyhow::Result<Vec<String>> {
-    const PROMPT_PREFIX: &str = r#"I'll give you a list of tags, they come from slices of an article.
-    Most of the tags are related to programming and technology.
-    Each tag is word or short description of the subject related on this text.
-    Most of the tags looks like duplicated, redundant or ambiguous.
-    Try to produce a new list of tags that is more clear and succinct.
-    Less is better, give me maximum of 15 tags.
-    Response should be in JSON format. Here're the tags, comma separated: "#;
+    const PROMPT_PREFIX: &str = r#"Consolidate these tags into a final list of maximum 7 tags.
+    Merge synonyms and related concepts into the most specific term.
+    Each tag must be 1-2 words maximum. Remove anything generic or redundant.
+    Prefer specific terms over broad ones (e.g., "tokio" over "async", "react hooks" over "frontend").
+    Here are the tags: "#;
 
     let text = tags.join(", ");
     let ollama = Ollama::from_url(ollama_url.to_owned());
@@ -84,20 +82,21 @@ pub async fn consolidate_tags(
 }
 
 pub async fn summary(ollama_url: &Url, ollama_model: &str, text: &str) -> anyhow::Result<String> {
-    const PROMPT_PREFIX: &str = r#"The given the following text is a slice of a bigger article.
-    I'm asking you to produce a sort summary of it taht better describe this slice of text.
-    Most of the text will be related to programming and technology, so be focus on that.
-    Avoid topics that is too broad or generic, try to focus on what will make this piece distinct.
-    Is ok to not provide any summary if you think there's nothing relevant to point out.
+    const PROMPT_PREFIX: &str = r#"The following text is a slice of a bigger article.
+    I'm asking you to produce a short summary of it that better describes this slice of text.
+    Most of the text will be related to programming and technology, so focus on that.
+    Avoid topics that are too broad or generic, try to focus on what will make this piece distinct.
+    It's ok to not provide any summary if you think there's nothing relevant to point out.
     Try to be very succinct, one sentence would be the ideal.
-    Response should be in JSON format. Here's text: "#;
+    Here's the text: "#;
 
     let ollama = Ollama::from_url(ollama_url.to_owned());
 
     let format = FormatType::StructuredJson(Box::new(JsonStructure::new::<SummaryModelResponse>()));
     let request =
         GenerationRequest::new(ollama_model.to_owned(), format!("{PROMPT_PREFIX}\n{text}"))
-            .format(format);
+            .format(format)
+            .system(SYSTEM_PROMPT);
     let response = ollama.generate(request).await?;
     if let Ok(parsed) = serde_json::from_str::<SummaryModelResponse>(&response.response) {
         Ok(parsed.summary)
@@ -116,18 +115,19 @@ pub async fn consolidate_summary(
     summaries: &[String],
 ) -> anyhow::Result<String> {
     const PROMPT_PREFIX: &str = r#"I'll give you a list of summaries, they come from slices of an article.
-    Most of the summary are related to programming and technology.
-    Most of the summaries looks like duplicated, redundant or ambiguous.
-    Try to produce a new consolidated summary of then all, that is more clear and succinct.
+    Most of the summaries are related to programming and technology.
+    Most of the summaries look like duplicated, redundant or ambiguous.
+    Try to produce a new consolidated summary of them all, that is more clear and succinct.
     Less is better, give me maximum of 3 sentences.
-    Response should be in JSON format. Here're the summaries, separated by new lines: "#;
+    Here are the summaries, separated by new lines: "#;
 
     let text = summaries.join("\n");
     let ollama = Ollama::from_url(ollama_url.to_owned());
     let format = FormatType::StructuredJson(Box::new(JsonStructure::new::<SummaryModelResponse>()));
     let request =
         GenerationRequest::new(ollama_model.to_owned(), format!("{PROMPT_PREFIX}\n{text}"))
-            .format(format);
+            .format(format)
+            .system(SYSTEM_PROMPT);
     let response = ollama.generate(request).await?;
     if let Ok(parsed) = serde_json::from_str::<SummaryModelResponse>(&response.response) {
         Ok(parsed.summary)

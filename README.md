@@ -50,7 +50,7 @@ This configuration:
 - Uses `network_mode: host` for direct access to host services
 - Connects to Ollama running at `localhost:11434`
 - Uses `pgvector/pgvector:pg17` for vector embedding storage
-- Configures embedding model as `nomic-embed-text:v1.5` for RAG features
+- Configures embedding model as `mxbai-embed-large` for RAG features
 
 ### Development Setup
 
@@ -97,8 +97,8 @@ export APP_DATA_DIR=/path/to/data
 
 # Optional: AI Features
 export OLLAMA_URL=http://localhost:11434
-export OLLAMA_TEXT_MODEL=gemma3:4b
-export OLLAMA_EMBEDDING_MODEL=nomic-embed-text:v1.5
+export OLLAMA_TEXT_MODEL=qwen3:14b
+export OLLAMA_EMBEDDING_MODEL=mxbai-embed-large
 
 # Optional: Chrome Automation
 export CHROME_HOST=localhost

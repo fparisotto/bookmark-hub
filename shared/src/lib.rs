@@ -224,11 +224,30 @@ pub struct RagSession {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
+/// Configuration for hybrid search combining vector similarity with full-text search
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct HybridSearchConfig {
+    /// Enable hybrid search (combines vector + FTS)
+    pub enabled: bool,
+    /// Use Reciprocal Rank Fusion for combining scores (default: true)
+    pub use_rrf: Option<bool>,
+    /// RRF k parameter (default: 60)
+    pub rrf_k: Option<u32>,
+    /// Weight for vector similarity in weighted average mode (when use_rrf is false)
+    pub vector_weight: Option<f64>,
+    /// Weight for FTS score in weighted average mode (when use_rrf is false)
+    pub fts_weight: Option<f64>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RagQueryRequest {
     pub question: String,
     pub max_chunks: Option<usize>,
     pub similarity_threshold: Option<f64>,
+    /// Maximum tokens for context (default: 4096)
+    pub max_context_tokens: Option<usize>,
+    /// Hybrid search configuration
+    pub hybrid_search: Option<HybridSearchConfig>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -246,6 +265,12 @@ pub struct RagChunkMatch {
     pub bookmark: Bookmark,
     pub similarity_score: f64,
     pub relevance_explanation: Option<String>,
+    /// Vector similarity score (populated when hybrid search is enabled)
+    pub vector_score: Option<f64>,
+    /// Full-text search score (populated when hybrid search is enabled)
+    pub fts_score: Option<f64>,
+    /// Combined score from hybrid search (RRF or weighted average)
+    pub combined_score: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
