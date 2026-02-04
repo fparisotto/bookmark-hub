@@ -105,7 +105,12 @@ pub fn rag_history_page(props: &RagHistoryPageProps) -> Html {
                     <div class="accordion" id="historyAccordion">
                         {
                             state.history.iter().enumerate().map(|(index, session)| {
-                                render_session(session, index)
+                                let key = format!("{}-{}", session.created_at.timestamp(), index);
+                                html! {
+                                    <div key={key}>
+                                        {render_session(session, index)}
+                                    </div>
+                                }
                             }).collect::<Html>()
                         }
                     </div>
@@ -167,7 +172,12 @@ fn render_session(session: &RagSessionWithSources, index: usize) -> Html {
                             <h6 class="text-muted mb-2">{"Sources"}</h6>
                             {
                                 session.sources.iter().enumerate().map(|(idx, source)| {
-                                    render_source(idx, source)
+                                    let key = format!("{}-{}", source.chunk.chunk_id, idx);
+                                    html! {
+                                        <div key={key}>
+                                            {render_source(idx, source)}
+                                        </div>
+                                    }
                                 }).collect::<Html>()
                             }
                         </div>
@@ -206,7 +216,7 @@ fn render_source(index: usize, source: &RagChunkInfo) -> Html {
                     <div>
                         {
                             tags.iter().map(|tag| html! {
-                                <span class="badge bg-secondary me-1">
+                                <span key={tag.clone()} class="badge bg-secondary me-1">
                                     {tag}
                                 </span>
                             }).collect::<Html>()

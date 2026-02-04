@@ -30,7 +30,12 @@ pub fn rag_history(props: &RagHistoryProps) -> Html {
 
             {
                 props.sessions.iter().map(|session| {
-                    render_session(session)
+                    let key = format!("{}", session.created_at.timestamp());
+                    html! {
+                        <div key={key}>
+                            {render_session(session)}
+                        </div>
+                    }
                 }).collect::<Html>()
             }
         </div>

@@ -114,7 +114,12 @@ pub fn rag_query(props: &RagQueryProps) -> Html {
                             <div class="card-body">
                                 {
                                     response.relevant_chunks.iter().enumerate().map(|(index, chunk_match)| {
-                                        render_chunk_match(index, chunk_match)
+                                        let key = format!("{}-{}", chunk_match.chunk.chunk_id, index);
+                                        html! {
+                                            <div key={key}>
+                                                {render_chunk_match(index, chunk_match)}
+                                            </div>
+                                        }
                                     }).collect::<Html>()
                                 }
                             </div>
@@ -165,7 +170,7 @@ fn render_chunk_match(index: usize, chunk_match: &RagChunkMatch) -> Html {
                     <div>
                         {
                             tags.iter().map(|tag| html! {
-                                <span class="badge bg-secondary me-1">
+                                <span key={tag.clone()} class="badge bg-secondary me-1">
                                     {tag}
                                 </span>
                             }).collect::<Html>()

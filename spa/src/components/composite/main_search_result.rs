@@ -16,7 +16,7 @@ fn article(callback: Callback<SearchResultItem>, item: SearchResultItem) -> Html
         .tags
         .unwrap_or_default()
         .into_iter()
-        .map(|tag| html! { <span class="badge bg-primary me-1">{tag}</span> })
+        .map(|tag| html! { <span key={tag.clone()} class="badge bg-primary me-1">{tag}</span> })
         .collect::<Vec<_>>();
 
     let search_match = match item.search_match.clone() {
@@ -55,10 +55,11 @@ pub fn search_result(props: &Props) -> Html {
         <main>
             {
                 results.into_iter().map(|bookmark| {
+                    let key = bookmark.bookmark.url.clone();
                     html! {
-                        <>
+                        <div key={key}>
                             {article(props.on_item_selected.clone(), bookmark)}
-                        </>
+                        </div>
                     }
                 }).collect::<Html>()
             }
