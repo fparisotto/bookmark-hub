@@ -37,6 +37,20 @@ pub struct Props {
 
 #[function_component(InputText)]
 pub fn input_text(props: &Props) -> Html {
+    let node_ref = use_node_ref();
+
+    {
+        let node_ref = node_ref.clone();
+        let value = props.value.clone();
+        use_effect_with(value, move |value| {
+            if let Some(input) = node_ref.cast::<HtmlInputElement>() {
+                if let Some(val) = value {
+                    input.set_value(val);
+                }
+            }
+        });
+    }
+
     let callback = props.on_change.clone();
     let on_change = {
         Callback::from(move |event: Event| {
@@ -45,8 +59,10 @@ pub fn input_text(props: &Props) -> Html {
             callback.emit(value);
         })
     };
+
     html! {
         <input
+            ref={node_ref}
             id={props.id.clone()}
             name={props.name.clone()}
             value={props.value.clone()}
