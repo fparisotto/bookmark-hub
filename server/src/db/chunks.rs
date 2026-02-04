@@ -9,6 +9,17 @@ use uuid::Uuid;
 use super::PgPool;
 use crate::error::{Error, Result};
 
+/// Result from hybrid search combining vector and FTS scores
+#[derive(Debug, Clone)]
+pub struct HybridChunkMatch {
+    pub chunk: BookmarkChunk,
+    pub bookmark: Bookmark,
+    pub vector_score: f64,
+    pub vector_rank: usize,
+    pub fts_score: f64,
+    pub fts_rank: usize,
+}
+
 #[derive(Debug, FromRow)]
 struct RowBookmarkChunk {
     chunk_id: Uuid,
@@ -156,6 +167,9 @@ pub async fn search_similar_chunks(
             bookmark,
             similarity_score: row.get("similarity_score"),
             relevance_explanation: None, // Will be filled by relevance assessment
+            vector_score: None,          // Only set in hybrid search mode
+            fts_score: None,             // Only set in hybrid search mode
+            combined_score: None,        // Only set in hybrid search mode
         });
     }
 
@@ -318,4 +332,114 @@ pub async fn get_bookmarks_without_chunks(
         .collect();
 
     results
+}
+
+/// Search chunks using hybrid approach: vector similarity + full-text search
+/// Returns chunks with both vector and FTS scores for RRF/weighted combination
+pub async fn search_chunks_hybrid(
+    pool: &PgPool,
+    user_id: Uuid,
+    query_text: &str,
+    query_embedding: Vec<f32>,
+    limit: usize,
+    similarity_threshold: f64,
+) -> Result<Vec<HybridChunkMatch>> {
+    let client = pool.get().await?;
+
+    // Use CTE to get vector matches with ranks, then join with FTS scores from
+    // bookmarks
+    let rows = client
+        .query(
+            r#"
+            WITH vector_matches AS (
+                SELECT
+                    c.chunk_id, c.bookmark_id, c.user_id, c.chunk_text,
+                    c.chunk_index, c.created_at, c.updated_at,
+                    1 - (c.embedding <=> $2) as vector_score,
+                    ROW_NUMBER() OVER (ORDER BY c.embedding <=> $2) as vector_rank
+                FROM bookmark_chunk c
+                WHERE c.user_id = $1
+                AND 1 - (c.embedding <=> $2) >= $3
+                ORDER BY c.embedding <=> $2
+                LIMIT $4
+            ),
+            fts_scores AS (
+                SELECT
+                    b.bookmark_id,
+                    ts_rank(b.search_tokens, websearch_to_tsquery('english', $5)) as fts_score,
+                    ROW_NUMBER() OVER (
+                        ORDER BY ts_rank(b.search_tokens, websearch_to_tsquery('english', $5)) DESC
+                    ) as fts_rank
+                FROM bookmark b
+                WHERE b.user_id = $1
+                AND b.search_tokens @@ websearch_to_tsquery('english', $5)
+            )
+            SELECT
+                vm.chunk_id, vm.bookmark_id, vm.user_id, vm.chunk_text,
+                vm.chunk_index, vm.created_at, vm.updated_at,
+                vm.vector_score, vm.vector_rank,
+                COALESCE(fs.fts_score, 0.0) as fts_score,
+                COALESCE(fs.fts_rank, $4 + 1) as fts_rank,
+                b.url, b.domain, b.title, b.tags, b.summary,
+                b.created_at as bookmark_created_at, b.updated_at as bookmark_updated_at
+            FROM vector_matches vm
+            INNER JOIN bookmark b ON vm.bookmark_id = b.bookmark_id AND vm.user_id = b.user_id
+            LEFT JOIN fts_scores fs ON vm.bookmark_id = fs.bookmark_id
+            "#,
+            &[
+                &user_id,
+                &Vector::from(query_embedding),
+                &similarity_threshold,
+                &(limit as i64),
+                &query_text,
+            ],
+        )
+        .await?;
+
+    let mut matches = Vec::new();
+    for row in rows {
+        let chunk = BookmarkChunk {
+            chunk_id: row.get("chunk_id"),
+            bookmark_id: row.get("bookmark_id"),
+            user_id: row.get("user_id"),
+            chunk_text: row.get("chunk_text"),
+            chunk_index: row.get("chunk_index"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+        };
+
+        let bookmark = Bookmark {
+            bookmark_id: row.get("bookmark_id"),
+            user_id: row.get("user_id"),
+            url: row.get("url"),
+            domain: row.get("domain"),
+            title: row.get("title"),
+            tags: row.get("tags"),
+            summary: row.get("summary"),
+            created_at: row.get("bookmark_created_at"),
+            updated_at: row.get("bookmark_updated_at"),
+        };
+
+        let vector_rank: i64 = row.get("vector_rank");
+        let fts_rank: i64 = row.get("fts_rank");
+
+        matches.push(HybridChunkMatch {
+            chunk,
+            bookmark,
+            vector_score: row.get("vector_score"),
+            vector_rank: vector_rank as usize,
+            fts_score: row.get("fts_score"),
+            fts_rank: fts_rank as usize,
+        });
+    }
+
+    debug!(
+        user_id = %user_id,
+        matches_found = matches.len(),
+        similarity_threshold,
+        query_text,
+        "Found hybrid search matches"
+    );
+
+    Ok(matches)
 }

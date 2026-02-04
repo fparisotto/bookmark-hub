@@ -21,8 +21,8 @@ services:
       PG_DATABASE: main
       PG_MAX_CONNECTIONS: 5
       OLLAMA_URL: http://ollama:11434
-      OLLAMA_TEXT_MODEL: gemma3:4b
-      OLLAMA_EMBEDDING_MODEL: nomic-embed-text:v1.5
+      OLLAMA_TEXT_MODEL: qwen3:14b
+      OLLAMA_EMBEDDING_MODEL: mxbai-embed-large
       CHROME_HOST: chrome
       CHROME_PORT: 3001
     volumes:
@@ -58,9 +58,9 @@ services:
       - -c
       - |
         echo "Pulling text model..."
-        curl ollama:11434/api/pull -d '{"model":"gemma3:4b"}' || exit 1
+        curl ollama:11434/api/pull -d '{"model":"qwen3:14b"}' || exit 1
         echo "Pulling embedding model..."
-        curl ollama:11434/api/pull -d '{"model":"nomic-embed-text:v1.5"}' || exit 1
+        curl ollama:11434/api/pull -d '{"model":"mxbai-embed-large"}' || exit 1
         echo "All models pulled successfully"
     depends_on:
       - ollama

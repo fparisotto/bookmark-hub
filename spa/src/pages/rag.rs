@@ -53,6 +53,8 @@ pub fn rag_page(props: &RagPageProps) -> Html {
                     question,
                     max_chunks: Some(10),
                     similarity_threshold: Some(0.3),
+                    max_context_tokens: None,
+                    hybrid_search: None,
                 };
 
                 let result = rag_api::query_rag(&user_session, &request).await;
