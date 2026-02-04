@@ -1,4 +1,5 @@
 use shared::NewBookmarkRequest;
+use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 
 use crate::components::atoms::input_text::{InputText, InputType};
@@ -27,6 +28,31 @@ pub struct Props {
 pub fn add_bookmark_modal(props: &Props) -> Html {
     let url_state = use_state(String::default);
     let tags_state = use_state(String::default);
+    let modal_ref = use_node_ref();
+
+    {
+        let modal_ref = modal_ref.clone();
+        let url_state = url_state.clone();
+        let tags_state = tags_state.clone();
+        use_effect_with(modal_ref.clone(), move |modal_ref| {
+            let element = modal_ref.cast::<web_sys::Element>();
+            let closure: Option<Closure<dyn Fn()>> = element.as_ref().map(|el| {
+                let url_state = url_state.clone();
+                let tags_state = tags_state.clone();
+                let closure = Closure::new(move || {
+                    url_state.set(String::default());
+                    tags_state.set(String::default());
+                });
+                el.add_event_listener_with_callback(
+                    "hidden.bs.modal",
+                    closure.as_ref().unchecked_ref(),
+                )
+                .ok();
+                closure
+            });
+            move || drop(closure)
+        });
+    }
 
     let on_change_url = {
         let url_state = url_state.clone();
@@ -61,7 +87,7 @@ pub fn add_bookmark_modal(props: &Props) -> Html {
     };
 
     html! {
-        <div class="modal fade" id="add-bookmark-modal" tabindex="-1">
+        <div ref={modal_ref} class="modal fade" id="add-bookmark-modal" tabindex="-1">
             <div class="modal-dialog">
                 <div class="modal-content">
                     <div class="modal-header">
@@ -78,6 +104,7 @@ pub fn add_bookmark_modal(props: &Props) -> Html {
                                     placeholder="Enter link"
                                     input_type={InputType::Url}
                                     class={classes!("form-control")}
+                                    value={Some((*url_state).clone())}
                                     on_change={on_change_url} />
                             </div>
                             <div class="mb-3">
@@ -88,6 +115,7 @@ pub fn add_bookmark_modal(props: &Props) -> Html {
                                     placeholder="Enter tags separated by commas"
                                     input_type={InputType::Text}
                                     class={classes!("form-control")}
+                                    value={Some((*tags_state).clone())}
                                     on_change={on_change_tags} />
                             </div>
                             <input type="submit" class="btn btn-primary" value="Save" data-bs-dismiss="modal" data-bs-target="#add-bookmark-modal" />

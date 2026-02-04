@@ -36,7 +36,6 @@ pub fn rag_history_page(props: &RagHistoryPageProps) -> Html {
         ..Default::default()
     });
 
-    // Load history when component mounts
     use_effect_with((), {
         let state = state.clone();
         let user_session = props.user_session.clone();

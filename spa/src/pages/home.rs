@@ -88,7 +88,6 @@ pub fn home(props: &Props) -> Html {
         ..Default::default()
     });
 
-    // Trigger initial search on component mount
     {
         let state_handle = state_handle.clone();
         let token = token.clone();
@@ -97,7 +96,6 @@ pub fn home(props: &Props) -> Html {
             let token = token.clone();
             spawn_local(async move {
                 let state = (*state_handle).clone();
-                // Create an empty search request (no query, no filters)
                 let search_request: SearchRequest = state.into();
                 match search_api::search(&token, search_request).await {
                     Ok(result) => {
@@ -171,32 +169,55 @@ pub fn home(props: &Props) -> Html {
                 TagCheckedEvent::Checked(tag) => {
                     if !state.tags_filter.contains(&tag.tag) {
                         state.tags_filter.push(tag.tag);
-                        state.current_search_page = 1; // Reset to first page on
-                                                       // filter change
+                        state.current_search_page = 1;
                     }
                 }
                 TagCheckedEvent::Unchecked(tag) => {
                     if let Some(index_of) = state.tags_filter.iter().position(|e| e == &tag.tag) {
                         state.tags_filter.remove(index_of);
-                        state.current_search_page = 1; // Reset to first page on
-                                                       // filter change
+                        state.current_search_page = 1;
                     }
                 }
             }
-            let state_clone = state.clone();
+            let updated_state = state.clone();
             state_handle.set(state);
-            // Trigger search with new filters
             spawn_local(async move {
-                match search_api::search(&token, state_clone.into()).await {
+                match search_api::search(&token, updated_state.clone().into()).await {
                     Ok(result) => {
-                        let mut state = (*state_handle).clone();
+                        let mut new_state = updated_state;
+                        new_state.items = result.items;
+                        new_state.tags = result.tags;
+                        new_state.total_results = result.total;
+                        state_handle.set(new_state);
+                    }
+                    Err(error) => {
+                        log::warn!("Fail to search bookmarks with new filter, error: {error}");
+                    }
+                }
+            });
+        })
+    };
+
+    let on_clear_filters = {
+        let state_handle = state_handle.clone();
+        let token = token.clone();
+        Callback::from(move |_: ()| {
+            let state_handle = state_handle.clone();
+            let token = token.clone();
+            spawn_local(async move {
+                let mut state = (*state_handle).clone();
+                state.tags_filter.clear();
+                state.search_input.clear();
+                state.current_search_page = 1;
+                match search_api::search(&token, state.clone().into()).await {
+                    Ok(result) => {
                         state.items = result.items;
                         state.tags = result.tags;
                         state.total_results = result.total;
                         state_handle.set(state);
                     }
                     Err(error) => {
-                        log::warn!("Fail to search bookmarks with new filter, error: {error}");
+                        log::warn!("Fail to execute default search on clear, error: {error}");
                     }
                 }
             });
@@ -458,14 +479,21 @@ pub fn home(props: &Props) -> Html {
             let has_more = state_handle.current_search_page * state_handle.page_size
                 < state_handle.total_results as usize;
             html! {
-                <div class="row g-0 h-100">
+                <div class="row h-100">
                     // Left side panel for tags filter
-                    <div class="col-12 col-md-3 col-lg-2">
-                        <TagsFilter tags={state_handle.tags.clone()} on_tag_checked={on_tag_checked} />
+                    <div class="col-12 col-md-3 col-lg-2 mb-3 mb-md-0">
+                        <TagsFilter
+                            tags={state_handle.tags.clone()}
+                            selected_tags={state_handle.tags_filter.clone()}
+                            on_tag_checked={on_tag_checked} />
                     </div>
                     // Main content area
-                    <div class="col-12 col-md-9 col-lg-10 ps-md-3">
-                        <SearchBar on_submit={on_search_submit} />
+                    <div class="col-12 col-md-9 col-lg-10">
+                        <SearchBar
+                            value={state_handle.search_input.clone()}
+                            on_submit={on_search_submit}
+                            on_clear={Some(on_clear_filters.clone())}
+                            has_active_filters={!state_handle.tags_filter.is_empty() || !state_handle.search_input.is_empty()} />
                         <div class="mt-3">
                             <SearchResult on_item_selected={on_item_selected} results={state_handle.items.clone()} />
                         </div>
