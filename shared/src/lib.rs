@@ -224,7 +224,8 @@ pub struct RagSession {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
-/// Configuration for hybrid search combining vector similarity with full-text search
+/// Configuration for hybrid search combining vector similarity with full-text
+/// search
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct HybridSearchConfig {
     /// Enable hybrid search (combines vector + FTS)
@@ -233,7 +234,8 @@ pub struct HybridSearchConfig {
     pub use_rrf: Option<bool>,
     /// RRF k parameter (default: 60)
     pub rrf_k: Option<u32>,
-    /// Weight for vector similarity in weighted average mode (when use_rrf is false)
+    /// Weight for vector similarity in weighted average mode (when use_rrf is
+    /// false)
     pub vector_weight: Option<f64>,
     /// Weight for FTS score in weighted average mode (when use_rrf is false)
     pub fts_weight: Option<f64>,

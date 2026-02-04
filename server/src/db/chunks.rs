@@ -346,7 +346,8 @@ pub async fn search_chunks_hybrid(
 ) -> Result<Vec<HybridChunkMatch>> {
     let client = pool.get().await?;
 
-    // Use CTE to get vector matches with ranks, then join with FTS scores from bookmarks
+    // Use CTE to get vector matches with ranks, then join with FTS scores from
+    // bookmarks
     let rows = client
         .query(
             r#"

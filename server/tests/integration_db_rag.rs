@@ -343,7 +343,8 @@ async fn test_chunks_storage_overwrite() -> anyhow::Result<()> {
 
     // Store initial chunks
     let initial_chunks = vec!["First chunk".to_string(), "Second chunk".to_string()];
-    let initial_embeddings: Vec<Vec<f32>> = initial_chunks.iter().map(|_| vec![0.1; 1024]).collect();
+    let initial_embeddings: Vec<Vec<f32>> =
+        initial_chunks.iter().map(|_| vec![0.1; 1024]).collect();
 
     let initial_stored = chunks::store_chunks_with_embeddings(
         &db.pool,

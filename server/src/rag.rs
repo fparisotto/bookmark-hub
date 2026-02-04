@@ -273,8 +273,7 @@ impl RagEngine {
 
         debug!(
             results_count = results.len(),
-            k,
-            "Combined hybrid results with RRF"
+            k, "Combined hybrid results with RRF"
         );
 
         results
@@ -294,8 +293,7 @@ impl RagEngine {
         let mut results: Vec<RagChunkMatch> = matches
             .into_iter()
             .map(|m| {
-                let combined =
-                    m.vector_score * norm_vector_weight + m.fts_score * norm_fts_weight;
+                let combined = m.vector_score * norm_vector_weight + m.fts_score * norm_fts_weight;
                 RagChunkMatch {
                     chunk: m.chunk,
                     bookmark: m.bookmark,
@@ -362,9 +360,7 @@ impl RagEngine {
 
         debug!(
             selected_count = selected.len(),
-            total_tokens,
-            available_tokens,
-            "Selected chunks within token budget"
+            total_tokens, available_tokens, "Selected chunks within token budget"
         );
 
         Ok(selected)
