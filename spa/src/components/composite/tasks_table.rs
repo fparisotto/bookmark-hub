@@ -35,7 +35,8 @@ fn render_fail_reason_modal(task_id: &str, fail_reason: &str) -> Html {
 }
 
 fn render_bookmark_task(task: &BookmarkTask) -> Html {
-    let task_id_strip = format!("{}...", &task.task_id.to_string()[0..6]);
+    let task_id = task.task_id.to_string();
+    let task_id_strip = format!("{}...", &task_id[0..6]);
 
     let fail_content = if let Some(fail_reason) = &task.fail_reason {
         render_fail_reason_modal(&task_id_strip, fail_reason)
@@ -44,7 +45,7 @@ fn render_bookmark_task(task: &BookmarkTask) -> Html {
     };
 
     html! {
-        <tr>
+        <tr key={task_id}>
             <td>{task_id_strip}</td>
             <td><a href={task.url.to_owned()} target="_blank">{&task.url}</a></td>
             <td>{task.status.as_ref()}</td>

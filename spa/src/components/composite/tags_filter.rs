@@ -30,7 +30,7 @@ fn render_tag(on_tag_checked: Callback<TagCheckedEvent>, tag: TagCount, is_check
     };
 
     html! {
-        <div class="form-check d-flex align-items-center py-1" style="min-height: 1.75rem;">
+        <div key={tag.tag.clone()} class="form-check d-flex align-items-center py-1" style="min-height: 1.75rem;">
             <InputCheckbox
                 id={tag.tag.clone()}
                 name={tag.tag.clone()}
