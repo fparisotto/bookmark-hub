@@ -3,6 +3,16 @@ use tokenizers::tokenizer::Tokenizer;
 
 const TOKENIZER_MODEL: &str = "bert-base-cased";
 
+/// Count tokens in text using BERT tokenizer
+pub fn count_tokens(text: &str) -> anyhow::Result<usize> {
+    let tokenizer =
+        Tokenizer::from_pretrained(TOKENIZER_MODEL, None).map_err(anyhow::Error::from_boxed)?;
+    let encoding = tokenizer
+        .encode(text, false)
+        .map_err(anyhow::Error::from_boxed)?;
+    Ok(encoding.get_tokens().len())
+}
+
 pub fn windowed_chunks(
     size: usize,
     edge_overlap: usize,

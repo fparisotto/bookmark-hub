@@ -75,7 +75,7 @@ CREATE TABLE bookmark_chunk (
     user_id UUID NOT NULL,
     chunk_text TEXT NOT NULL,
     chunk_index INTEGER NOT NULL,
-    embedding VECTOR(768), -- nomic-embed-text:v1.5 produces 768-dimensional embeddings
+    embedding VECTOR(1024), -- mxbai-embed-large produces 1024-dimensional embeddings
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (chunk_id),

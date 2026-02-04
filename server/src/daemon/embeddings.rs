@@ -8,7 +8,7 @@ use crate::db::PgPool;
 use crate::{ollama, tokenizer};
 
 const QUERY_LIMIT: usize = 5; // Process fewer items at once to avoid overwhelming Ollama
-const EMBEDDING_MODEL: &str = "nomic-embed-text:v1.5"; // Default embedding model
+const EMBEDDING_MODEL: &str = "mxbai-embed-large"; // Default embedding model
 
 pub async fn run(
     pool: &PgPool,

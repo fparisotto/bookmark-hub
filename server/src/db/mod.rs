@@ -38,10 +38,19 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;";
 
-const SCHEMAS: [(i32, &str); 1] = [(
-    1,
-    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/schema/1_unified.sql")),
-)];
+const SCHEMAS: [(i32, &str); 2] = [
+    (
+        1,
+        include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/schema/1_unified.sql")),
+    ),
+    (
+        2,
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/schema/2_embedding_dimension.sql"
+        )),
+    ),
+];
 
 pub async fn get_pool(pg: PgParams) -> anyhow::Result<PgPool> {
     info!(

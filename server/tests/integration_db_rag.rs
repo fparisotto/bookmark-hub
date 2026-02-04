@@ -280,10 +280,10 @@ async fn test_bookmark_chunks_storage_and_retrieval() -> anyhow::Result<()> {
         "Memory safety is guaranteed by Rust's ownership system.".to_string(),
     ];
 
-    // Generate mock embeddings (768-dimensional for nomic-embed-text:v1.5)
+    // Generate mock embeddings (1024-dimensional for nomic-embed-text:v1.5)
     let embeddings: Vec<Vec<f32>> = test_chunks
         .iter()
-        .map(|_| (0..768).map(|i| (i as f32) / 768.0).collect())
+        .map(|_| (0..1024).map(|i| (i as f32) / 1024.0).collect())
         .collect();
 
     let stored_chunks = chunks::store_chunks_with_embeddings(
@@ -343,7 +343,8 @@ async fn test_chunks_storage_overwrite() -> anyhow::Result<()> {
 
     // Store initial chunks
     let initial_chunks = vec!["First chunk".to_string(), "Second chunk".to_string()];
-    let initial_embeddings: Vec<Vec<f32>> = initial_chunks.iter().map(|_| vec![0.1; 768]).collect();
+    let initial_embeddings: Vec<Vec<f32>> =
+        initial_chunks.iter().map(|_| vec![0.1; 1024]).collect();
 
     let initial_stored = chunks::store_chunks_with_embeddings(
         &db.pool,
@@ -361,7 +362,7 @@ async fn test_chunks_storage_overwrite() -> anyhow::Result<()> {
         "New second chunk".to_string(),
         "New third chunk".to_string(),
     ];
-    let new_embeddings: Vec<Vec<f32>> = new_chunks.iter().map(|_| vec![0.2; 768]).collect();
+    let new_embeddings: Vec<Vec<f32>> = new_chunks.iter().map(|_| vec![0.2; 1024]).collect();
 
     let new_stored = chunks::store_chunks_with_embeddings(
         &db.pool,
@@ -413,7 +414,7 @@ async fn test_chunks_user_isolation() -> anyhow::Result<()> {
 
     // Store chunks for user1
     let user1_chunks = vec!["User1 chunk".to_string()];
-    let user1_embeddings = vec![vec![0.1; 768]];
+    let user1_embeddings = vec![vec![0.1; 1024]];
 
     let user1_stored = chunks::store_chunks_with_embeddings(
         &db.pool,
@@ -426,7 +427,7 @@ async fn test_chunks_user_isolation() -> anyhow::Result<()> {
 
     // Store chunks for user2
     let user2_chunks = vec!["User2 chunk".to_string()];
-    let user2_embeddings = vec![vec![0.2; 768]];
+    let user2_embeddings = vec![vec![0.2; 1024]];
 
     let user2_stored = chunks::store_chunks_with_embeddings(
         &db.pool,
@@ -463,7 +464,7 @@ async fn test_chunks_length_mismatch_error() -> anyhow::Result<()> {
     let user_id = db.create_user().await?;
 
     let chunks = vec!["Chunk 1".to_string(), "Chunk 2".to_string()];
-    let embeddings = vec![vec![0.1; 768]]; // Only one embedding for two chunks
+    let embeddings = vec![vec![0.1; 1024]]; // Only one embedding for two chunks
 
     let result = chunks::store_chunks_with_embeddings(
         &db.pool,
