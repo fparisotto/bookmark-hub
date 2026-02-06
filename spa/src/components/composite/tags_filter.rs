@@ -61,9 +61,9 @@ pub fn tags_filter(props: &Props) -> Html {
         .collect::<Html>();
 
     html! {
-        <div class="tags-filter-panel bg-body-secondary border-end p-3 h-100">
-            <h6 class="text-muted fw-bold mb-3">{"Filter by Tags"}</h6>
-            <div class="d-flex flex-column gap-2" style="max-height: 400px; overflow-y: auto;">
+        <div class="tags-filter-panel bg-body-secondary border-end p-3 h-100 d-flex flex-column" style="min-width: 200px;">
+            <h6 class="text-muted fw-bold mb-3 flex-shrink-0">{"Filter by Tags"}</h6>
+            <div class="d-flex flex-column gap-2 flex-grow-1" style="overflow-y: auto;">
                 {tags}
             </div>
         </div>

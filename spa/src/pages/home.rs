@@ -479,16 +479,16 @@ pub fn home(props: &Props) -> Html {
             let has_more = state_handle.current_search_page * state_handle.page_size
                 < state_handle.total_results as usize;
             html! {
-                <div class="row h-100">
+                <div class="row" style="min-height: calc(100vh - 120px);">
                     // Left side panel for tags filter
-                    <div class="col-12 col-md-3 col-lg-2 mb-3 mb-md-0">
+                    <div class="col-12 col-md-4 col-lg-3 mb-3 mb-md-0">
                         <TagsFilter
                             tags={state_handle.tags.clone()}
                             selected_tags={state_handle.tags_filter.clone()}
                             on_tag_checked={on_tag_checked} />
                     </div>
                     // Main content area
-                    <div class="col-12 col-md-9 col-lg-10">
+                    <div class="col-12 col-md-8 col-lg-9">
                         <SearchBar
                             value={state_handle.search_input.clone()}
                             on_submit={on_search_submit}
@@ -506,7 +506,6 @@ pub fn home(props: &Props) -> Html {
                                 page_size={state_handle.page_size}
                                 current_count={state_handle.items.len()} />
                         </div>
-                        <AddBookmarkModal on_submit={on_new_bookmark} />
                     </div>
                 </div>
             }
@@ -569,6 +568,7 @@ pub fn home(props: &Props) -> Html {
             <div class="container mt-5">
                 {content}
             </div>
+            <AddBookmarkModal on_submit={on_new_bookmark} />
         </>
     }
 }
