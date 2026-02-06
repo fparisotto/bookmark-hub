@@ -8,14 +8,15 @@ pub struct Props {
 }
 
 fn render_fail_reason_modal(task_id: &str, fail_reason: &str) -> Html {
-    let mini_text = format!("{}...", &fail_reason[0..12]);
+    let truncate_len = fail_reason.len().min(60);
+    let mini_text = format!("{}...", &fail_reason[0..truncate_len]);
     let modal_id = format!("modal-id-{task_id}");
     let modal_id_ref = format!("#{modal_id}");
     html! {
         <>
             <a href=""  data-bs-toggle="modal" data-bs-target={modal_id_ref}>{mini_text}</a>
             <div class="modal fade" id={modal_id} tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
-              <div class="odal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+              <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
                 <div class="modal-content">
                   <div class="modal-header">
                     <h1 class="modal-title fs-5" id="exampleModalLabel">{"Fail reason"}</h1>
@@ -44,17 +45,18 @@ fn render_bookmark_task(task: &BookmarkTask) -> Html {
         html! {}
     };
 
+    let created_at = task.created_at.to_rfc3339_opts(SecondsFormat::Secs, true);
+    let updated_at = task.updated_at.to_rfc3339_opts(SecondsFormat::Secs, true);
+
     html! {
         <tr key={task_id}>
-            <td>{task_id_strip}</td>
             <td><a href={task.url.to_owned()} target="_blank">{&task.url}</a></td>
-            <td>{task.status.as_ref()}</td>
-            <td>{&task.tags.to_owned().unwrap_or_default().join(", ")}</td>
-            <td>{&task.created_at.to_rfc3339_opts(SecondsFormat::Secs, true)}</td>
-            <td>{&task.updated_at.to_rfc3339_opts(SecondsFormat::Secs, true)}</td>
-            <td>{&task.next_delivery.to_rfc3339_opts(SecondsFormat::Secs, true)}</td>
-            <td>{&task.retries.map(|e| e.to_string()).unwrap_or_default()}</td>
             <td>{fail_content}</td>
+            <td>{&task.tags.to_owned().unwrap_or_default().join(", ")}</td>
+            <td>
+                <small class="text-muted">{"Created: "}</small>{created_at}<br/>
+                <small class="text-muted">{"Updated: "}</small>{updated_at}
+            </td>
         </tr>
     }
 }
@@ -70,7 +72,7 @@ pub fn tasks_table(props: &Props) -> Html {
         None => {
             html! {
                 <tr>
-                    <td colspan="9" class="text-center text-muted">{"No data found"}</td>
+                    <td colspan="4" class="text-center text-muted">{"No data found"}</td>
                 </tr>
             }
         }
@@ -80,15 +82,10 @@ pub fn tasks_table(props: &Props) -> Html {
         <table class="table table-striped table-hover">
             <thead>
               <tr>
-                <th>{"Task ID"}</th>
                 <th>{"URL"}</th>
-                <th>{"Status"}</th>
-                <th>{"Tags"}</th>
-                <th>{"Created At"}</th>
-                <th>{"Updated At"}</th>
-                <th>{"Next Delivery"}</th>
-                <th>{"Retries"}</th>
                 <th>{"Fail Reason"}</th>
+                <th>{"Tags"}</th>
+                <th>{"Dates"}</th>
               </tr>
             </thead>
             <tbody>
