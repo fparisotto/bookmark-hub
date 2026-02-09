@@ -7,10 +7,14 @@ use crate::db::chunks::{get_bookmarks_without_chunks, store_chunks_with_embeddin
 use crate::db::PgPool;
 use crate::{ollama, tokenizer};
 
-const QUERY_LIMIT: usize = 5; // Process fewer items at once to avoid overwhelming Ollama
-const EMBEDDING_MODEL: &str = "mxbai-embed-large"; // Default embedding model
+// Process fewer items at once to avoid overwhelming Ollama
+const QUERY_LIMIT: usize = 5;
+
+// Default embedding model
 // mxbai-embed-large has a 512 token context window; use a smaller chunk size
 // than the shared constants (which target the text model with a larger context)
+const EMBEDDING_MODEL: &str = "mxbai-embed-large";
+
 const EMBEDDING_WINDOW_SIZE: usize = 450;
 const EMBEDDING_WINDOW_OVERLAP: usize = 50;
 
