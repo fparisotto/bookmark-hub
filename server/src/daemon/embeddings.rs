@@ -2,13 +2,21 @@ use anyhow::{Context, Result};
 use tracing::{debug, error, info, warn};
 use url::Url;
 
-use super::{DAEMON_IDLE_SLEEP, TOKENIZER_WINDOW_OVERLAP, TOKENIZER_WINDOW_SIZE};
+use super::DAEMON_IDLE_SLEEP;
 use crate::db::chunks::{get_bookmarks_without_chunks, store_chunks_with_embeddings};
 use crate::db::PgPool;
 use crate::{ollama, tokenizer};
 
-const QUERY_LIMIT: usize = 5; // Process fewer items at once to avoid overwhelming Ollama
-const EMBEDDING_MODEL: &str = "mxbai-embed-large"; // Default embedding model
+// Process fewer items at once to avoid overwhelming Ollama
+const QUERY_LIMIT: usize = 5;
+
+// Default embedding model
+// mxbai-embed-large has a 512 token context window; use a smaller chunk size
+// than the shared constants (which target the text model with a larger context)
+const EMBEDDING_MODEL: &str = "mxbai-embed-large";
+
+const EMBEDDING_WINDOW_SIZE: usize = 450;
+const EMBEDDING_WINDOW_OVERLAP: usize = 50;
 
 pub async fn run(
     pool: &PgPool,
@@ -118,8 +126,8 @@ async fn process_bookmark_chunks(
 
     // Generate chunks using the existing tokenizer
     let chunks = tokenizer::windowed_chunks(
-        TOKENIZER_WINDOW_SIZE,
-        TOKENIZER_WINDOW_OVERLAP,
+        EMBEDDING_WINDOW_SIZE,
+        EMBEDDING_WINDOW_OVERLAP,
         text_content,
     )
     .context("Failed to create text chunks")?;
