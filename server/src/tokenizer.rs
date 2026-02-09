@@ -23,15 +23,14 @@ pub fn windowed_chunks(
     let encoding = tokenizer
         .encode(text, false)
         .map_err(anyhow::Error::from_boxed)?;
-    let tokens: Vec<_> = encoding.get_tokens().iter().collect();
-    let windowed = tokens.windowed(size, size - edge_overlap);
+    let ids: Vec<_> = encoding.get_ids().to_vec();
+    let windowed = ids.windowed(size, size - edge_overlap);
     let mut result = Vec::new();
     for window in windowed {
-        let window_text = window
-            .iter()
-            .map(|e| (*e).to_owned())
-            .collect::<Vec<_>>()
-            .join(" ");
+        let window_ids: Vec<u32> = window.to_vec();
+        let window_text = tokenizer
+            .decode(&window_ids, true)
+            .map_err(anyhow::Error::from_boxed)?;
         result.push(window_text);
     }
     Ok(result)
