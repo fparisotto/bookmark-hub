@@ -313,7 +313,8 @@ pub async fn get_bookmarks_without_chunks(
             FROM bookmark b
             LEFT JOIN bookmark_chunk c ON b.bookmark_id = c.bookmark_id AND b.user_id = c.user_id
             WHERE c.bookmark_id IS NULL
-            AND LENGTH(b.text_content) > 100
+            AND LENGTH(b.text_content) >= 200
+            ORDER BY RANDOM()
             LIMIT $1
             "#,
             &[&(limit as i64)],
