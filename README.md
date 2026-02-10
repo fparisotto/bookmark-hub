@@ -97,7 +97,7 @@ export APP_DATA_DIR=/path/to/data
 
 # Optional: AI Features
 export OLLAMA_URL=http://localhost:11434
-export OLLAMA_TEXT_MODEL=qwen3:14b
+export OLLAMA_TEXT_MODEL=qwen3:8b
 export OLLAMA_EMBEDDING_MODEL=mxbai-embed-large
 
 # Optional: Chrome Automation
