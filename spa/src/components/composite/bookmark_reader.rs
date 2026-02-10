@@ -72,7 +72,9 @@ pub fn bookmark_page(props: &Props) -> Html {
         Callback::from(move |_: MouseEvent| {
             let window = web_sys::window().unwrap();
             let confirmed = window
-                .confirm_with_message("Are you sure you want to delete this bookmark? This action cannot be undone.")
+                .confirm_with_message(
+                    "Are you sure you want to delete this bookmark? This action cannot be undone.",
+                )
                 .unwrap_or(false);
             if confirmed {
                 callback.emit(());

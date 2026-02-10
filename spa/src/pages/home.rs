@@ -313,7 +313,9 @@ pub fn home(props: &Props) -> Html {
                                     state_handle.set(state);
                                 }
                                 Err(error) => {
-                                    log::warn!("Failed to refresh search after delete, error: {error}");
+                                    log::warn!(
+                                        "Failed to refresh search after delete, error: {error}"
+                                    );
                                     state_handle.set(state);
                                 }
                             }
