@@ -73,6 +73,8 @@ async fn execute_step(pool: &PgPool, ollama_url: &Url, model: &str) -> Result<bo
         "Found bookmarks without chunks, processing..."
     );
 
+    let mut total_chunks_produced = 0usize;
+
     for (bookmark_id, user_id, text_content) in bookmarks {
         match process_bookmark_chunks(
             &bookmark_id,
@@ -85,6 +87,7 @@ async fn execute_step(pool: &PgPool, ollama_url: &Url, model: &str) -> Result<bo
         .await
         {
             Ok(chunk_count) => {
+                total_chunks_produced += chunk_count;
                 info!(
                     bookmark_id,
                     user_id = %user_id,
@@ -103,7 +106,12 @@ async fn execute_step(pool: &PgPool, ollama_url: &Url, model: &str) -> Result<bo
         }
     }
 
-    Ok(true) // There were tasks to process
+    if total_chunks_produced == 0 {
+        debug!("No chunks produced in this batch, backing off");
+        return Ok(false);
+    }
+
+    Ok(true) // There were tasks that made progress
 }
 
 async fn process_bookmark_chunks(
