@@ -522,11 +522,13 @@ pub fn home(props: &Props) -> Html {
             html! {
                 <div class="row" style="min-height: calc(100vh - 120px);">
                     // Left side panel for tags filter
-                    <div class="col-12 col-md-4 col-lg-3 mb-3 mb-md-0">
-                        <TagsFilter
-                            tags={state_handle.tags.clone()}
-                            selected_tags={state_handle.tags_filter.clone()}
-                            on_tag_checked={on_tag_checked} />
+                    <div class="col-12 col-md-4 col-lg-3 mb-3 mb-md-0" style="position: relative;">
+                        <div style="position: absolute; top: 0; bottom: 0; left: 0; right: 0;">
+                            <TagsFilter
+                                tags={state_handle.tags.clone()}
+                                selected_tags={state_handle.tags_filter.clone()}
+                                on_tag_checked={on_tag_checked} />
+                        </div>
                     </div>
                     // Main content area
                     <div class="col-12 col-md-8 col-lg-9">
