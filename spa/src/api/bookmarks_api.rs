@@ -68,6 +68,27 @@ pub async fn set_tags(token: &str, id: &str, tags: Vec<String>) -> Result<Bookma
     Ok(response)
 }
 
+pub async fn delete_bookmark(token: &str, id: &str) -> Result<bool, Error> {
+    let endpoint = format!("/api/v1/bookmarks/{id}");
+    let response = Request::delete(&endpoint)
+        .header("Authorization", &format!("Bearer {token}"))
+        .send()
+        .await?;
+    log::info!("Api delete bookmark, id={id}");
+    match response.status() {
+        204 => Ok(true),
+        404 => Ok(false),
+        _ => {
+            let response_body = response.text().await?;
+            log::warn!(
+                "Api delete bookmark id={id}, error = unexpected response, status={status}, response={response_body}",
+                status = response.status(),
+            );
+            Err(Error::GlooError("unexpected response".to_owned()))
+        }
+    }
+}
+
 pub async fn get_content(token: &str, user_id: &Uuid, id: &str) -> Result<Option<String>, Error> {
     let endpoint = format!("/static/{user_id}/{id}/index.html");
     let response = Request::get(&endpoint)

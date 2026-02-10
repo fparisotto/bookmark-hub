@@ -278,6 +278,20 @@ pub async fn get_untagged_bookmarks(pool: &PgPool, limit: usize) -> Result<Vec<B
     Ok(results)
 }
 
+pub async fn delete(pool: &PgPool, user_id: Uuid, bookmark_id: &str) -> Result<bool> {
+    const SQL: &str = "DELETE FROM bookmark WHERE bookmark_id = $1 AND user_id = $2";
+    debug!(bookmark_id = %bookmark_id, user_id = %user_id, "Deleting bookmark");
+    let client = pool.get().await?;
+    let rows_affected = client.execute(SQL, &[&bookmark_id, &user_id]).await?;
+    if rows_affected > 0 {
+        info!(bookmark_id = %bookmark_id, user_id = %user_id, "Bookmark deleted");
+        Ok(true)
+    } else {
+        debug!(bookmark_id = %bookmark_id, user_id = %user_id, "Bookmark not found for deletion");
+        Ok(false)
+    }
+}
+
 pub async fn get_bookmarks_without_summary(
     pool: &PgPool,
     limit: usize,
