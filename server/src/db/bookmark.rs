@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use chrono::{DateTime, Utc};
 use deadpool_postgres::GenericClient;
 use postgres_from_row::FromRow;
@@ -8,6 +10,14 @@ use uuid::Uuid;
 
 use super::PgPool;
 use crate::error::{Error, Result};
+
+fn normalize_tags(tags: &[String]) -> Vec<String> {
+    let mut seen = HashSet::new();
+    tags.iter()
+        .map(|t| t.trim().to_lowercase())
+        .filter(|t| !t.is_empty() && seen.insert(t.clone()))
+        .collect()
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 struct RowBookmark {
@@ -156,9 +166,12 @@ pub async fn update_tags(
     bookmark_id: &str,
     operation: &TagOperation,
 ) -> Result<Bookmark> {
-    let (update_tag_sql, tags) = match operation.clone() {
-        TagOperation::Set(tags) => ("tags=$1", tags),
-        TagOperation::Append(tags) => ("tags=array_cat(tags, $1)", tags),
+    let (update_tag_sql, tags) = match operation {
+        TagOperation::Set(tags) => ("tags=$1", normalize_tags(tags)),
+        TagOperation::Append(tags) => (
+            "tags=(SELECT ARRAY(SELECT DISTINCT unnest(array_cat(tags, $1))))",
+            normalize_tags(tags),
+        ),
     };
     let sql = format!(
         "UPDATE bookmark SET {update_tag_sql}, updated_at=now() WHERE bookmark_id=$2 AND user_id=$3 RETURNING *;"
@@ -185,6 +198,7 @@ pub async fn save(pool: &PgPool, bookmark: &Bookmark, text_content: &str) -> Res
     INSERT INTO bookmark
     (bookmark_id, user_id, url, domain, title, text_content, tags, created_at, updated_at)
     VALUES ($1, $2, $3, $4, $5, $6, $7, now(), now()) RETURNING *;"#;
+    let normalized_tags: Option<Vec<String>> = bookmark.tags.as_ref().map(|t| normalize_tags(t));
     let client = pool.get().await?;
     let row = client
         .query_one(
@@ -196,7 +210,7 @@ pub async fn save(pool: &PgPool, bookmark: &Bookmark, text_content: &str) -> Res
                 &bookmark.domain,
                 &bookmark.title,
                 &text_content,
-                &bookmark.tags,
+                &normalized_tags,
             ],
         )
         .await?;

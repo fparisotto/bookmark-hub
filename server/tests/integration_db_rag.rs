@@ -494,22 +494,22 @@ async fn test_get_bookmarks_without_chunks() -> anyhow::Result<()> {
             "https://example1.com",
             "Title 1",
             "example1.com",
-            "A".repeat(150),
-        ), // Has enough content
+            "A".repeat(250),
+        ), // Has enough content (>= 200)
         (
             "bookmark2",
             "https://example2.com",
             "Title 2",
             "example2.com",
             "B".repeat(50),
-        ), // Too short
+        ), // Too short (< 200)
         (
             "bookmark3",
             "https://example3.com",
             "Title 3",
             "example3.com",
-            "C".repeat(200),
-        ), // Has enough content
+            "C".repeat(300),
+        ), // Has enough content (>= 200)
     ];
 
     for (_bookmark_id, url, title, domain, text_content) in &bookmarks_data {
@@ -522,7 +522,7 @@ async fn test_get_bookmarks_without_chunks() -> anyhow::Result<()> {
     // Get bookmarks without chunks
     let bookmarks_without_chunks = chunks::get_bookmarks_without_chunks(&db.pool, 10).await?;
 
-    // Should return bookmarks with sufficient content (>100 chars)
+    // Should return bookmarks with sufficient content (>= 200 chars)
     let returned_bookmarks: Vec<_> = bookmarks_without_chunks
         .iter()
         .filter(|(_, uid, _)| uid == &user_id)
@@ -533,7 +533,7 @@ async fn test_get_bookmarks_without_chunks() -> anyhow::Result<()> {
 
     // Verify content length filter
     for (_, _, text_content) in &returned_bookmarks {
-        assert!(text_content.len() > 100);
+        assert!(text_content.len() >= 200);
     }
 
     Ok(())

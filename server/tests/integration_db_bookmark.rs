@@ -286,19 +286,24 @@ async fn test_update_tags_append() -> anyhow::Result<()> {
     let updated =
         bookmark::update_tags(&db.pool, user_id, &saved.bookmark_id, &tag_operation).await?;
 
-    // Should contain both original and new tags
-    let expected_tags = vec![
+    // Should contain both original and new tags (order may vary due to DISTINCT)
+    let mut expected_tags = vec![
         "initial".to_string(),
         "existing".to_string(),
         "new".to_string(),
         "additional".to_string(),
     ];
-    assert_eq!(updated.tags, Some(expected_tags.clone()));
+    expected_tags.sort();
+    let mut actual_tags = updated.tags.unwrap();
+    actual_tags.sort();
+    assert_eq!(actual_tags, expected_tags);
 
     // Verify in database
     let retrieved = bookmark::get_with_user_data(&db.pool, user_id, &saved.bookmark_id).await?;
     assert!(retrieved.is_some());
-    assert_eq!(retrieved.unwrap().tags, Some(expected_tags));
+    let mut retrieved_tags = retrieved.unwrap().tags.unwrap();
+    retrieved_tags.sort();
+    assert_eq!(retrieved_tags, expected_tags);
 
     Ok(())
 }
