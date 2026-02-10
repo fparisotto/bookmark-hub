@@ -21,7 +21,7 @@ services:
       PG_DATABASE: main
       PG_MAX_CONNECTIONS: 5
       OLLAMA_URL: http://ollama:11434
-      OLLAMA_TEXT_MODEL: qwen3:14b
+      OLLAMA_TEXT_MODEL: qwen3:8b
       OLLAMA_EMBEDDING_MODEL: mxbai-embed-large
       CHROME_HOST: chrome
       CHROME_PORT: 3001
@@ -58,7 +58,7 @@ services:
       - -c
       - |
         echo "Pulling text model..."
-        curl ollama:11434/api/pull -d '{"model":"qwen3:14b"}' || exit 1
+        curl ollama:11434/api/pull -d '{"model":"qwen3:8b"}' || exit 1
         echo "Pulling embedding model..."
         curl ollama:11434/api/pull -d '{"model":"mxbai-embed-large"}' || exit 1
         echo "All models pulled successfully"
