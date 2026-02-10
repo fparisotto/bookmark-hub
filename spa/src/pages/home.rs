@@ -291,6 +291,45 @@ pub fn home(props: &Props) -> Html {
         })
     };
 
+    let on_delete = {
+        let state_handle = state_handle.clone();
+        let token = token.clone();
+        Callback::from(move |_: ()| {
+            let token = token.clone();
+            let state_handle = state_handle.clone();
+            let page = state_handle.page.clone();
+            if let Page::Read { bookmark } = page {
+                spawn_local(async move {
+                    match bookmarks_api::delete_bookmark(&token, &bookmark.bookmark_id).await {
+                        Ok(_) => {
+                            log::info!("Bookmark deleted, id={}", &bookmark.bookmark_id);
+                            let mut state = (*state_handle).clone();
+                            state.page = Page::Search;
+                            match search_api::search(&token, state.clone().into()).await {
+                                Ok(result) => {
+                                    state.items = result.items;
+                                    state.tags = result.tags;
+                                    state.total_results = result.total;
+                                    state_handle.set(state);
+                                }
+                                Err(error) => {
+                                    log::warn!("Failed to refresh search after delete, error: {error}");
+                                    state_handle.set(state);
+                                }
+                            }
+                        }
+                        Err(error) => {
+                            log::error!(
+                                "Failed to delete bookmark={}, error={error}",
+                                &bookmark.bookmark_id
+                            );
+                        }
+                    }
+                });
+            }
+        })
+    };
+
     let on_page_change = {
         let state_handle = state_handle.clone();
         Callback::from(move |event: Page| {
@@ -516,7 +555,8 @@ pub fn home(props: &Props) -> Html {
                     user_session={props.user_session.to_owned()}
                     bookmark={bookmark.to_owned()}
                     on_goback={on_goback}
-                    on_new_tags={on_new_tags} />
+                    on_new_tags={on_new_tags}
+                    on_delete={on_delete.clone()} />
             }
         }
         Page::Tasks => {

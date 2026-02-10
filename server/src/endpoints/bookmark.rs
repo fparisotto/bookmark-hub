@@ -19,7 +19,7 @@ pub fn routes() -> Router {
         .route("/tags", get(get_all_tags))
         .route("/tags/{tag}", get(get_bookmarks_by_tag))
         .route("/bookmarks", get(get_bookmarks).post(new_bookmark))
-        .route("/bookmarks/{id}", get(get_bookmark))
+        .route("/bookmarks/{id}", get(get_bookmark).delete(delete_bookmark))
         .route("/bookmarks/{id}/tags", post(set_tags).patch(append_tags))
 }
 
@@ -105,6 +105,35 @@ async fn get_bookmark(
             Err(Error::NotFound)
         }
     }
+}
+
+#[debug_handler]
+async fn delete_bookmark(
+    claims: Claim,
+    Extension(app_context): Extension<AppContext>,
+    Path(id): Path<String>,
+) -> Result<StatusCode> {
+    info!(bookmark_id = %id, user_id = %claims.user_id, "Deleting bookmark");
+    let deleted = bookmark::delete(&app_context.pool, claims.user_id, &id).await?;
+    if !deleted {
+        return Err(Error::NotFound);
+    }
+    let static_dir = app_context
+        .config
+        .data_dir
+        .join(claims.user_id.to_string())
+        .join(&id);
+    if static_dir.exists() {
+        if let Err(err) = tokio::fs::remove_dir_all(&static_dir).await {
+            error!(
+                bookmark_id = %id,
+                path = ?static_dir,
+                error = %err,
+                "Failed to remove static files for deleted bookmark"
+            );
+        }
+    }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[debug_handler]

@@ -14,6 +14,7 @@ pub struct Props {
     pub bookmark: Bookmark,
     pub on_goback: Callback<()>,
     pub on_new_tags: Callback<Vec<String>>,
+    pub on_delete: Callback<()>,
 }
 
 #[function_component(BookmarkReader)]
@@ -66,6 +67,19 @@ pub fn bookmark_page(props: &Props) -> Html {
         })
     };
 
+    let on_delete = {
+        let callback = props.on_delete.clone();
+        Callback::from(move |_: MouseEvent| {
+            let window = web_sys::window().unwrap();
+            let confirmed = window
+                .confirm_with_message("Are you sure you want to delete this bookmark? This action cannot be undone.")
+                .unwrap_or(false);
+            if confirmed {
+                callback.emit(());
+            }
+        })
+    };
+
     let article = if let Some(data) = (*html_content).clone() {
         html! {
             <ArticleHtml html={data} />
@@ -114,6 +128,7 @@ pub fn bookmark_page(props: &Props) -> Html {
                               on_change={on_tag_change}
                               value={tags_as_string} />
                           <button onclick={on_save_tags} class="btn btn-primary" type="button">{"Save"}</button>
+                          <button onclick={on_delete} class="btn btn-danger" type="button">{"Delete"}</button>
                       </div>
                   </div>
               </div>
