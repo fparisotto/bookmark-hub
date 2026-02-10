@@ -68,6 +68,7 @@ async fn get_bookmarks_by_tag(
         tag = %tag,
         "Fetching bookmarks with tag"
     );
+    let tag = tag.to_lowercase();
     let bookmarks = bookmark::get_by_tag(&app_context.pool, claims.user_id, &tag).await?;
     info!(
         user_id = %claims.user_id,
