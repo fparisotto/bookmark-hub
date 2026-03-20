@@ -1,5 +1,5 @@
-use anyhow::Result;
 use ammonia::Builder;
+use anyhow::Result;
 use dom_smoothie::{Article, Config, Readability};
 use serde::{Deserialize, Serialize};
 
@@ -31,7 +31,5 @@ pub async fn process(raw_content: String) -> Result<ReadabilityResponse> {
 }
 
 fn sanitize_html(content: &str) -> String {
-    Builder::default()
-        .clean(content)
-        .to_string()
+    Builder::default().clean(content).to_string()
 }

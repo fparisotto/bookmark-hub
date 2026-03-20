@@ -38,6 +38,8 @@ pub enum Error {
     ConstraintViolation { constraint: String, message: String },
     #[error("internal_server_error")]
     Anyhow(#[from] anyhow::Error),
+    #[error("too_many_requests")]
+    TooManyRequests { retry_after_secs: u64 },
     #[error("wrong_credentials")]
     WrongCredentials,
     #[error("missing_credentials")]
@@ -96,6 +98,10 @@ impl Error {
         Self::Argon2 { details }
     }
 
+    pub fn too_many_requests(retry_after_secs: u64) -> Self {
+        Self::TooManyRequests { retry_after_secs }
+    }
+
     fn status_code(&self) -> StatusCode {
         match self {
             Error::Anyhow(_) => StatusCode::INTERNAL_SERVER_ERROR,
@@ -109,6 +115,7 @@ impl Error {
             Error::Jwt(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Error::MissingCredentials => StatusCode::BAD_REQUEST,
             Error::NotFound => StatusCode::NOT_FOUND,
+            Error::TooManyRequests { .. } => StatusCode::TOO_MANY_REQUESTS,
             Error::Unauthorized => StatusCode::UNAUTHORIZED,
             Error::UnprocessableEntity { .. } => StatusCode::UNPROCESSABLE_ENTITY,
             Error::WrongCredentials => StatusCode::UNAUTHORIZED,
@@ -136,6 +143,21 @@ impl IntoResponse for Error {
                     Json(ErrorsPayload {
                         errors: errors.clone(),
                     }),
+                );
+                return t.into_response();
+            }
+            Self::TooManyRequests { retry_after_secs } => {
+                warn!(retry_after_secs, "Auth rate limit exceeded");
+                let t = (
+                    StatusCode::TOO_MANY_REQUESTS,
+                    [(
+                        axum::http::header::RETRY_AFTER,
+                        HeaderValue::from_str(&retry_after_secs.to_string())
+                            .unwrap_or_else(|_| HeaderValue::from_static("60")),
+                    )]
+                    .into_iter()
+                    .collect::<HeaderMap>(),
+                    self.to_string(),
                 );
                 return t.into_response();
             }
