@@ -21,7 +21,7 @@ pub async fn process(raw_content: String) -> Result<ReadabilityResponse> {
         }),
     )?;
     let article: Article = readability.parse()?;
-    let sanitized_content = sanitize_html(&article.content.to_string());
+    let sanitized_content = sanitize_html(article.content.as_ref());
 
     Ok(ReadabilityResponse {
         title: article.title,
