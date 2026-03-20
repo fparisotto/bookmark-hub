@@ -260,11 +260,17 @@ async fn save_static_content(
     let index = bookmark_dir.join("index.html.gz");
     tokio::fs::write(&index, compressed_content).await?;
 
+    let reduction_pct = if original_size == 0 {
+        0
+    } else {
+        100 - (compressed_size * 100 / original_size)
+    };
+
     tracing::info!(
         "Compressed HTML from {} bytes to {} bytes ({}% reduction)",
         original_size,
         compressed_size,
-        100 - (compressed_size * 100 / original_size)
+        reduction_pct
     );
 
     let mut saved_images = 0;
