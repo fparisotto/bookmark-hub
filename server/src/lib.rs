@@ -8,6 +8,7 @@ use url::Url;
 
 use self::db::PgPool;
 
+pub mod auth_rate_limit;
 pub mod chrome_client;
 pub mod daemon;
 pub mod db;
@@ -22,6 +23,7 @@ pub mod tokenizer;
 pub struct AppContext {
     pub pool: PgPool,
     pub config: Arc<Config>,
+    pub auth_rate_limiter: Arc<auth_rate_limit::AuthRateLimiter>,
     pub tx_new_task: tokio::sync::watch::Sender<()>,
 }
 
@@ -42,6 +44,9 @@ pub struct Config {
 
     #[arg(long, env = "APP_BIND", default_value = "[::]:3000")]
     pub bind: SocketAddr,
+
+    #[arg(long, env = "APP_CORS_ALLOW_ORIGIN")]
+    pub cors_allow_origin: Option<String>,
 
     #[arg(long, env = "APP_DATA_DIR")]
     pub data_dir: PathBuf,

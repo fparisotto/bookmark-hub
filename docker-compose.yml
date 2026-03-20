@@ -13,7 +13,7 @@ services:
       RUST_LOG: info,server=debug
       APP_BIND: "[::]:3000"
       APP_DATA_DIR: /data
-      HMAC_KEY: secret
+      HMAC_KEY: ${HMAC_KEY:?set HMAC_KEY before starting docker compose}
       PG_HOST: postgres
       PG_PORT: 5432
       PG_USER: main

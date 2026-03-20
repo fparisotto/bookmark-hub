@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+ammonia = "4"
 anyhow = { workspace = true }
 argon2 = "0.5"
 async-trait = "0.1"

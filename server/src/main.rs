@@ -1,15 +1,17 @@
 use std::future::pending;
 use std::io;
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::bail;
+use axum::http::{header, HeaderValue, Method};
 use axum::{Extension, Router};
 use axum_otel_metrics::HttpMetricsLayerBuilder;
 use clap::Parser;
 use server::db::PgPool;
 use server::{daemon, db, endpoints, AppContext, Config};
 use tokio::signal::unix::SignalKind;
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 use tracing::level_filters::LevelFilter;
@@ -175,24 +177,49 @@ async fn setup_app(
     let app_state = AppContext {
         config: Arc::new(config.clone()),
         pool,
+        auth_rate_limiter: Arc::new(server::auth_rate_limit::AuthRateLimiter::new(
+            5,
+            Duration::from_secs(5 * 60),
+        )),
         tx_new_task: tx,
     };
 
     let metrics = HttpMetricsLayerBuilder::new().build();
-    let app = Router::new()
+    let mut app = Router::new()
         .nest("/api/v1", endpoints::routers_v1())
         .merge(endpoints::health_check())
         .merge(endpoints::static_content(config))
         .fallback_service(ServeDir::new(env!("SPA_DIST")))
         .layer(metrics)
         .layer(Extension(app_state))
-        .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http());
+
+    if let Some(origin) = &config.cors_allow_origin {
+        let cors = if origin == "*" {
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE])
+                .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
+        } else {
+            CorsLayer::new()
+                .allow_origin(
+                    HeaderValue::from_str(origin)
+                        .map_err(|_| anyhow::anyhow!("Invalid APP_CORS_ALLOW_ORIGIN value"))?,
+                )
+                .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE])
+                .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
+        };
+        app = app.layer(cors);
+    }
+
     let listener = tokio::net::TcpListener::bind(&config.bind).await?;
     info!(bind_address = %config.bind, "HTTP server listening");
-    axum::serve(listener, app.into_make_service())
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await?;
     info!("HTTP server shutdown complete");
     Ok(())
 }

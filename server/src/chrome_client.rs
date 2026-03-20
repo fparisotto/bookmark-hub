@@ -41,7 +41,10 @@ impl ChromeClient {
         let http_url = format!("http://{}:{}/json/version", host, port);
         debug!(%http_url, "Discovering WebSocket URL");
 
-        let client = Client::new();
+        let client = Client::builder()
+            .timeout(Duration::from_secs(10))
+            .build()
+            .context("Failed to build Chrome discovery client")?;
         let response = client
             .get(&http_url)
             .send()

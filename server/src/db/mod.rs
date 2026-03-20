@@ -38,7 +38,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;";
 
-const SCHEMAS: [(i32, &str); 3] = [
+const SCHEMAS: [(i32, &str); 4] = [
     (
         1,
         include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/schema/1_unified.sql")),
@@ -55,6 +55,13 @@ const SCHEMAS: [(i32, &str); 3] = [
         include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/schema/3_lowercase_tags.sql"
+        )),
+    ),
+    (
+        4,
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/schema/4_trim_tags.sql"
         )),
     ),
 ];

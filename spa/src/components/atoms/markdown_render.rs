@@ -1,3 +1,4 @@
+use ammonia::clean;
 use pulldown_cmark::{html, Options, Parser};
 use yew::prelude::*;
 
@@ -39,5 +40,5 @@ fn markdown_to_html(markdown: &str) -> String {
     let mut html_output = String::new();
     html::push_html(&mut html_output, parser);
 
-    html_output
+    clean(&html_output)
 }

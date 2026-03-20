@@ -59,7 +59,10 @@ pub async fn run(
     mut new_task_rx: tokio::sync::watch::Receiver<()>,
     new_bookmark_tx: tokio::sync::watch::Sender<()>,
 ) -> Result<()> {
-    let http: HttpClient = HttpClient::new();
+    let http: HttpClient = HttpClient::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .context("Failed to build HTTP client for bookmark ingestion")?;
     let chrome_connection = match &config.chrome {
         Some(chrome_params) => ChromeConnection::Remote {
             host: chrome_params.chrome_host.clone(),
@@ -260,11 +263,17 @@ async fn save_static_content(
     let index = bookmark_dir.join("index.html.gz");
     tokio::fs::write(&index, compressed_content).await?;
 
+    let reduction_pct = if original_size == 0 {
+        0
+    } else {
+        100 - (compressed_size * 100 / original_size)
+    };
+
     tracing::info!(
         "Compressed HTML from {} bytes to {} bytes ({}% reduction)",
         original_size,
         compressed_size,
-        100 - (compressed_size * 100 / original_size)
+        reduction_pct
     );
 
     let mut saved_images = 0;

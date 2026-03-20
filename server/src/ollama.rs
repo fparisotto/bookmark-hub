@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use anyhow::bail;
 use ollama_rs::generation::completion::request::GenerationRequest;
 use ollama_rs::generation::embeddings::request::{EmbeddingsInput, GenerateEmbeddingsRequest};
@@ -24,6 +26,28 @@ const SYSTEM_PROMPT: &str = r#"You are an expert researcher. Follow these instru
   - Be succinct and cohesive.
 "#;
 
+const OLLAMA_TIMEOUT: Duration = Duration::from_secs(120);
+
+async fn generate_with_timeout(
+    ollama: &Ollama,
+    request: GenerationRequest<'_>,
+) -> anyhow::Result<ollama_rs::generation::completion::GenerationResponse> {
+    tokio::time::timeout(OLLAMA_TIMEOUT, ollama.generate(request))
+        .await
+        .map_err(|_| anyhow::anyhow!("Ollama request timed out after {:?}", OLLAMA_TIMEOUT))?
+        .map_err(Into::into)
+}
+
+async fn embeddings_with_timeout(
+    ollama: &Ollama,
+    request: GenerateEmbeddingsRequest,
+) -> anyhow::Result<ollama_rs::generation::embeddings::GenerateEmbeddingsResponse> {
+    tokio::time::timeout(OLLAMA_TIMEOUT, ollama.generate_embeddings(request))
+        .await
+        .map_err(|_| anyhow::anyhow!("Ollama request timed out after {:?}", OLLAMA_TIMEOUT))?
+        .map_err(Into::into)
+}
+
 pub async fn tags(ollama_url: &Url, ollama_model: &str, text: &str) -> anyhow::Result<Vec<String>> {
     const PROMPT_PREFIX: &str = r#"Extract up to 5 tags from this text slice.
     Each tag must be 1-2 words maximum (e.g., "rust", "async runtime", "postgresql").
@@ -39,7 +63,7 @@ pub async fn tags(ollama_url: &Url, ollama_model: &str, text: &str) -> anyhow::R
         GenerationRequest::new(ollama_model.to_owned(), format!("{PROMPT_PREFIX}\n{text}"))
             .format(format)
             .system(SYSTEM_PROMPT);
-    let response = ollama.generate(request).await?;
+    let response = generate_with_timeout(&ollama, request).await?;
     if let Ok(parsed) = serde_json::from_str::<TagsModelResponse>(&response.response) {
         Ok(parsed.tags)
     } else {
@@ -69,7 +93,7 @@ pub async fn consolidate_tags(
         GenerationRequest::new(ollama_model.to_owned(), format!("{PROMPT_PREFIX}\n{text}"))
             .format(format)
             .system(SYSTEM_PROMPT);
-    let response = ollama.generate(request).await?;
+    let response = generate_with_timeout(&ollama, request).await?;
     if let Ok(parsed) = serde_json::from_str::<TagsModelResponse>(&response.response) {
         Ok(parsed.tags)
     } else {
@@ -97,7 +121,7 @@ pub async fn summary(ollama_url: &Url, ollama_model: &str, text: &str) -> anyhow
         GenerationRequest::new(ollama_model.to_owned(), format!("{PROMPT_PREFIX}\n{text}"))
             .format(format)
             .system(SYSTEM_PROMPT);
-    let response = ollama.generate(request).await?;
+    let response = generate_with_timeout(&ollama, request).await?;
     if let Ok(parsed) = serde_json::from_str::<SummaryModelResponse>(&response.response) {
         Ok(parsed.summary)
     } else {
@@ -128,7 +152,7 @@ pub async fn consolidate_summary(
         GenerationRequest::new(ollama_model.to_owned(), format!("{PROMPT_PREFIX}\n{text}"))
             .format(format)
             .system(SYSTEM_PROMPT);
-    let response = ollama.generate(request).await?;
+    let response = generate_with_timeout(&ollama, request).await?;
     if let Ok(parsed) = serde_json::from_str::<SummaryModelResponse>(&response.response) {
         Ok(parsed.summary)
     } else {
@@ -148,7 +172,7 @@ pub async fn embeddings(
     let ollama = Ollama::from_url(ollama_url.to_owned());
     let input = EmbeddingsInput::Single(text.to_string());
     let request = GenerateEmbeddingsRequest::new(ollama_model.to_owned(), input);
-    let response = ollama.generate_embeddings(request).await?;
+    let response = embeddings_with_timeout(&ollama, request).await?;
     if response.embeddings.len() > 1 {
         bail!("More than one embeddings returned from ollama, not expected")
     }
@@ -182,7 +206,7 @@ Original question: "#;
     )
     .format(format)
     .system(SYSTEM_PROMPT);
-    let response = ollama.generate(request).await?;
+    let response = generate_with_timeout(&ollama, request).await?;
     if let Ok(parsed) = serde_json::from_str::<QuestionsResponse>(&response.response) {
         Ok(parsed.questions)
     } else {
@@ -224,7 +248,7 @@ Evaluate if this chunk contains information that would help answer the question.
     let request = GenerationRequest::new(ollama_model.to_owned(), prompt)
         .format(format)
         .system(SYSTEM_PROMPT);
-    let response = ollama.generate(request).await?;
+    let response = generate_with_timeout(&ollama, request).await?;
     if let Ok(parsed) = serde_json::from_str::<RelevanceResponse>(&response.response) {
         Ok((parsed.relevant, parsed.explanation))
     } else {
@@ -258,6 +282,6 @@ Provide a clear, accurate answer based on the context provided. If you cannot an
 
     let ollama = Ollama::from_url(ollama_url.to_owned());
     let request = GenerationRequest::new(ollama_model.to_owned(), prompt).system(SYSTEM_PROMPT);
-    let response = ollama.generate(request).await?;
+    let response = generate_with_timeout(&ollama, request).await?;
     Ok(response.response)
 }
