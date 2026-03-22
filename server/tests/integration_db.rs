@@ -202,7 +202,7 @@ async fn test_db_migration_4_backfills_existing_version_3_data() -> anyhow::Resu
         task_tags.into_iter().collect::<BTreeSet<_>>(),
         BTreeSet::from(["ops".to_string()])
     );
-    assert_eq!(schema_version, 4);
+    assert_eq!(schema_version, 5);
 
     Ok(())
 }
