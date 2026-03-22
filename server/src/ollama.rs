@@ -26,7 +26,7 @@ const SYSTEM_PROMPT: &str = r#"You are an expert researcher. Follow these instru
   - Be succinct and cohesive.
 "#;
 
-const OLLAMA_TIMEOUT: Duration = Duration::from_secs(300);
+const OLLAMA_TIMEOUT: Duration = Duration::from_secs(600);
 
 async fn generate_with_timeout(
     ollama: &Ollama,
