@@ -12,7 +12,6 @@ use crate::tokenizer::count_tokens;
 
 const DEFAULT_MAX_CHUNKS: usize = 6;
 const DEFAULT_SIMILARITY_THRESHOLD: f64 = 0.3;
-const EMBEDDING_MODEL: &str = "mxbai-embed-large";
 const DEFAULT_MAX_CONTEXT_TOKENS: usize = 4096;
 const PROMPT_OVERHEAD_TOKENS: usize = 200;
 const DEFAULT_RRF_K: u32 = 60;
@@ -31,12 +30,12 @@ pub struct RagEngine {
 }
 
 impl RagEngine {
-    pub fn new(pool: PgPool, ollama_url: Url, text_model: String) -> Self {
+    pub fn new(pool: PgPool, ollama_url: Url, text_model: String, embedding_model: String) -> Self {
         Self {
             pool,
             ollama_url,
             text_model,
-            embedding_model: EMBEDDING_MODEL.to_string(),
+            embedding_model,
         }
     }
 

@@ -20,8 +20,8 @@ services:
       PG_DATABASE: main
       PG_MAX_CONNECTIONS: 5
       OLLAMA_URL: http://localhost:11434
-      OLLAMA_TEXT_MODEL: qwen3:8b
-      OLLAMA_EMBEDDING_MODEL: mxbai-embed-large
+      OLLAMA_TEXT_MODEL: qwen3.5:9b
+      OLLAMA_EMBEDDING_MODEL: qwen3-embedding:0.6b
       CHROME_HOST: localhost
       CHROME_PORT: 3001
     volumes:

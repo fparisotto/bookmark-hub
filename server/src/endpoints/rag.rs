@@ -43,8 +43,20 @@ async fn rag_query(
         }
     };
 
+    let embedding_model = app_context
+        .config
+        .ollama
+        .ollama_embedding_model
+        .clone()
+        .unwrap_or_else(|| "qwen3-embedding:0.6b".to_string());
+
     // Create RAG engine
-    let rag_engine = RagEngine::new(app_context.pool.clone(), ollama_url, text_model);
+    let rag_engine = RagEngine::new(
+        app_context.pool.clone(),
+        ollama_url,
+        text_model,
+        embedding_model,
+    );
 
     // Process the query
     match rag_engine.process_query(claims.user_id, &request).await {

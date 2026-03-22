@@ -11,12 +11,12 @@ use crate::{ollama, tokenizer};
 const QUERY_LIMIT: usize = 5;
 
 // Default embedding model
-// mxbai-embed-large has a 512 token context window; use a smaller chunk size
-// than the shared constants (which target the text model with a larger context)
-const EMBEDDING_MODEL: &str = "mxbai-embed-large";
+// qwen3-embedding has a 32K token context window; use larger chunks for better
+// context
+const EMBEDDING_MODEL: &str = "qwen3-embedding:0.6b";
 
-const EMBEDDING_WINDOW_SIZE: usize = 450;
-const EMBEDDING_WINDOW_OVERLAP: usize = 50;
+const EMBEDDING_WINDOW_SIZE: usize = 2000;
+const EMBEDDING_WINDOW_OVERLAP: usize = 200;
 
 pub async fn run(
     pool: &PgPool,
