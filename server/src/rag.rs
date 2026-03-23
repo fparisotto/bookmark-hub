@@ -1,13 +1,12 @@
 use anyhow::{Context, Result};
 use shared::{RagChunkMatch, RagQueryRequest, RagQueryResponse};
 use tracing::{debug, info, warn};
-use url::Url;
 use uuid::Uuid;
 
 use crate::db::chunks::{search_chunks_hybrid, search_similar_chunks, HybridChunkMatch};
 use crate::db::rag::{create_rag_session, update_rag_session};
 use crate::db::PgPool;
-use crate::ollama;
+use crate::llm::{self, LlmClient};
 use crate::tokenizer::count_tokens;
 
 const DEFAULT_MAX_CHUNKS: usize = 6;
@@ -24,19 +23,12 @@ fn rrf_score(vector_rank: usize, fts_rank: usize, k: u32) -> f64 {
 
 pub struct RagEngine {
     pool: PgPool,
-    ollama_url: Url,
-    text_model: String,
-    embedding_model: String,
+    client: LlmClient,
 }
 
 impl RagEngine {
-    pub fn new(pool: PgPool, ollama_url: Url, text_model: String, embedding_model: String) -> Self {
-        Self {
-            pool,
-            ollama_url,
-            text_model,
-            embedding_model,
-        }
+    pub fn new(pool: PgPool, client: LlmClient) -> Self {
+        Self { pool, client }
     }
 
     pub async fn process_query(
@@ -148,8 +140,7 @@ impl RagEngine {
     async fn generate_query_variations(&self, question: &str) -> Result<Vec<String>> {
         let mut questions = vec![question.to_string()];
 
-        match ollama::generate_similar_questions(&self.ollama_url, &self.text_model, question).await
-        {
+        match llm::generate_similar_questions(&self.client, question).await {
             Ok(similar_questions) => {
                 questions.extend(similar_questions);
                 debug!(
@@ -176,7 +167,7 @@ impl RagEngine {
         request: &RagQueryRequest,
     ) -> Result<Vec<RagChunkMatch>> {
         // Generate embedding for the question
-        let query_embedding = ollama::embeddings(&self.ollama_url, &self.embedding_model, question)
+        let query_embedding = llm::embeddings(&self.client, question)
             .await
             .context("Failed to generate embedding for question")?;
 
@@ -374,9 +365,8 @@ impl RagEngine {
 
         let match_count = matches.len();
         for mut chunk_match in matches {
-            match ollama::assess_chunk_relevance(
-                &self.ollama_url,
-                &self.text_model,
+            match llm::assess_chunk_relevance(
+                &self.client,
                 question,
                 &chunk_match.chunk.chunk_text,
             )
@@ -430,7 +420,7 @@ impl RagEngine {
     }
 
     async fn generate_answer(&self, question: &str, context_chunks: &[String]) -> Result<String> {
-        ollama::answer_with_context(&self.ollama_url, &self.text_model, question, context_chunks)
+        llm::answer_with_context(&self.client, question, context_chunks)
             .await
             .context("Failed to generate answer with context")
     }

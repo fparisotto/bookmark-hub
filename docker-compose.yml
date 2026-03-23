@@ -13,16 +13,18 @@ services:
       RUST_LOG: info,server=debug
       APP_BIND: "[::]:3000"
       APP_DATA_DIR: /data
-      HMAC_KEY: ${HMAC_KEY:?set HMAC_KEY before starting docker compose}
+      HMAC_KEY: test-hmac-key-for-local-development-only
       PG_HOST: postgres
       PG_PORT: 5432
       PG_USER: main
       PG_PASSWORD: main
       PG_DATABASE: main
       PG_MAX_CONNECTIONS: 5
+      LLM_PROVIDER: ollama
       OLLAMA_URL: http://ollama:11434
-      OLLAMA_TEXT_MODEL: qwen3.5:4b
-      OLLAMA_EMBEDDING_MODEL: qwen3-embedding:0.6b
+      LLM_TEXT_MODEL: qwen3.5:4b
+      LLM_EMBEDDING_MODEL: qwen3-embedding:0.6b
+      LLM_EMBEDDING_DIMENSION: "1024"
       CHROME_HOST: chrome
       CHROME_PORT: 3001
     volumes:

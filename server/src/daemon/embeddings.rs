@@ -1,19 +1,14 @@
 use anyhow::{Context, Result};
 use tracing::{debug, error, info, warn};
-use url::Url;
 
 use super::DAEMON_IDLE_SLEEP;
 use crate::db::chunks::{get_bookmarks_without_chunks, store_chunks_with_embeddings};
 use crate::db::PgPool;
-use crate::{ollama, tokenizer};
+use crate::llm::{self, LlmClient};
+use crate::tokenizer;
 
-// Process fewer items at once to avoid overwhelming Ollama
+// Process fewer items at once to avoid overwhelming the LLM provider
 const QUERY_LIMIT: usize = 5;
-
-// Default embedding model
-// qwen3-embedding has a 32K token context window; use larger chunks for better
-// context
-const EMBEDDING_MODEL: &str = "qwen3-embedding:0.6b";
 
 const EMBEDDING_WINDOW_SIZE: usize = 2000;
 const EMBEDDING_WINDOW_OVERLAP: usize = 200;
@@ -21,17 +16,19 @@ const EMBEDDING_WINDOW_OVERLAP: usize = 200;
 pub async fn run(
     pool: &PgPool,
     mut new_bookmark_rx: tokio::sync::watch::Receiver<()>,
-    ollama_url: &Url,
-    embedding_model: Option<&str>,
+    client: &LlmClient,
 ) -> Result<()> {
-    let model = embedding_model.unwrap_or(EMBEDDING_MODEL);
-    info!(model = %model, "Starting embeddings daemon");
+    info!(
+        model = %client.embedding_model,
+        ndims = %client.embedding_ndims,
+        "Starting embeddings daemon"
+    );
 
     let mut interval = tokio::time::interval(DAEMON_IDLE_SLEEP);
     loop {
         // Process all available tasks continuously
         loop {
-            match execute_step(pool, ollama_url, model).await {
+            match execute_step(pool, client).await {
                 Ok(has_tasks) => {
                     if !has_tasks {
                         // No more tasks, exit inner loop
@@ -60,7 +57,7 @@ pub async fn run(
     }
 }
 
-async fn execute_step(pool: &PgPool, ollama_url: &Url, model: &str) -> Result<bool> {
+async fn execute_step(pool: &PgPool, client: &LlmClient) -> Result<bool> {
     let bookmarks = get_bookmarks_without_chunks(pool, QUERY_LIMIT).await?;
 
     if bookmarks.is_empty() {
@@ -76,16 +73,7 @@ async fn execute_step(pool: &PgPool, ollama_url: &Url, model: &str) -> Result<bo
     let mut total_chunks_produced = 0usize;
 
     for (bookmark_id, user_id, text_content) in bookmarks {
-        match process_bookmark_chunks(
-            &bookmark_id,
-            user_id,
-            &text_content,
-            pool,
-            ollama_url,
-            model,
-        )
-        .await
-        {
+        match process_bookmark_chunks(&bookmark_id, user_id, &text_content, pool, client).await {
             Ok(chunk_count) => {
                 total_chunks_produced += chunk_count;
                 info!(
@@ -119,8 +107,7 @@ async fn process_bookmark_chunks(
     user_id: uuid::Uuid,
     text_content: &str,
     pool: &PgPool,
-    ollama_url: &Url,
-    model: &str,
+    client: &LlmClient,
 ) -> Result<usize> {
     // Skip bookmarks with very little content
     if text_content.len() < 200 {
@@ -154,7 +141,7 @@ async fn process_bookmark_chunks(
     // Generate embeddings for each chunk
     let mut embeddings = Vec::new();
     for (index, chunk) in chunks.iter().enumerate() {
-        match ollama::embeddings(ollama_url, model, chunk).await {
+        match llm::embeddings(client, chunk).await {
             Ok(embedding) => {
                 debug!(
                     bookmark_id,

@@ -6,25 +6,24 @@ services:
     depends_on:
       - postgres
       - chrome
-    network_mode: host
     environment:
       RUST_BACKTRACE: full
-      RUST_LOG: info
+      RUST_LOG: info,server=debug
       APP_BIND: "[::]:3000"
       APP_DATA_DIR: /data
       HMAC_KEY: test-hmac-key-for-local-development-only
-      PG_HOST: localhost
+      PG_HOST: postgres
       PG_PORT: 5432
       PG_USER: main
       PG_PASSWORD: main
       PG_DATABASE: main
       PG_MAX_CONNECTIONS: 5
-      LLM_PROVIDER: ollama
-      OLLAMA_URL: http://localhost:11434
-      LLM_TEXT_MODEL: qwen3.5:4b
-      LLM_EMBEDDING_MODEL: qwen3-embedding:0.6b
-      LLM_EMBEDDING_DIMENSION: "1024"
-      CHROME_HOST: localhost
+      LLM_PROVIDER: gemini
+      GEMINI_API_KEY: ${GEMINI_API_KEY:?set GEMINI_API_KEY}
+      LLM_TEXT_MODEL: gemini-2.5-flash
+      LLM_EMBEDDING_MODEL: gemini-embedding-001
+      LLM_EMBEDDING_DIMENSION: "768"
+      CHROME_HOST: chrome
       CHROME_PORT: 3001
     volumes:
       - bookmark-hub-data:/data
@@ -34,7 +33,7 @@ services:
       interval: 10s
       start_period: 10s
       retries: 5
-    restart: on-failure # needed during startup, until pg is available
+    restart: on-failure
   postgres:
     image: pgvector/pgvector:pg17
     ports:
