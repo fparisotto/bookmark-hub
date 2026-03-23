@@ -365,12 +365,8 @@ impl RagEngine {
 
         let match_count = matches.len();
         for mut chunk_match in matches {
-            match llm::assess_chunk_relevance(
-                &self.client,
-                question,
-                &chunk_match.chunk.chunk_text,
-            )
-            .await
+            match llm::assess_chunk_relevance(&self.client, question, &chunk_match.chunk.chunk_text)
+                .await
             {
                 Ok((is_relevant, explanation)) => {
                     if is_relevant {

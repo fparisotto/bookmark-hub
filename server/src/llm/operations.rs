@@ -109,8 +109,13 @@ pub async fn tags(client: &LlmClient, text: &str) -> Result<Vec<String>> {
     Here's the text: "#;
 
     let prompt = format!("{PROMPT_PREFIX}\n{text}");
-    let resp: TagsModelResponse =
-        extract!(&client.text_client, &client.text_model, SYSTEM_PROMPT, &prompt, TagsModelResponse)?;
+    let resp: TagsModelResponse = extract!(
+        &client.text_client,
+        &client.text_model,
+        SYSTEM_PROMPT,
+        &prompt,
+        TagsModelResponse
+    )?;
     Ok(resp.tags)
 }
 
@@ -123,8 +128,13 @@ pub async fn consolidate_tags(client: &LlmClient, tags: Vec<String>) -> Result<V
 
     let text = tags.join(", ");
     let prompt = format!("{PROMPT_PREFIX}\n{text}");
-    let resp: TagsModelResponse =
-        extract!(&client.text_client, &client.text_model, SYSTEM_PROMPT, &prompt, TagsModelResponse)?;
+    let resp: TagsModelResponse = extract!(
+        &client.text_client,
+        &client.text_model,
+        SYSTEM_PROMPT,
+        &prompt,
+        TagsModelResponse
+    )?;
     Ok(resp.tags)
 }
 
@@ -138,8 +148,13 @@ pub async fn summary(client: &LlmClient, text: &str) -> Result<String> {
     Here's the text: "#;
 
     let prompt = format!("{PROMPT_PREFIX}\n{text}");
-    let resp: SummaryModelResponse =
-        extract!(&client.text_client, &client.text_model, SYSTEM_PROMPT, &prompt, SummaryModelResponse)?;
+    let resp: SummaryModelResponse = extract!(
+        &client.text_client,
+        &client.text_model,
+        SYSTEM_PROMPT,
+        &prompt,
+        SummaryModelResponse
+    )?;
     Ok(resp.summary)
 }
 
@@ -153,8 +168,13 @@ pub async fn consolidate_summary(client: &LlmClient, summaries: &[String]) -> Re
 
     let text = summaries.join("\n");
     let prompt = format!("{PROMPT_PREFIX}\n{text}");
-    let resp: SummaryModelResponse =
-        extract!(&client.text_client, &client.text_model, SYSTEM_PROMPT, &prompt, SummaryModelResponse)?;
+    let resp: SummaryModelResponse = extract!(
+        &client.text_client,
+        &client.text_model,
+        SYSTEM_PROMPT,
+        &prompt,
+        SummaryModelResponse
+    )?;
     Ok(resp.summary)
 }
 
@@ -163,15 +183,18 @@ pub async fn embeddings(client: &LlmClient, text: &str) -> Result<Vec<f32>> {
 
     let embedding = match &client.embedding_client {
         EmbeddingClient::Ollama(c) => {
-            let model = c.embedding_model_with_ndims(&client.embedding_model, client.embedding_ndims);
+            let model =
+                c.embedding_model_with_ndims(&client.embedding_model, client.embedding_ndims);
             model.embed_text(text).await?
         }
         EmbeddingClient::OpenAI(c) => {
-            let model = c.embedding_model_with_ndims(&client.embedding_model, client.embedding_ndims);
+            let model =
+                c.embedding_model_with_ndims(&client.embedding_model, client.embedding_ndims);
             model.embed_text(text).await?
         }
         EmbeddingClient::Gemini(c) => {
-            let model = c.embedding_model_with_ndims(&client.embedding_model, client.embedding_ndims);
+            let model =
+                c.embedding_model_with_ndims(&client.embedding_model, client.embedding_ndims);
             model.embed_text(text).await?
         }
     };
@@ -179,17 +202,19 @@ pub async fn embeddings(client: &LlmClient, text: &str) -> Result<Vec<f32>> {
     Ok(embedding.vec.into_iter().map(|v| v as f32).collect())
 }
 
-pub async fn generate_similar_questions(
-    client: &LlmClient,
-    question: &str,
-) -> Result<Vec<String>> {
+pub async fn generate_similar_questions(client: &LlmClient, question: &str) -> Result<Vec<String>> {
     const PROMPT_PREFIX: &str = r#"Given the following question, generate 4 additional similar questions that would help find the same or related information. The questions should be variations with different phrasings, perspectives, or levels of specificity.
 
 Original question: "#;
 
     let prompt = format!("{PROMPT_PREFIX}\n{question}");
-    let resp: QuestionsResponse =
-        extract!(&client.text_client, &client.text_model, SYSTEM_PROMPT, &prompt, QuestionsResponse)?;
+    let resp: QuestionsResponse = extract!(
+        &client.text_client,
+        &client.text_model,
+        SYSTEM_PROMPT,
+        &prompt,
+        QuestionsResponse
+    )?;
     Ok(resp.questions)
 }
 
@@ -211,8 +236,13 @@ Evaluate if this chunk contains information that would help answer the question.
     let prompt = PROMPT_TEMPLATE
         .replace("{question}", question)
         .replace("{chunk}", chunk_text);
-    let resp: RelevanceResponse =
-        extract!(&client.text_client, &client.text_model, SYSTEM_PROMPT, &prompt, RelevanceResponse)?;
+    let resp: RelevanceResponse = extract!(
+        &client.text_client,
+        &client.text_model,
+        SYSTEM_PROMPT,
+        &prompt,
+        RelevanceResponse
+    )?;
     Ok((resp.relevant, resp.explanation))
 }
 
@@ -234,5 +264,10 @@ Provide a clear, accurate answer based on the context provided. If you cannot an
         context, question
     );
 
-    prompt!(&client.text_client, &client.text_model, SYSTEM_PROMPT, &user_prompt)
+    prompt!(
+        &client.text_client,
+        &client.text_model,
+        SYSTEM_PROMPT,
+        &user_prompt
+    )
 }

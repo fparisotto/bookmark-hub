@@ -3,7 +3,6 @@ mod provider;
 
 pub use operations::*;
 pub use provider::build_llm_client;
-
 use rig::providers::{anthropic, gemini, ollama, openai, openrouter};
 
 /// Text completion client supporting multiple LLM providers.

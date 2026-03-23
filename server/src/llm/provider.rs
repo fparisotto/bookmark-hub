@@ -7,7 +7,8 @@ use rig::providers::{anthropic, gemini, ollama, openai, openrouter};
 use super::{EmbeddingClient, LlmClient, TextClient};
 use crate::LlmParams;
 
-/// Strip trailing slash from URL to avoid double-slash in rig-core's URL construction.
+/// Strip trailing slash from URL to avoid double-slash in rig-core's URL
+/// construction.
 fn ollama_base_url(params: &LlmParams) -> String {
     params
         .ollama_url

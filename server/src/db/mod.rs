@@ -149,7 +149,8 @@ pub async fn run_migrations(pool: &PgPool) -> Result<()> {
 }
 
 /// Check the current embedding vector dimension and adjust if needed.
-/// If the dimension changed, truncates all chunks (they'll be re-embedded by the daemon).
+/// If the dimension changed, truncates all chunks (they'll be re-embedded by
+/// the daemon).
 pub async fn ensure_embedding_dimension(pool: &PgPool, target_dim: usize) -> anyhow::Result<()> {
     let client = pool.get().await?;
 
@@ -189,9 +190,7 @@ pub async fn ensure_embedding_dimension(pool: &PgPool, target_dim: usize) -> any
             );
         }
         _ => {
-            debug!(
-                "No embedding column dimension found (table may not exist yet), skipping check"
-            );
+            debug!("No embedding column dimension found (table may not exist yet), skipping check");
         }
     }
 
