@@ -2,8 +2,8 @@
 POST http://localhost:3000/api/v1/auth/sign-up
 {
   "username": "test",
-  "password": "1234",
-  "password_confirmation": "1234"
+  "password": "12345678",
+  "password_confirmation": "12345678"
 }
 HTTP/1.1 200
 [Captures]
@@ -13,7 +13,7 @@ user_id: jsonpath "$.id"
 POST http://localhost:3000/api/v1/auth/sign-in
 {
   "username": "test",
-  "password": "1234"
+  "password": "12345678"
 }
 HTTP/1.1 200
 [Captures]

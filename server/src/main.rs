@@ -9,6 +9,7 @@ use axum::{Extension, Router};
 use axum_otel_metrics::HttpMetricsLayerBuilder;
 use clap::Parser;
 use server::db::PgPool;
+use server::llm::LlmClient;
 use server::{daemon, db, endpoints, AppContext, Config};
 use tokio::signal::unix::SignalKind;
 use tower_http::cors::{Any, CorsLayer};
@@ -35,14 +36,15 @@ async fn main() -> anyhow::Result<()> {
 
     info!(?config, "Starting Bookmark Hub Server");
 
-    let ollama_enabled =
-        config.ollama.ollama_url.is_some() && config.ollama.ollama_text_model.is_some();
-    info!(ollama_enabled = %ollama_enabled, "Ollama AI features configuration");
-    if ollama_enabled {
+    let llm_client = server::llm::build_llm_client(&config.llm)?;
+    let llm_enabled = llm_client.is_some();
+    info!(llm_enabled = %llm_enabled, provider = %config.llm.llm_provider, "LLM AI features configuration");
+    if let Some(ref client) = llm_client {
         debug!(
-            ollama_url = ?config.ollama.ollama_url.as_ref().map(|u| u.to_string()),
-            ollama_model = ?config.ollama.ollama_text_model,
-            "Ollama URL configured"
+            text_model = %client.text_model,
+            embedding_model = %client.embedding_model,
+            embedding_ndims = %client.embedding_ndims,
+            "LLM client configured"
         );
     }
 
@@ -50,6 +52,12 @@ async fn main() -> anyhow::Result<()> {
     let pool = db::get_pool(config.pg.clone()).await?;
     info!("Running database migrations");
     db::run_migrations(&pool).await?;
+
+    // Ensure embedding dimension matches configuration
+    if let Some(ref client) = llm_client {
+        db::ensure_embedding_dimension(&pool, client.embedding_ndims).await?;
+    }
+
     info!("Database initialization complete");
 
     debug!("Creating inter-daemon communication channels");
@@ -64,23 +72,23 @@ async fn main() -> anyhow::Result<()> {
         new_bookmark_tx,
     ));
     let tags_daemon = tokio::spawn(setup_tags_daemon(
-        config.clone(),
+        llm_client.clone(),
         pool.clone(),
         new_bookmark_rx.clone(),
     ));
     let summary_daemon = tokio::spawn(setup_summary_daemon(
-        config.clone(),
+        llm_client.clone(),
         pool.clone(),
         new_bookmark_rx.clone(),
     ));
     let embeddings_daemon = tokio::spawn(setup_embeddings_daemon(
-        config.clone(),
+        llm_client.clone(),
         pool.clone(),
         new_bookmark_rx.clone(),
     ));
 
     info!("Setting up HTTP server");
-    let app_server = setup_app(&config, pool.clone(), new_task_tx);
+    let app_server = setup_app(&config, pool.clone(), new_task_tx, llm_client);
 
     info!("All services started successfully");
     tokio::select! {
@@ -173,6 +181,7 @@ async fn setup_app(
     config: &Config,
     pool: PgPool,
     tx: tokio::sync::watch::Sender<()>,
+    llm_client: Option<LlmClient>,
 ) -> anyhow::Result<()> {
     let app_state = AppContext {
         config: Arc::new(config.clone()),
@@ -182,6 +191,7 @@ async fn setup_app(
             Duration::from_secs(5 * 60),
         )),
         tx_new_task: tx,
+        llm_client,
     };
 
     let metrics = HttpMetricsLayerBuilder::new().build();
@@ -252,61 +262,54 @@ async fn setup_add_bookmark_daemon(
 }
 
 async fn setup_tags_daemon(
-    config: Config,
+    llm_client: Option<LlmClient>,
     pool: PgPool,
     new_bookmark_rx: tokio::sync::watch::Receiver<()>,
 ) -> anyhow::Result<()> {
-    match (config.ollama.ollama_url, config.ollama.ollama_text_model) {
-        (Some(url), Some(text_model)) => {
-            info!(model = %text_model, "Starting tags daemon");
-            daemon::tag::run(&pool, new_bookmark_rx, &url, &text_model).await
+    match llm_client {
+        Some(client) => {
+            info!(model = %client.text_model, "Starting tags daemon");
+            daemon::tag::run(&pool, new_bookmark_rx, &client).await
         }
-        (None, None) => {
-            warn!("No args for Ollama, disabling it");
+        None => {
+            warn!("No LLM configured, disabling tags daemon");
             pending::<anyhow::Result<()>>().await
-        }
-        args => {
-            bail!("Invalid args for Ollama, {args:?}")
         }
     }
 }
 
 async fn setup_summary_daemon(
-    config: Config,
+    llm_client: Option<LlmClient>,
     pool: PgPool,
     new_bookmark_rx: tokio::sync::watch::Receiver<()>,
 ) -> anyhow::Result<()> {
-    match (config.ollama.ollama_url, config.ollama.ollama_text_model) {
-        (Some(url), Some(text_model)) => {
-            info!(model = %text_model, "Starting summary daemon");
-            daemon::summary::run(&pool, new_bookmark_rx, &url, &text_model).await
+    match llm_client {
+        Some(client) => {
+            info!(model = %client.text_model, "Starting summary daemon");
+            daemon::summary::run(&pool, new_bookmark_rx, &client).await
         }
-        (None, None) => {
-            warn!("No args for Ollama, disabling it");
+        None => {
+            warn!("No LLM configured, disabling summary daemon");
             pending::<anyhow::Result<()>>().await
-        }
-        args => {
-            bail!("Invalid args for Ollama, {args:?}")
         }
     }
 }
 
 async fn setup_embeddings_daemon(
-    config: Config,
+    llm_client: Option<LlmClient>,
     pool: PgPool,
     new_bookmark_rx: tokio::sync::watch::Receiver<()>,
 ) -> anyhow::Result<()> {
-    match &config.ollama.ollama_url {
-        Some(url) => {
-            let embedding_model = config.ollama.ollama_embedding_model.as_deref();
+    match llm_client {
+        Some(client) => {
             info!(
-                embedding_model = ?embedding_model,
+                embedding_model = %client.embedding_model,
                 "Starting embeddings daemon"
             );
-            daemon::embeddings::run(&pool, new_bookmark_rx, url, embedding_model).await
+            daemon::embeddings::run(&pool, new_bookmark_rx, &client).await
         }
         None => {
-            warn!("No Ollama URL configured, disabling embeddings daemon");
+            warn!("No LLM configured, disabling embeddings daemon");
             pending::<anyhow::Result<()>>().await
         }
     }

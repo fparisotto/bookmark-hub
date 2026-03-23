@@ -28,35 +28,20 @@ async fn rag_query(
         "RAG query received"
     );
 
-    // Check if Ollama is configured
-    let (ollama_url, text_model) = match (
-        &app_context.config.ollama.ollama_url,
-        &app_context.config.ollama.ollama_text_model,
-    ) {
-        (Some(url), Some(model)) => (url.clone(), model.clone()),
-        _ => {
-            warn!("RAG query attempted but Ollama is not configured");
+    // Check if LLM is configured
+    let llm_client = match &app_context.llm_client {
+        Some(client) => client.clone(),
+        None => {
+            warn!("RAG query attempted but LLM is not configured");
             return Err(Error::bad_request([(
-                "ollama",
-                "AI features are not available. Ollama is not configured.",
+                "llm",
+                "AI features are not available. LLM provider is not configured.",
             )]));
         }
     };
 
-    let embedding_model = app_context
-        .config
-        .ollama
-        .ollama_embedding_model
-        .clone()
-        .unwrap_or_else(|| "qwen3-embedding:0.6b".to_string());
-
     // Create RAG engine
-    let rag_engine = RagEngine::new(
-        app_context.pool.clone(),
-        ollama_url,
-        text_model,
-        embedding_model,
-    );
+    let rag_engine = RagEngine::new(app_context.pool.clone(), llm_client);
 
     // Process the query
     match rag_engine.process_query(claims.user_id, &request).await {

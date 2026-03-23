@@ -28,7 +28,7 @@ lol_html = "2.2"
 metrics = "0.24"
 metrics-exporter-prometheus = "0.18"
 murmur3 = "0.5"
-ollama-rs = { version = "0.3.2", features = ["macros"] }
+rig-core = { version = "0.33", features = ["derive"] }
 opentelemetry_sdk = "0.31"
 postgres-from-row = "0.5.2"
 postgres-types = { version = "0.2.9", features = ["derive"] }

@@ -3,26 +3,25 @@ use std::collections::BTreeSet;
 use anyhow::{Context, Result};
 use shared::Bookmark;
 use tracing::{debug, error, info};
-use url::Url;
 
 use super::{DAEMON_IDLE_SLEEP, TOKENIZER_WINDOW_OVERLAP, TOKENIZER_WINDOW_SIZE};
 use crate::db::bookmark::{get_text_content, get_untagged_bookmarks, update_tags};
 use crate::db::PgPool;
-use crate::{ollama, tokenizer};
+use crate::llm::{self, LlmClient};
+use crate::tokenizer;
 
 const QUERY_LIMIT: usize = 10;
 
 pub async fn run(
     pool: &PgPool,
     mut new_bookmark_rx: tokio::sync::watch::Receiver<()>,
-    ollama_url: &Url,
-    ollama_text_model: &str,
+    client: &LlmClient,
 ) -> Result<()> {
     let mut interval = tokio::time::interval(DAEMON_IDLE_SLEEP);
     loop {
         // Process all available tasks continuously
         loop {
-            match execute_step(pool, ollama_url, ollama_text_model).await {
+            match execute_step(pool, client).await {
                 Ok(has_tasks) => {
                     if !has_tasks {
                         // No more tasks, exit inner loop
@@ -51,7 +50,7 @@ pub async fn run(
     }
 }
 
-async fn execute_step(pool: &PgPool, ollama_url: &Url, ollama_text_model: &str) -> Result<bool> {
+async fn execute_step(pool: &PgPool, client: &LlmClient) -> Result<bool> {
     let tasks: Vec<Bookmark> = get_untagged_bookmarks(pool, QUERY_LIMIT).await?;
     if tasks.is_empty() {
         info!("No new task");
@@ -60,7 +59,7 @@ async fn execute_step(pool: &PgPool, ollama_url: &Url, ollama_text_model: &str) 
     info!("New tasks found: {}", tasks.len());
     for task in tasks {
         info!(?task, "Executing task");
-        match handle_task(pool, ollama_url, ollama_text_model, &task).await {
+        match handle_task(pool, client, &task).await {
             Ok(_) => {
                 info!(id = task.bookmark_id, "Task executed")
             }
@@ -72,12 +71,7 @@ async fn execute_step(pool: &PgPool, ollama_url: &Url, ollama_text_model: &str) 
     Ok(true)
 }
 
-async fn handle_task(
-    pool: &PgPool,
-    ollama_url: &Url,
-    ollama_text_model: &str,
-    bookmark: &Bookmark,
-) -> Result<()> {
+async fn handle_task(pool: &PgPool, client: &LlmClient, bookmark: &Bookmark) -> Result<()> {
     info!(
         bookmark_id = %bookmark.bookmark_id,
         title = %bookmark.title,
@@ -139,16 +133,14 @@ async fn handle_task(
         );
 
         let start = std::time::Instant::now();
-        let response = ollama::tags(ollama_url, ollama_text_model, chunk)
-            .await
-            .with_context(|| {
-                format!(
-                    "Failed to get tags from ollama for chunk {}/{}, bookmark_id: {}",
-                    chunk_idx + 1,
-                    total_chunks,
-                    bookmark.bookmark_id
-                )
-            })?;
+        let response = llm::tags(client, chunk).await.with_context(|| {
+            format!(
+                "Failed to get tags for chunk {}/{}, bookmark_id: {}",
+                chunk_idx + 1,
+                total_chunks,
+                bookmark.bookmark_id
+            )
+        })?;
 
         let elapsed = start.elapsed();
         debug!(
@@ -157,7 +149,7 @@ async fn handle_task(
             tag_count = %response.len(),
             elapsed = ?elapsed,
             bookmark_id = %bookmark.bookmark_id,
-            "Ollama tags response for chunk"
+            "Tags response for chunk"
         );
 
         let tags_before = tags.len();
@@ -188,18 +180,15 @@ async fn handle_task(
     );
 
     let start = std::time::Instant::now();
-    let consolidated_tags = ollama::consolidate_tags(
-        ollama_url,
-        ollama_text_model,
-        tags.iter().map(|e| e.to_owned()).collect(),
-    )
-    .await
-    .with_context(|| {
-        format!(
-            "Failed to consolidate tags from ollama, bookmark_id: {}",
-            bookmark.bookmark_id
-        )
-    })?;
+    let consolidated_tags =
+        llm::consolidate_tags(client, tags.iter().map(|e| e.to_owned()).collect())
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to consolidate tags, bookmark_id: {}",
+                    bookmark.bookmark_id
+                )
+            })?;
 
     let elapsed = start.elapsed();
     info!(

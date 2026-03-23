@@ -148,6 +148,55 @@ pub async fn run_migrations(pool: &PgPool) -> Result<()> {
     Ok(())
 }
 
+/// Check the current embedding vector dimension and adjust if needed.
+/// If the dimension changed, truncates all chunks (they'll be re-embedded by
+/// the daemon).
+pub async fn ensure_embedding_dimension(pool: &PgPool, target_dim: usize) -> anyhow::Result<()> {
+    let client = pool.get().await?;
+
+    // Query current dimension from pg_attribute
+    let row = client
+        .query_opt(
+            "SELECT atttypmod FROM pg_attribute
+             WHERE attrelid = 'bookmark_chunk'::regclass
+             AND attname = 'embedding'",
+            &[],
+        )
+        .await?;
+
+    let current_dim: Option<i32> = row.map(|r| r.get(0));
+
+    match current_dim {
+        Some(dim) if dim > 0 && dim as usize == target_dim => {
+            info!(
+                dimension = target_dim,
+                "Embedding dimension matches, no change needed"
+            );
+        }
+        Some(dim) if dim > 0 => {
+            tracing::warn!(
+                current = dim,
+                target = target_dim,
+                "Embedding dimension changed, truncating chunks and altering column"
+            );
+            let stmt = format!(
+                "TRUNCATE bookmark_chunk;
+                 ALTER TABLE bookmark_chunk ALTER COLUMN embedding TYPE VECTOR({target_dim});"
+            );
+            client.batch_execute(&stmt).await?;
+            info!(
+                new_dimension = target_dim,
+                "Embedding dimension updated, all bookmarks will be re-embedded"
+            );
+        }
+        _ => {
+            debug!("No embedding column dimension found (table may not exist yet), skipping check");
+        }
+    }
+
+    Ok(())
+}
+
 pub async fn run_health_check(pool: &PgPool) -> Result<()> {
     debug!("Running database health check");
     let start = std::time::Instant::now();
