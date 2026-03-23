@@ -5,7 +5,7 @@ A self-hosted bookmark management application that helps you organize, search, a
 ## Features
 
 - **Offline-First**: Store and manage bookmarks entirely on your own infrastructure
-- **AI-Powered Organization**: Automatic tagging and summarization using Ollama integration
+- **AI-Powered Organization**: Automatic tagging and summarization with multi-provider LLM support (Ollama, OpenAI, Anthropic, Gemini, OpenRouter)
 - **RAG-Enhanced Search**: Intelligent search using Retrieval-Augmented Generation to find relevant bookmarks based on semantic similarity
 - **Full-Text Search**: Search through bookmark titles, URLs, content, and AI-generated summaries
 - **Tag Management**: Organize bookmarks with manual and AI-suggested tags
@@ -50,7 +50,7 @@ This configuration:
 - Uses `network_mode: host` for direct access to host services
 - Connects to Ollama running at `localhost:11434`
 - Uses `pgvector/pgvector:pg17` for vector embedding storage
-- Configures embedding model as `mxbai-embed-large` for RAG features
+- Uses default Ollama models for AI features
 
 ### Development Setup
 
@@ -61,7 +61,7 @@ For local development with hot reloading:
 - [Just](https://github.com/casey/just) task runner
 - [Trunk](https://trunkrs.dev/) for WebAssembly builds
 - PostgreSQL database
-- Optional: [Ollama](https://ollama.ai/) for AI features
+- Optional: [Ollama](https://ollama.ai/) for local AI features, or an API key for a cloud provider (OpenAI, Anthropic, Gemini, OpenRouter)
 
 #### Running Components
 
@@ -95,15 +95,80 @@ export PG_DATABASE=bookmark_hub
 export HMAC_KEY=your_secret_key
 export APP_DATA_DIR=/path/to/data
 
-# Optional: AI Features
-export OLLAMA_URL=http://localhost:11434
-export OLLAMA_TEXT_MODEL=qwen3:8b
-export OLLAMA_EMBEDDING_MODEL=mxbai-embed-large
-
 # Optional: Chrome Automation
 export CHROME_HOST=localhost
 export CHROME_PORT=3001
 ```
+
+#### LLM Provider Configuration
+
+AI features (tagging, summarization, embeddings, RAG) are disabled when `LLM_TEXT_MODEL` is not set. To enable them, configure a provider:
+
+**Ollama (local, default):**
+```bash
+export LLM_PROVIDER=ollama
+export OLLAMA_URL=http://localhost:11434
+export LLM_TEXT_MODEL=qwen3.5:4b
+export LLM_EMBEDDING_MODEL=qwen3-embedding:0.6b
+export LLM_EMBEDDING_DIMENSION=1024
+```
+
+**OpenAI:**
+```bash
+export LLM_PROVIDER=openai
+export OPENAI_API_KEY=sk-...
+export LLM_TEXT_MODEL=gpt-4o
+export LLM_EMBEDDING_MODEL=text-embedding-3-small
+export LLM_EMBEDDING_DIMENSION=1536
+```
+
+**Anthropic** (requires a separate embedding provider since Anthropic has no embedding API):
+```bash
+export LLM_PROVIDER=anthropic
+export ANTHROPIC_API_KEY=sk-ant-...
+export LLM_TEXT_MODEL=claude-sonnet-4-20250514
+export LLM_EMBEDDING_PROVIDER=openai
+export LLM_EMBEDDING_API_KEY=sk-...
+export LLM_EMBEDDING_MODEL=text-embedding-3-small
+export LLM_EMBEDDING_DIMENSION=1536
+```
+
+**Gemini:**
+```bash
+export LLM_PROVIDER=gemini
+export GEMINI_API_KEY=AIza...
+export LLM_TEXT_MODEL=gemini-2.5-flash
+export LLM_EMBEDDING_MODEL=gemini-embedding-001
+export LLM_EMBEDDING_DIMENSION=768
+```
+
+**OpenRouter:**
+```bash
+export LLM_PROVIDER=openrouter
+export OPENROUTER_API_KEY=sk-or-...
+export LLM_TEXT_MODEL=anthropic/claude-sonnet-4
+export LLM_EMBEDDING_PROVIDER=openai
+export LLM_EMBEDDING_API_KEY=sk-...
+export LLM_EMBEDDING_MODEL=text-embedding-3-small
+export LLM_EMBEDDING_DIMENSION=1536
+```
+
+You can mix providers — for example, use Anthropic for text and OpenAI for embeddings via `LLM_EMBEDDING_PROVIDER` and `LLM_EMBEDDING_API_KEY`.
+
+| Variable | Default | Description |
+|---|---|---|
+| `LLM_PROVIDER` | `ollama` | Text completion provider |
+| `LLM_TEXT_MODEL` | _(none, disables AI)_ | Model for text tasks |
+| `LLM_EMBEDDING_PROVIDER` | _(falls back to LLM_PROVIDER)_ | Embedding provider |
+| `LLM_EMBEDDING_MODEL` | _(falls back to LLM_TEXT_MODEL)_ | Model for embeddings |
+| `LLM_EMBEDDING_DIMENSION` | `1024` | Embedding vector dimension |
+| `LLM_EMBEDDING_API_KEY` | _(none)_ | API key for embedding provider if different |
+| `LLM_REQUEST_TIMEOUT_SECS` | `120` | HTTP request timeout for LLM calls |
+| `OLLAMA_URL` | `http://localhost:11434` | Ollama base URL |
+| `OPENAI_API_KEY` | _(none)_ | OpenAI API key |
+| `ANTHROPIC_API_KEY` | _(none)_ | Anthropic API key |
+| `GEMINI_API_KEY` | _(none)_ | Google Gemini API key |
+| `OPENROUTER_API_KEY` | _(none)_ | OpenRouter API key |
 
 ### CLI Usage
 
@@ -131,7 +196,7 @@ $ hurl --verbose --test test.hurl
 - **Server**: Axum-based REST API with background processing daemons
 - **Frontend**: Yew WebAssembly application for modern web experience  
 - **Database**: PostgreSQL for reliable data storage with vector embeddings
-- **AI Integration**: Ollama for content summarization, tag generation, and embedding creation
+- **AI Integration**: Multi-provider LLM support via [rig-core](https://github.com/0xPlaygrounds/rig) (Ollama, OpenAI, Anthropic, Gemini, OpenRouter)
 - **RAG System**: Vector similarity search using embeddings for intelligent bookmark discovery
 - **Content Processing**: dom_smoothie for web page content extraction
 - **Browser Automation**: Browserless Chrome for reliable web page rendering and content extraction
