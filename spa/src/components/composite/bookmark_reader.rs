@@ -25,6 +25,16 @@ pub fn bookmark_page(props: &Props) -> Html {
     let tags_as_string = state.clone().join(", ");
     let html_content = use_state(|| None);
     {
+        let state = state.clone();
+        let html_content = html_content.clone();
+        let bookmark_id = props.bookmark.bookmark_id.clone();
+        let bookmark_tags = props.bookmark.tags.clone().unwrap_or_default();
+        use_effect_with(bookmark_id, move |_| {
+            state.set(bookmark_tags.clone());
+            html_content.set(None);
+        });
+    }
+    {
         let html_contentt = html_content.clone();
         let token = token.clone();
         let bookmark_id = props.bookmark.bookmark_id.clone();

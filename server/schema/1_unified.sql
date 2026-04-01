@@ -22,19 +22,28 @@ CREATE TABLE "user" (
 CREATE UNIQUE INDEX user_username_unique ON "user" (LOWER(username));
 
 CREATE TABLE bookmark (
-    bookmark_id VARCHAR(512) UNIQUE NOT NULL,
+    bookmark_id VARCHAR(512) NOT NULL,
     user_id UUID NOT NULL,
     url TEXT NOT NULL,
+    canonical_url TEXT NOT NULL,
     domain text NOT NULL,
     title TEXT NOT NULL,
     text_content TEXT NOT NULL,
     tags TEXT[],
     summary TEXT,
+    summary_status task_status NOT NULL DEFAULT 'pending',
+    summary_attempts SMALLINT NOT NULL DEFAULT 0,
+    summary_next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    summary_fail_reason TEXT,
+    tag_status task_status NOT NULL DEFAULT 'pending',
+    tag_attempts SMALLINT NOT NULL DEFAULT 0,
+    tag_next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    tag_fail_reason TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (bookmark_id, user_id),
     CONSTRAINT fk_user FOREIGN KEY(user_id) REFERENCES "user"(user_id) ON DELETE CASCADE,
-    CONSTRAINT bookmark_url_user_unique UNIQUE (url, user_id)
+    CONSTRAINT bookmark_canonical_url_user_unique UNIQUE (user_id, canonical_url)
 );
 -- Add search index (done via trigger instead of generated column for compatibility)
 CREATE OR REPLACE FUNCTION update_bookmark_search_tokens()
@@ -103,11 +112,15 @@ CREATE INDEX idx_bookmark_user_updated_at ON bookmark (user_id, updated_at DESC)
 CREATE INDEX idx_bookmark_search_tokens ON bookmark USING GIN (search_tokens);
 CREATE INDEX idx_bookmark_tags ON bookmark USING GIN (tags);
 CREATE INDEX idx_bookmark_user_domain ON bookmark (user_id, domain);
+CREATE INDEX idx_bookmark_summary_pending ON bookmark (summary_next_attempt_at, created_at)
+    WHERE summary_status = 'pending';
+CREATE INDEX idx_bookmark_tag_pending ON bookmark (tag_next_attempt_at, created_at)
+    WHERE tag_status = 'pending';
 CREATE INDEX idx_task_user_id ON bookmark_task (user_id);
 CREATE INDEX idx_task_status ON bookmark_task (status);
 CREATE INDEX idx_task_next_delivery ON bookmark_task (next_delivery) WHERE status = 'pending';
 CREATE INDEX idx_bookmark_chunk_embedding ON bookmark_chunk 
-    USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+    USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
 CREATE INDEX idx_bookmark_chunk_bookmark ON bookmark_chunk (bookmark_id, user_id);
 CREATE INDEX idx_rag_session_user ON rag_session (user_id, created_at DESC);
 

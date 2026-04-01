@@ -1,11 +1,17 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Context, Result};
-use shared::Bookmark;
+use chrono::Utc;
 use tracing::{debug, error, info};
 
-use super::{DAEMON_IDLE_SLEEP, TOKENIZER_WINDOW_OVERLAP, TOKENIZER_WINDOW_SIZE};
-use crate::db::bookmark::{get_text_content, get_untagged_bookmarks, update_tags};
+use super::{
+    ai_generation_backoff, AI_GENERATION_MAX_RETRIES, DAEMON_IDLE_SLEEP, TOKENIZER_WINDOW_OVERLAP,
+    TOKENIZER_WINDOW_SIZE,
+};
+use crate::db::bookmark::{
+    get_bookmarks_pending_tag_generation, get_text_content, mark_tag_generation_failure,
+    update_tags, AiGenerationStatus, BookmarkGenerationCandidate,
+};
 use crate::db::PgPool;
 use crate::llm::{self, LlmClient};
 use crate::tokenizer;
@@ -51,27 +57,69 @@ pub async fn run(
 }
 
 async fn execute_step(pool: &PgPool, client: &LlmClient) -> Result<bool> {
-    let tasks: Vec<Bookmark> = get_untagged_bookmarks(pool, QUERY_LIMIT).await?;
+    let tasks: Vec<BookmarkGenerationCandidate> =
+        get_bookmarks_pending_tag_generation(pool, QUERY_LIMIT, Utc::now()).await?;
     if tasks.is_empty() {
         info!("No new task");
         return Ok(false);
     }
     info!("New tasks found: {}", tasks.len());
-    for task in tasks {
-        info!(?task, "Executing task");
-        match handle_task(pool, client, &task).await {
+    let mut any_progress = false;
+    for candidate in tasks {
+        let task = &candidate.bookmark;
+        info!(?task, attempts = candidate.attempts, "Executing task");
+        match handle_task(pool, client, task).await {
             Ok(_) => {
+                any_progress = true;
                 info!(id = task.bookmark_id, "Task executed")
             }
             Err(error) => {
-                error!(?task, ?error, "Task failed");
+                let attempts = candidate.attempts + 1;
+                let is_terminal = attempts >= AI_GENERATION_MAX_RETRIES;
+                let status = if is_terminal {
+                    AiGenerationStatus::Fail
+                } else {
+                    AiGenerationStatus::Pending
+                };
+                let next_attempt_at = if is_terminal {
+                    Utc::now()
+                } else {
+                    Utc::now() + ai_generation_backoff(attempts)
+                };
+                mark_tag_generation_failure(
+                    pool,
+                    task.user_id,
+                    &task.bookmark_id,
+                    status,
+                    attempts,
+                    next_attempt_at,
+                    &format!("{error:#}"),
+                )
+                .await?;
+                any_progress = true;
+                if is_terminal {
+                    error!(
+                        ?task,
+                        ?error,
+                        attempts,
+                        "Task failed permanently after max retries"
+                    );
+                } else {
+                    error!(
+                        ?task,
+                        ?error,
+                        attempts,
+                        next_attempt_at = %next_attempt_at,
+                        "Task failed, scheduled retry"
+                    );
+                }
             }
         }
     }
-    Ok(true)
+    Ok(any_progress)
 }
 
-async fn handle_task(pool: &PgPool, client: &LlmClient, bookmark: &Bookmark) -> Result<()> {
+async fn handle_task(pool: &PgPool, client: &LlmClient, bookmark: &shared::Bookmark) -> Result<()> {
     info!(
         bookmark_id = %bookmark.bookmark_id,
         title = %bookmark.title,

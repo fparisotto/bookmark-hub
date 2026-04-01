@@ -9,6 +9,7 @@ use url::Url;
 use self::db::PgPool;
 
 pub mod auth_rate_limit;
+pub mod bookmark_identity;
 pub mod chrome_client;
 pub mod daemon;
 pub mod db;

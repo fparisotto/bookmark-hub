@@ -2,9 +2,41 @@
 
 mod common;
 
+use chrono::{Duration, Utc};
 use common::test_db::{create_test_bookmark, create_test_user, TestDatabase};
-use server::db::bookmark;
+use server::db::bookmark::{self, AiGenerationStatus};
 use shared::TagOperation;
+
+async fn get_processing_state(
+    db: &TestDatabase,
+    bookmark_id: &str,
+) -> anyhow::Result<(
+    AiGenerationStatus,
+    i16,
+    Option<String>,
+    AiGenerationStatus,
+    i16,
+    Option<String>,
+)> {
+    let client = db.pool.get().await?;
+    let row = client
+        .query_one(
+            "SELECT summary_status, summary_attempts, summary_fail_reason, tag_status, tag_attempts, tag_fail_reason
+             FROM bookmark
+             WHERE bookmark_id = $1",
+            &[&bookmark_id],
+        )
+        .await?;
+
+    Ok((
+        row.get("summary_status"),
+        row.get("summary_attempts"),
+        row.get("summary_fail_reason"),
+        row.get("tag_status"),
+        row.get("tag_attempts"),
+        row.get("tag_fail_reason"),
+    ))
+}
 
 #[tokio::test]
 async fn test_bookmark_save_and_retrieve() -> anyhow::Result<()> {
@@ -34,8 +66,9 @@ async fn test_bookmark_save_and_retrieve() -> anyhow::Result<()> {
     assert_eq!(saved_bookmark.summary, None);
     assert!(saved_bookmark.created_at <= saved_bookmark.updated_at.unwrap());
 
-    // Test get_by_url_and_user_id
-    let retrieved = bookmark::get_by_url_and_user_id(&db.pool, &bookmark.url, user_id).await?;
+    // Test canonical URL lookup
+    let retrieved =
+        bookmark::get_by_canonical_url_and_user_id(&db.pool, &bookmark.url, user_id).await?;
     assert!(retrieved.is_some());
     let retrieved = retrieved.unwrap();
     assert_eq!(retrieved.bookmark_id, bookmark.bookmark_id);
@@ -155,14 +188,14 @@ async fn test_get_by_tag() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
-async fn test_get_by_url_and_user_id() -> anyhow::Result<()> {
+async fn test_get_by_canonical_url_and_user_id() -> anyhow::Result<()> {
     let db = TestDatabase::new().await?;
     let user1_id = create_test_user(&db).await?;
     let user2_id = create_test_user(&db).await?;
 
     let bookmark1 = create_test_bookmark(
         user1_id,
-        "https://example.com/shared",
+        "https://example.com/shared?a=1",
         "Shared URL",
         "example.com",
         None,
@@ -171,7 +204,7 @@ async fn test_get_by_url_and_user_id() -> anyhow::Result<()> {
 
     let bookmark2 = create_test_bookmark(
         user2_id,
-        "https://example.com/shared",
+        "https://example.com/shared?a=1",
         "Same URL Different User",
         "example.com",
         None,
@@ -179,21 +212,62 @@ async fn test_get_by_url_and_user_id() -> anyhow::Result<()> {
     bookmark::save(&db.pool, &bookmark2, "content2").await?;
 
     // Get bookmark for user1
-    let result1 =
-        bookmark::get_by_url_and_user_id(&db.pool, "https://example.com/shared", user1_id).await?;
+    let result1 = bookmark::get_by_canonical_url_and_user_id(
+        &db.pool,
+        "https://EXAMPLE.com:443/shared?a=1#top",
+        user1_id,
+    )
+    .await?;
     assert!(result1.is_some());
     assert_eq!(result1.unwrap().bookmark_id, bookmark1.bookmark_id);
 
     // Get bookmark for user2
-    let result2 =
-        bookmark::get_by_url_and_user_id(&db.pool, "https://example.com/shared", user2_id).await?;
+    let result2 = bookmark::get_by_canonical_url_and_user_id(
+        &db.pool,
+        "https://example.com/shared?a=1",
+        user2_id,
+    )
+    .await?;
     assert!(result2.is_some());
     assert_eq!(result2.unwrap().bookmark_id, bookmark2.bookmark_id);
 
     // Try to get non-existent URL
     let result3 =
-        bookmark::get_by_url_and_user_id(&db.pool, "https://nonexistent.com", user1_id).await?;
+        bookmark::get_by_canonical_url_and_user_id(&db.pool, "https://nonexistent.com", user1_id)
+            .await?;
     assert!(result3.is_none());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_same_bookmark_id_can_exist_for_different_users() -> anyhow::Result<()> {
+    let db = TestDatabase::new().await?;
+    let user1_id = create_test_user(&db).await?;
+    let user2_id = create_test_user(&db).await?;
+
+    let mut bookmark1 = create_test_bookmark(
+        user1_id,
+        "https://example.com/user-1",
+        "User1 Article",
+        "example.com",
+        None,
+    );
+    bookmark1.bookmark_id = "shared-bookmark-id".to_string();
+    let saved1 = bookmark::save(&db.pool, &bookmark1, "content1").await?;
+
+    let mut bookmark2 = create_test_bookmark(
+        user2_id,
+        "https://example.com/user-2",
+        "User2 Article",
+        "example.com",
+        None,
+    );
+    bookmark2.bookmark_id = "shared-bookmark-id".to_string();
+    let saved2 = bookmark::save(&db.pool, &bookmark2, "content2").await?;
+
+    assert_eq!(saved1.bookmark_id, saved2.bookmark_id);
+    assert_ne!(saved1.user_id, saved2.user_id);
 
     Ok(())
 }
@@ -261,6 +335,12 @@ async fn test_update_tags_set() -> anyhow::Result<()> {
         retrieved.unwrap().tags,
         Some(vec!["rust".to_string(), "programming".to_string()])
     );
+
+    let (_, _, _, tag_status, tag_attempts, tag_fail_reason) =
+        get_processing_state(&db, &saved.bookmark_id).await?;
+    assert_eq!(tag_status, AiGenerationStatus::Done);
+    assert_eq!(tag_attempts, 0);
+    assert!(tag_fail_reason.is_none());
 
     Ok(())
 }
@@ -335,6 +415,12 @@ async fn test_update_summary() -> anyhow::Result<()> {
     let retrieved = bookmark::get_with_user_data(&db.pool, user_id, &saved.bookmark_id).await?;
     assert!(retrieved.is_some());
     assert_eq!(retrieved.unwrap().summary, Some(summary_text.to_string()));
+
+    let (summary_status, summary_attempts, summary_fail_reason, _, _, _) =
+        get_processing_state(&db, &saved.bookmark_id).await?;
+    assert_eq!(summary_status, AiGenerationStatus::Done);
+    assert_eq!(summary_attempts, 0);
+    assert!(summary_fail_reason.is_none());
 
     Ok(())
 }
@@ -432,7 +518,7 @@ async fn test_get_tag_count_by_user() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
-async fn test_get_untagged_bookmarks() -> anyhow::Result<()> {
+async fn test_get_bookmarks_pending_tag_generation_respects_backoff() -> anyhow::Result<()> {
     let db = TestDatabase::new().await?;
     let user_id = create_test_user(&db).await?;
 
@@ -454,7 +540,7 @@ async fn test_get_untagged_bookmarks() -> anyhow::Result<()> {
         "example.com",
         Some(vec![]),
     );
-    bookmark::save(&db.pool, &empty_tags_bookmark, "content2").await?;
+    let empty_saved = bookmark::save(&db.pool, &empty_tags_bookmark, "content2").await?;
 
     // Create bookmark with null tags
     let null_tags_bookmark = create_test_bookmark(
@@ -464,27 +550,74 @@ async fn test_get_untagged_bookmarks() -> anyhow::Result<()> {
         "example.com",
         None,
     );
-    bookmark::save(&db.pool, &null_tags_bookmark, "content3").await?;
+    let null_saved = bookmark::save(&db.pool, &null_tags_bookmark, "content3").await?;
 
-    // Get untagged bookmarks (should include empty and null tags)
-    let untagged = bookmark::get_untagged_bookmarks(&db.pool, 10).await?;
+    let now = Utc::now() + Duration::seconds(1);
+    let pending = bookmark::get_bookmarks_pending_tag_generation(&db.pool, 10, now).await?;
+    assert_eq!(pending.len(), 2);
+    let urls: Vec<&str> = pending
+        .iter()
+        .map(|candidate| candidate.bookmark.url.as_str())
+        .collect();
+    assert!(urls.contains(&"https://example.com/empty"));
+    assert!(urls.contains(&"https://example.com/null"));
+    assert!(!urls.contains(&"https://example.com/tagged"));
 
-    assert_eq!(untagged.len(), 2); // empty_tags and null_tags bookmarks
+    let retry_at = now + Duration::minutes(5);
+    bookmark::mark_tag_generation_failure(
+        &db.pool,
+        user_id,
+        &empty_saved.bookmark_id,
+        AiGenerationStatus::Pending,
+        1,
+        retry_at,
+        "temporary failure",
+    )
+    .await?;
 
-    let urls: Vec<&String> = untagged.iter().map(|b| &b.url).collect();
-    assert!(urls.contains(&&"https://example.com/empty".to_string()));
-    assert!(urls.contains(&&"https://example.com/null".to_string()));
-    assert!(!urls.contains(&&"https://example.com/tagged".to_string()));
+    let pending_before_retry =
+        bookmark::get_bookmarks_pending_tag_generation(&db.pool, 10, now).await?;
+    assert_eq!(pending_before_retry.len(), 1);
+    assert_eq!(
+        pending_before_retry[0].bookmark.bookmark_id,
+        null_saved.bookmark_id
+    );
 
-    // Test limit
-    let limited = bookmark::get_untagged_bookmarks(&db.pool, 1).await?;
-    assert_eq!(limited.len(), 1);
+    let pending_after_retry = bookmark::get_bookmarks_pending_tag_generation(
+        &db.pool,
+        10,
+        retry_at + Duration::seconds(1),
+    )
+    .await?;
+    let retried = pending_after_retry
+        .iter()
+        .find(|candidate| candidate.bookmark.bookmark_id == empty_saved.bookmark_id)
+        .expect("bookmark should be retried after backoff");
+    assert_eq!(retried.attempts, 1);
+
+    bookmark::mark_tag_generation_failure(
+        &db.pool,
+        user_id,
+        &empty_saved.bookmark_id,
+        AiGenerationStatus::Fail,
+        5,
+        retry_at,
+        "permanent failure",
+    )
+    .await?;
+
+    let after_terminal_failure =
+        bookmark::get_bookmarks_pending_tag_generation(&db.pool, 10, retry_at + Duration::hours(1))
+            .await?;
+    assert!(after_terminal_failure
+        .iter()
+        .all(|candidate| candidate.bookmark.bookmark_id != empty_saved.bookmark_id));
 
     Ok(())
 }
 
 #[tokio::test]
-async fn test_get_bookmarks_without_summary() -> anyhow::Result<()> {
+async fn test_get_bookmarks_pending_summary_generation_respects_backoff() -> anyhow::Result<()> {
     let db = TestDatabase::new().await?;
     let user_id = create_test_user(&db).await?;
 
@@ -513,18 +646,57 @@ async fn test_get_bookmarks_without_summary() -> anyhow::Result<()> {
         "example.com",
         None,
     );
-    bookmark::save(&db.pool, &without_summary, "content2").await?;
+    let pending_summary = bookmark::save(&db.pool, &without_summary, "content2").await?;
 
-    // Get bookmarks without summary
-    let no_summaries = bookmark::get_bookmarks_without_summary(&db.pool, 10).await?;
+    let now = Utc::now() + Duration::seconds(1);
+    let pending = bookmark::get_bookmarks_pending_summary_generation_at(&db.pool, 10, now).await?;
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].bookmark.bookmark_id, pending_summary.bookmark_id);
+    assert_eq!(pending[0].attempts, 0);
 
-    assert_eq!(no_summaries.len(), 1);
-    assert_eq!(no_summaries[0].url, "https://example.com/no-summary");
-    assert!(no_summaries[0].summary.is_none());
+    let retry_at = now + Duration::minutes(15);
+    bookmark::mark_summary_generation_failure(
+        &db.pool,
+        user_id,
+        &pending_summary.bookmark_id,
+        AiGenerationStatus::Pending,
+        1,
+        retry_at,
+        "temporary failure",
+    )
+    .await?;
 
-    // Test limit
-    let limited = bookmark::get_bookmarks_without_summary(&db.pool, 0).await?;
-    assert_eq!(limited.len(), 0);
+    let before_retry =
+        bookmark::get_bookmarks_pending_summary_generation_at(&db.pool, 10, now).await?;
+    assert!(before_retry.is_empty());
+
+    let after_retry = bookmark::get_bookmarks_pending_summary_generation_at(
+        &db.pool,
+        10,
+        retry_at + Duration::seconds(1),
+    )
+    .await?;
+    assert_eq!(after_retry.len(), 1);
+    assert_eq!(after_retry[0].attempts, 1);
+
+    bookmark::mark_summary_generation_failure(
+        &db.pool,
+        user_id,
+        &pending_summary.bookmark_id,
+        AiGenerationStatus::Fail,
+        5,
+        retry_at,
+        "permanent failure",
+    )
+    .await?;
+
+    let after_terminal_failure = bookmark::get_bookmarks_pending_summary_generation_at(
+        &db.pool,
+        10,
+        retry_at + Duration::hours(1),
+    )
+    .await?;
+    assert!(after_terminal_failure.is_empty());
 
     Ok(())
 }
@@ -610,7 +782,7 @@ async fn test_duplicate_url_per_user() -> anyhow::Result<()> {
     let user1_id = create_test_user(&db).await?;
     let user2_id = create_test_user(&db).await?;
 
-    let url = "https://example.com/duplicate";
+    let url = "https://example.com/duplicate?a=1";
 
     // User1 saves URL - should succeed
     let bookmark1 = create_test_bookmark(user1_id, url, "User1 Title", "example.com", None);
@@ -622,12 +794,63 @@ async fn test_duplicate_url_per_user() -> anyhow::Result<()> {
     let saved2 = bookmark::save(&db.pool, &bookmark2, "content2").await?;
     assert_eq!(saved2.url, url);
 
-    // User1 tries to save same URL again - should fail due to unique constraint
-    let bookmark1_duplicate =
-        create_test_bookmark(user1_id, url, "Duplicate Title", "example.com", None);
+    // User1 tries to save the same canonical URL again with a variant raw URL.
+    let bookmark1_duplicate = create_test_bookmark(
+        user1_id,
+        "https://EXAMPLE.com:443/duplicate?a=1#top",
+        "Duplicate Title",
+        "example.com",
+        None,
+    );
     let result = bookmark::save(&db.pool, &bookmark1_duplicate, "duplicate content").await;
 
     assert!(result.is_err());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_canonical_url_distinguishes_query_scheme_and_port() -> anyhow::Result<()> {
+    let db = TestDatabase::new().await?;
+    let user_id = create_test_user(&db).await?;
+
+    let bookmarks = vec![
+        create_test_bookmark(
+            user_id,
+            "https://example.com/article?a=1",
+            "Query One",
+            "example.com",
+            None,
+        ),
+        create_test_bookmark(
+            user_id,
+            "https://example.com/article?a=2",
+            "Query Two",
+            "example.com",
+            None,
+        ),
+        create_test_bookmark(
+            user_id,
+            "http://example.com/article?a=1",
+            "Http Variant",
+            "example.com",
+            None,
+        ),
+        create_test_bookmark(
+            user_id,
+            "https://example.com:8443/article?a=1",
+            "Port Variant",
+            "example.com",
+            None,
+        ),
+    ];
+
+    for bookmark_to_save in bookmarks {
+        bookmark::save(&db.pool, &bookmark_to_save, "content").await?;
+    }
+
+    let user_bookmarks = bookmark::get_by_user(&db.pool, user_id).await?;
+    assert_eq!(user_bookmarks.len(), 4);
 
     Ok(())
 }

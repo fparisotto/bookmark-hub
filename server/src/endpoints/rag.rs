@@ -1,7 +1,9 @@
 use axum::routing::post;
 use axum::{Extension, Json, Router};
 use axum_macros::debug_handler;
-use shared::{RagHistoryRequest, RagHistoryResponse, RagQueryRequest, RagQueryResponse};
+use shared::{
+    HybridSearchConfig, RagHistoryRequest, RagHistoryResponse, RagQueryRequest, RagQueryResponse,
+};
 use tracing::{info, warn};
 
 use super::Claim;
@@ -16,12 +18,50 @@ pub fn routes() -> Router {
         .route("/history", post(rag_history))
 }
 
+fn validate_weighted_hybrid_config(config: &HybridSearchConfig) -> Result<()> {
+    let vector_weight = config.vector_weight.unwrap_or(0.5);
+    let fts_weight = config.fts_weight.unwrap_or(0.5);
+    let mut errors = Vec::new();
+
+    for (field, value) in [("vector_weight", vector_weight), ("fts_weight", fts_weight)] {
+        if !value.is_finite() {
+            errors.push((field, "must be a finite number"));
+        } else if value < 0.0 {
+            errors.push((field, "must be greater than or equal to 0"));
+        }
+    }
+
+    if errors.is_empty() && vector_weight + fts_weight <= 0.0 {
+        errors.push((
+            "hybrid_search",
+            "vector_weight and fts_weight cannot both be zero",
+        ));
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(Error::unprocessable_entity(errors))
+    }
+}
+
+fn validate_rag_query_request(request: &RagQueryRequest) -> Result<()> {
+    let Some(config) = request.hybrid_search.as_ref() else {
+        return Ok(());
+    };
+    if !config.enabled || config.use_rrf.unwrap_or(true) {
+        return Ok(());
+    }
+    validate_weighted_hybrid_config(config)
+}
+
 #[debug_handler]
 async fn rag_query(
     claims: Claim,
     Extension(app_context): Extension<AppContext>,
     Json(request): Json<RagQueryRequest>,
 ) -> Result<Json<RagQueryResponse>> {
+    validate_rag_query_request(&request)?;
     info!(
         user_id = %claims.user_id,
         question = %request.question,
@@ -66,6 +106,70 @@ async fn rag_query(
                 error
             )))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use shared::{HybridSearchConfig, RagQueryRequest};
+
+    use super::validate_rag_query_request;
+
+    #[test]
+    fn weighted_hybrid_rejects_zero_total_weight() {
+        let request = RagQueryRequest {
+            question: "test".into(),
+            max_chunks: None,
+            similarity_threshold: None,
+            max_context_tokens: None,
+            hybrid_search: Some(HybridSearchConfig {
+                enabled: true,
+                use_rrf: Some(false),
+                rrf_k: None,
+                vector_weight: Some(0.0),
+                fts_weight: Some(0.0),
+            }),
+        };
+
+        assert!(validate_rag_query_request(&request).is_err());
+    }
+
+    #[test]
+    fn weighted_hybrid_rejects_negative_weight() {
+        let request = RagQueryRequest {
+            question: "test".into(),
+            max_chunks: None,
+            similarity_threshold: None,
+            max_context_tokens: None,
+            hybrid_search: Some(HybridSearchConfig {
+                enabled: true,
+                use_rrf: Some(false),
+                rrf_k: None,
+                vector_weight: Some(-0.1),
+                fts_weight: Some(1.0),
+            }),
+        };
+
+        assert!(validate_rag_query_request(&request).is_err());
+    }
+
+    #[test]
+    fn weighted_hybrid_accepts_positive_weights() {
+        let request = RagQueryRequest {
+            question: "test".into(),
+            max_chunks: None,
+            similarity_threshold: None,
+            max_context_tokens: None,
+            hybrid_search: Some(HybridSearchConfig {
+                enabled: true,
+                use_rrf: Some(false),
+                rrf_k: None,
+                vector_weight: Some(0.2),
+                fts_weight: Some(0.8),
+            }),
+        };
+
+        assert!(validate_rag_query_request(&request).is_ok());
     }
 }
 
