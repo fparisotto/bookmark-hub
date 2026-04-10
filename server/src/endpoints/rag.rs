@@ -109,6 +109,40 @@ async fn rag_query(
     }
 }
 
+#[debug_handler]
+async fn rag_history(
+    claims: Claim,
+    Extension(app_context): Extension<AppContext>,
+    Json(request): Json<RagHistoryRequest>,
+) -> Result<Json<RagHistoryResponse>> {
+    info!(
+        user_id = %claims.user_id,
+        limit = request.limit,
+        offset = request.offset,
+        "RAG history request received"
+    );
+
+    match get_rag_history(&app_context.pool, claims.user_id, &request).await {
+        Ok(response) => {
+            info!(
+                user_id = %claims.user_id,
+                sessions_returned = response.sessions.len(),
+                total_count = response.total_count,
+                "RAG history retrieved successfully"
+            );
+            Ok(Json(response))
+        }
+        Err(error) => {
+            warn!(
+                user_id = %claims.user_id,
+                ?error,
+                "RAG history retrieval failed"
+            );
+            Err(error)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use shared::{HybridSearchConfig, RagQueryRequest};
@@ -170,39 +204,5 @@ mod tests {
         };
 
         assert!(validate_rag_query_request(&request).is_ok());
-    }
-}
-
-#[debug_handler]
-async fn rag_history(
-    claims: Claim,
-    Extension(app_context): Extension<AppContext>,
-    Json(request): Json<RagHistoryRequest>,
-) -> Result<Json<RagHistoryResponse>> {
-    info!(
-        user_id = %claims.user_id,
-        limit = request.limit,
-        offset = request.offset,
-        "RAG history request received"
-    );
-
-    match get_rag_history(&app_context.pool, claims.user_id, &request).await {
-        Ok(response) => {
-            info!(
-                user_id = %claims.user_id,
-                sessions_returned = response.sessions.len(),
-                total_count = response.total_count,
-                "RAG history retrieved successfully"
-            );
-            Ok(Json(response))
-        }
-        Err(error) => {
-            warn!(
-                user_id = %claims.user_id,
-                ?error,
-                "RAG history retrieval failed"
-            );
-            Err(error)
-        }
     }
 }
