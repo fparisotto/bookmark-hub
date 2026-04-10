@@ -8,6 +8,10 @@ use uuid::Uuid;
 use super::PgPool;
 use crate::db::{Error, Result, ResultExt};
 
+pub(crate) fn normalize_username(username: &str) -> String {
+    username.trim().to_lowercase()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct User {
     pub user_id: Uuid,
@@ -31,7 +35,8 @@ pub async fn get_by_id(pool: &PgPool, id: &Uuid) -> Result<Option<User>> {
 }
 
 pub async fn get_by_username(pool: &PgPool, username: String) -> Result<Option<User>> {
-    const SQL: &str = r#"SELECT * from "user" WHERE username = $1;"#;
+    const SQL: &str = r#"SELECT * from "user" WHERE LOWER(username) = $1;"#;
+    let username = normalize_username(&username);
     debug!(username = %username, "Fetching user by username");
     let client = pool.get().await?;
     let result = client.query_opt(SQL, &[&username]).await?;
@@ -44,6 +49,7 @@ pub async fn get_by_username(pool: &PgPool, username: String) -> Result<Option<U
 }
 
 pub async fn create(pool: &PgPool, username: String, password_hash: String) -> Result<User> {
+    let username = normalize_username(&username);
     const SQL: &str =
         r#"INSERT INTO "user" (username, password_hash) VALUES ($1, $2) RETURNING "user".*;"#;
     let client = pool.get().await?;

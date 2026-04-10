@@ -133,7 +133,8 @@ async fn sign_up(
     debug!(username = %payload.username, "Signup validation passed");
 
     let hashed_password = super::hash_password(payload.password).await?;
-    let try_user = user::create(&app_context.pool, payload.username.clone(), hashed_password).await;
+    let normalized_username = user::normalize_username(&payload.username);
+    let try_user = user::create(&app_context.pool, normalized_username, hashed_password).await;
     match try_user {
         Ok(user) => {
             app_context.auth_rate_limiter.reset(&rate_limit_key);
@@ -183,7 +184,8 @@ async fn sign_in(
     validate_signin(&payload)?;
     debug!(username = %payload.username, "Signin validation passed");
 
-    let maybe_user = user::get_by_username(&app_context.pool, payload.username.clone()).await?;
+    let normalized_username = user::normalize_username(&payload.username);
+    let maybe_user = user::get_by_username(&app_context.pool, normalized_username).await?;
     if let Some(user) = maybe_user {
         debug!(username = %user.username, "User found for signin");
         super::verify_password(payload.password, user.password_hash.clone()).await?;
@@ -228,9 +230,10 @@ async fn sign_in(
 #[cfg(test)]
 mod tests {
     use secrecy::SecretString;
-    use shared::SignUpRequest;
+    use shared::{SignInRequest, SignUpRequest};
 
-    use super::validate_signup;
+    use super::{validate_signin, validate_signup};
+    use crate::db::user;
 
     #[test]
     fn signup_requires_minimum_password_length() {
@@ -241,5 +244,21 @@ mod tests {
         });
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn signup_normalizes_username_before_persistence() {
+        assert_eq!(user::normalize_username(" Alice "), "alice");
+        assert_eq!(user::normalize_username("Bob.Smith"), "bob.smith");
+    }
+
+    #[test]
+    fn signin_allows_trimmed_username_input() {
+        let result = validate_signin(&SignInRequest {
+            username: " alice ".into(),
+            password: SecretString::from("password123"),
+        });
+
+        assert!(result.is_ok());
     }
 }

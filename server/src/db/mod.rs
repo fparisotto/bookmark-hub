@@ -38,7 +38,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;";
 
-const SCHEMAS: [(i32, &str); 5] = [
+const SCHEMAS: [(i32, &str); 7] = [
     (
         1,
         include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/schema/1_unified.sql")),
@@ -69,6 +69,20 @@ const SCHEMAS: [(i32, &str); 5] = [
         include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/schema/5_reembed_qwen3.sql"
+        )),
+    ),
+    (
+        6,
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/schema/6_ai_generation_retry_state.sql"
+        )),
+    ),
+    (
+        7,
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/schema/7_bookmark_identity.sql"
         )),
     ),
 ];
@@ -145,6 +159,11 @@ pub async fn run_migrations(pool: &PgPool) -> Result<()> {
     } else {
         info!("Database schema is up to date");
     }
+
+    if get_schema_version(pool).await? >= 7 {
+        bookmark::ensure_canonical_url_support(pool).await?;
+    }
+
     Ok(())
 }
 
