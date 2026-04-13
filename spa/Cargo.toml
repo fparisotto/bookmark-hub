@@ -22,6 +22,6 @@ url = { workspace = true }
 uuid = { workspace = true }
 wasm-bindgen = "0.2.100"
 wasm-logger = "0.2"
-web-sys = { version = "0.3", features = ["HtmlInputElement", "Window"] }
+web-sys = { version = "0.3", features = ["EventTarget", "History", "HtmlInputElement", "Location", "MouseEvent", "PopStateEvent", "UrlSearchParams", "Window"] }
 yew = { version = "0.22", features = ["csr"] }
 yew-hooks = "0.4"

@@ -6,6 +6,7 @@ use yew::prelude::*;
 use crate::api::bookmarks_api;
 use crate::components::atoms::input_text::{InputText, InputType};
 use crate::components::atoms::safe_html::ArticleHtml;
+use crate::router::{self, AppRoute};
 use crate::user_session::UserSession;
 
 #[derive(Debug, Clone, PartialEq, Properties)]
@@ -23,7 +24,7 @@ pub fn bookmark_page(props: &Props) -> Html {
     let user_id = props.user_session.user_id;
     let state = use_state_eq(|| props.bookmark.tags.clone().unwrap_or_default());
     let tags_as_string = state.clone().join(", ");
-    let html_content = use_state(|| None);
+    let html_content = use_state_eq(|| None);
     {
         let state = state.clone();
         let html_content = html_content.clone();
@@ -65,8 +66,10 @@ pub fn bookmark_page(props: &Props) -> Html {
     let on_goback = {
         let callback = props.on_goback.clone();
         Callback::from(move |event: MouseEvent| {
-            event.prevent_default();
-            callback.emit(());
+            if router::should_handle_spa_navigation(&event) {
+                event.prevent_default();
+                callback.emit(());
+            }
         })
     };
 
@@ -111,10 +114,12 @@ pub fn bookmark_page(props: &Props) -> Html {
         html! { <></> }
     };
 
+    let back_href = router::href(&AppRoute::Search(Default::default()));
+
     html! {
       <div class="container mt-5">
           <div class="mb-3">
-              <a href="#" class="btn btn-secondary" onclick={on_goback.clone()}>{"< Back to Home"}</a>
+              <a href={back_href.clone()} class="btn btn-secondary" onclick={on_goback.clone()}>{"< Back to Home"}</a>
           </div>
           <div class="card">
               <div class="card-body">
@@ -160,7 +165,7 @@ pub fn bookmark_page(props: &Props) -> Html {
             {article}
           </div>
           <div class="mb-3">
-              <a href="#" class="btn btn-secondary" onclick={on_goback.clone()}>{"< Back to Home"}</a>
+              <a href={back_href} class="btn btn-secondary" onclick={on_goback.clone()}>{"< Back to Home"}</a>
           </div>
       </div>
     }
