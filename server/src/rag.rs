@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use anyhow::{Context, Result};
 use shared::{RagChunkMatch, RagQueryRequest, RagQueryResponse};
 use tracing::{debug, info, warn};
@@ -60,7 +62,11 @@ impl RagEngine {
         }
 
         // Remove duplicates and sort by similarity
-        all_matches.sort_by(|a, b| b.similarity_score.partial_cmp(&a.similarity_score).unwrap());
+        all_matches.sort_by(|a, b| {
+            b.similarity_score
+                .partial_cmp(&a.similarity_score)
+                .unwrap_or(Ordering::Equal)
+        });
         all_matches.dedup_by(|a, b| a.chunk.chunk_id == b.chunk.chunk_id);
 
         // Limit the number of chunks
@@ -403,8 +409,11 @@ impl RagEngine {
         }
 
         // Sort by similarity score (highest first)
-        relevant_matches
-            .sort_by(|a, b| b.similarity_score.partial_cmp(&a.similarity_score).unwrap());
+        relevant_matches.sort_by(|a, b| {
+            b.similarity_score
+                .partial_cmp(&a.similarity_score)
+                .unwrap_or(Ordering::Equal)
+        });
 
         info!(
             total_matches = match_count,

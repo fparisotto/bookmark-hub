@@ -1,10 +1,6 @@
-use std::io::Cursor;
 use std::time::Duration;
 
-use anyhow::{anyhow, bail, Result};
-use murmur3::murmur3_x64_128;
-use tracing::info;
-use url::Url;
+use chrono::Duration as ChronoDuration;
 
 pub mod add_bookmark;
 pub mod embeddings;
@@ -14,36 +10,31 @@ pub mod tag;
 pub const DAEMON_IDLE_SLEEP: Duration = Duration::from_secs(300);
 pub const TOKENIZER_WINDOW_SIZE: usize = 1_000;
 pub const TOKENIZER_WINDOW_OVERLAP: usize = 100;
+pub const AI_GENERATION_MAX_RETRIES: i16 = 5;
 
-fn clean_url(url: Url) -> Result<Url> {
-    if let Some(host) = url.host_str() {
-        let path = &url.path();
-        let clean_url = format!("{scheme}://{host}{path}", scheme = &url.scheme());
-        info!("Clean url={clean_url}");
-        let clean = Url::parse(&clean_url)?;
-        return Ok(clean);
+pub fn ai_generation_backoff(attempt: i16) -> ChronoDuration {
+    match attempt {
+        1 => ChronoDuration::minutes(5),
+        2 => ChronoDuration::minutes(15),
+        3 => ChronoDuration::hours(1),
+        4 => ChronoDuration::hours(6),
+        _ => ChronoDuration::hours(24),
     }
-    bail!("Invalid url={url}")
 }
 
-fn make_bookmark_id(url: &Url) -> Result<String> {
-    if let Some(host) = url.host_str() {
-        let path = url.path();
-        let source = format!("{host}.{path}");
-        let mut source = Cursor::new(source.as_str());
-        let hash = murmur3_x64_128(&mut source, 0)?;
-        let id = base64_url::encode(&hash.to_be_bytes());
-        info!(id = &id, url = format!("{url}"), "Making url id");
-        return Ok(id);
-    }
-    bail!("Invalid url={url}")
-}
+#[cfg(test)]
+mod tests {
+    use chrono::Duration as ChronoDuration;
 
-fn domain_from_url(url: &Url) -> Result<String> {
-    let domain_or_host = url
-        .domain()
-        .or_else(|| url.host_str())
-        .map(|s| s.to_string())
-        .ok_or_else(|| anyhow!(format!("Domain not found for url={url}")))?;
-    Ok(domain_or_host)
+    use super::ai_generation_backoff;
+
+    #[test]
+    fn ai_generation_backoff_uses_step_schedule() {
+        assert_eq!(ai_generation_backoff(1), ChronoDuration::minutes(5));
+        assert_eq!(ai_generation_backoff(2), ChronoDuration::minutes(15));
+        assert_eq!(ai_generation_backoff(3), ChronoDuration::hours(1));
+        assert_eq!(ai_generation_backoff(4), ChronoDuration::hours(6));
+        assert_eq!(ai_generation_backoff(5), ChronoDuration::hours(24));
+        assert_eq!(ai_generation_backoff(8), ChronoDuration::hours(24));
+    }
 }

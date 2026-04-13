@@ -554,6 +554,7 @@ pub fn home(props: &Props) -> Html {
         Page::Read { bookmark } => {
             html! {
                 <BookmarkReader
+                    key={bookmark.bookmark_id.clone()}
                     user_session={props.user_session.to_owned()}
                     bookmark={bookmark.to_owned()}
                     on_goback={on_goback}

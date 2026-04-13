@@ -15,6 +15,7 @@ use url::Url;
 use uuid::Uuid;
 
 use super::DAEMON_IDLE_SLEEP;
+use crate::bookmark_identity::{canonicalize_url, domain_from_url, make_bookmark_id};
 use crate::chrome_client::{ChromeClient, ChromeConnection};
 use crate::db::{self, PgPool};
 use crate::{readability, Config};
@@ -170,7 +171,7 @@ async fn handle_task(
     config: &Config,
     task: &BookmarkTask,
 ) -> Result<()> {
-    if db::bookmark::get_by_url_and_user_id(pool, &task.url, task.user_id)
+    if db::bookmark::get_by_canonical_url_and_user_id(pool, &task.url, task.user_id)
         .await?
         .is_some()
     {
@@ -195,14 +196,23 @@ async fn handle_task(
         updated_at: None,
     };
 
-    let bookmark_saved = db::bookmark::save(pool, &bookmark, &output.text_content)
-        .await
-        .with_context(|| {
-            format!(
-                "save_bookmark_into_database: bookmark_id={}",
-                &bookmark.bookmark_id
-            )
-        })?;
+    let bookmark_saved = match db::bookmark::save(pool, &bookmark, &output.text_content).await {
+        Ok(bookmark_saved) => bookmark_saved,
+        Err(crate::error::Error::ConstraintViolation { constraint, .. })
+            if constraint == "duplicate_bookmark" =>
+        {
+            info!(url = %bookmark.url, user_id = %bookmark.user_id, "Duplicated bookmark");
+            return Ok(());
+        }
+        Err(error) => {
+            return Err(error).with_context(|| {
+                format!(
+                    "save_bookmark_into_database: bookmark_id={}",
+                    &bookmark.bookmark_id
+                )
+            });
+        }
+    };
 
     save_static_content(
         config,
@@ -314,11 +324,10 @@ async fn process_url(
         user_id = %user_id,
         "Starting URL processing"
     );
-    let original_url = Url::parse(original_url_str)?;
-    let original_url = super::clean_url(original_url)?;
-    debug!(url = %original_url, "URL cleaned");
+    let original_url = canonicalize_url(Url::parse(original_url_str)?)?;
+    debug!(url = %original_url, "URL canonicalized");
 
-    let bookmark_id: String = super::make_bookmark_id(&original_url)?;
+    let bookmark_id: String = make_bookmark_id(&original_url)?;
     debug!(bookmark_id = %bookmark_id, "Generated bookmark_id");
 
     debug!(url = %original_url, "Fetching HTML content using Chrome");
@@ -378,7 +387,7 @@ async fn process_url(
     Ok(ProcessorOutput {
         bookmark_id,
         url: original_url.to_string(),
-        domain: super::domain_from_url(&original_url)?,
+        domain: domain_from_url(&original_url)?,
         title: readability_response.title,
         text_content: readability_response.text_content,
         images,
@@ -476,7 +485,7 @@ fn find_images(base_url: &Url, content: &str) -> Result<Vec<ImageFound>> {
         };
         match parsed_img_src {
             Ok(parsed) => {
-                let image_id: String = super::make_bookmark_id(&parsed)?;
+                let image_id: String = make_bookmark_id(&parsed)?;
                 info!("Image found, original_url={parsed}");
                 images_found.push(ImageFound {
                     id: image_id,

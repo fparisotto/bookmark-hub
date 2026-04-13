@@ -78,7 +78,7 @@ async fn test_case_insensitive_username_uniqueness() -> anyhow::Result<()> {
     let password_hash1 = "hash1".to_string();
 
     let first_user = user::create(&db.pool, username1.clone(), password_hash1).await?;
-    assert_eq!(first_user.username, username1);
+    assert_eq!(first_user.username, "testuser");
 
     // Try to create user with same username but different case - should fail
     let username2 = "testuser".to_string(); // lowercase version
@@ -93,6 +93,26 @@ async fn test_case_insensitive_username_uniqueness() -> anyhow::Result<()> {
     let username3 = "TESTUSER".to_string();
     let result2 = user::create(&db.pool, username3, "hash3".to_string()).await;
     assert!(result2.is_err());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_get_by_username_is_case_insensitive_and_trimmed() -> anyhow::Result<()> {
+    let db = TestDatabase::new().await?;
+
+    let created_user =
+        user::create(&db.pool, "MixedCaseUser".to_string(), "hash1".to_string()).await?;
+    assert_eq!(created_user.username, "mixedcaseuser");
+
+    let retrieved_upper = user::get_by_username(&db.pool, "MIXEDCASEUSER".to_string()).await?;
+    assert!(retrieved_upper.is_some());
+    assert_eq!(retrieved_upper.unwrap().user_id, created_user.user_id);
+
+    let retrieved_trimmed =
+        user::get_by_username(&db.pool, "  mixedcaseuser  ".to_string()).await?;
+    assert!(retrieved_trimmed.is_some());
+    assert_eq!(retrieved_trimmed.unwrap().user_id, created_user.user_id);
 
     Ok(())
 }
