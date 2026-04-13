@@ -2,15 +2,19 @@ use shared::SearchResultItem;
 use yew::prelude::*;
 
 use crate::components::atoms::safe_html::BlockquoteHtml;
+use crate::router::{self, AppRoute};
 
 #[derive(Debug, Clone, PartialEq, Properties)]
 pub struct Props {
     pub results: Vec<SearchResultItem>,
-    pub on_item_selected: Callback<SearchResultItem>,
+    pub on_item_selected: Callback<String>,
 }
 
-fn article(callback: Callback<SearchResultItem>, item: SearchResultItem) -> Html {
-    let item_for_event = item.clone();
+fn article(callback: Callback<String>, item: SearchResultItem) -> Html {
+    let bookmark_id = item.bookmark.bookmark_id.clone();
+    let href = router::href(&AppRoute::Bookmark {
+        bookmark_id: bookmark_id.clone(),
+    });
     let tags = item
         .bookmark
         .tags
@@ -23,8 +27,11 @@ fn article(callback: Callback<SearchResultItem>, item: SearchResultItem) -> Html
         Some(html) => html! { <BlockquoteHtml html={html} /> },
         None => html! { <></>},
     };
-    let on_click = Callback::from(move |_| {
-        callback.emit(item_for_event.clone());
+    let on_click = Callback::from(move |event: MouseEvent| {
+        if router::should_handle_spa_navigation(&event) {
+            event.prevent_default();
+            callback.emit(bookmark_id.clone());
+        }
     });
     let summary = if let Some(summary) = &item.bookmark.summary {
         html! {
@@ -42,7 +49,7 @@ fn article(callback: Callback<SearchResultItem>, item: SearchResultItem) -> Html
                 <div>{tags}</div>
                 <small class="text-muted">{"Created at:"} {item.bookmark.created_at}</small>
                 <small><em>{summary}</em></small>
-                <a onclick={on_click} class="btn btn-link mt-2 d-block">{"Read more..."}</a>
+                <a href={href} onclick={on_click} class="btn btn-link mt-2 d-block">{"Read more..."}</a>
             </div>
         </div>
     }

@@ -1,7 +1,9 @@
 use shared::{
-    Bookmark, BookmarkTaskSearchRequest, BookmarkTaskSearchResponse, SearchRequest,
-    SearchResultItem, TagCount, TagFilter,
+    Bookmark, BookmarkTaskSearchRequest, BookmarkTaskSearchResponse, SearchRequest, TagCount,
+    TagFilter,
 };
+use wasm_bindgen::closure::Closure;
+use wasm_bindgen::JsCast;
 use yew::platform::spawn_local;
 use yew::prelude::*;
 
@@ -15,12 +17,13 @@ use crate::components::composite::search_bar::{SearchBar, SearchInputSubmit};
 use crate::components::composite::tags_filter::{TagCheckedEvent, TagsFilter};
 use crate::components::composite::tasks_filter::TasksFilter;
 use crate::components::composite::tasks_table::TasksTable;
+use crate::router::{self, AppRoute, HistoryEntryState, RouteKind, SearchRouteState};
 use crate::user_session::UserSession;
 
 #[derive(Clone, PartialEq, Default, Debug)]
 pub struct HomeState {
     pub user_session: UserSession,
-    pub items: Vec<SearchResultItem>,
+    pub items: Vec<shared::SearchResultItem>,
     pub tags: Vec<TagCount>,
     pub tags_filter: Vec<String>,
     pub search_input: String,
@@ -28,22 +31,36 @@ pub struct HomeState {
     pub new_bookmark_tags: Vec<String>,
     pub bookmark_tasks_response: Option<BookmarkTaskSearchResponse>,
     pub bookmark_tasks_request: BookmarkTaskSearchRequest,
-    pub page: Page,
     pub current_search_page: usize,
     pub page_size: usize,
     pub total_results: u64,
 }
 
 #[derive(Clone, PartialEq, Default, Debug)]
-pub enum Page {
+pub enum BookmarkDetailState {
     #[default]
-    Search,
-    Read {
-        bookmark: Bookmark,
+    None,
+    Loading {
+        bookmark_id: String,
     },
-    Tasks,
-    RAG,
-    RagHistory,
+    Ready(Bookmark),
+    NotFound {
+        bookmark_id: String,
+    },
+    Error {
+        bookmark_id: String,
+        message: String,
+    },
+}
+
+impl HomeState {
+    fn current_search_route(&self) -> AppRoute {
+        AppRoute::Search(SearchRouteState::new(
+            self.search_input.clone(),
+            self.tags_filter.clone(),
+            self.current_search_page,
+        ))
+    }
 }
 
 impl From<HomeState> for SearchRequest {
@@ -82,44 +99,145 @@ pub struct Props {
 pub fn home(props: &Props) -> Html {
     let token = props.user_session.token.clone();
 
-    let state_handle = use_state(|| HomeState {
+    let state_handle = use_state_eq(|| HomeState {
         page_size: 20,
         current_search_page: 1,
         ..Default::default()
     });
+    let bookmark_detail_handle = use_state_eq(BookmarkDetailState::default);
+    let route_handle = use_state_eq(|| router::sync_current_route(HistoryEntryState::Direct));
+
+    {
+        let route_handle = route_handle.clone();
+        use_effect_with((), move |_| {
+            let current_route = router::sync_current_route(HistoryEntryState::Direct);
+            route_handle.set(current_route);
+
+            let window = web_sys::window().expect("window should be available");
+            let listener_route_handle = route_handle.clone();
+            let callback =
+                Closure::<dyn FnMut(web_sys::PopStateEvent)>::wrap(Box::new(move |_| {
+                    let current_route = router::sync_current_route(HistoryEntryState::Direct);
+                    listener_route_handle.set(current_route);
+                }));
+
+            let _ = window
+                .add_event_listener_with_callback("popstate", callback.as_ref().unchecked_ref());
+
+            move || {
+                let _ = window.remove_event_listener_with_callback(
+                    "popstate",
+                    callback.as_ref().unchecked_ref(),
+                );
+            }
+        });
+    }
 
     {
         let state_handle = state_handle.clone();
+        let bookmark_detail_handle = bookmark_detail_handle.clone();
+        let route_handle = route_handle.clone();
         let token = token.clone();
-        use_effect_with((), move |_| {
-            let state_handle = state_handle.clone();
-            let token = token.clone();
-            spawn_local(async move {
-                let state = (*state_handle).clone();
-                let search_request: SearchRequest = state.into();
-                match search_api::search(&token, search_request).await {
-                    Ok(result) => {
-                        log::info!("Initial search loaded, items count={}", result.items.len());
-                        let mut state = (*state_handle).clone();
-                        state.items = result.items;
-                        state.tags = result.tags;
-                        state.total_results = result.total;
-                        state_handle.set(state);
+        use_effect_with((*route_handle).clone(), move |route| match route.clone() {
+            AppRoute::Search(search_route) => {
+                bookmark_detail_handle.set(BookmarkDetailState::None);
+
+                let mut state = (*state_handle).clone();
+                state.search_input = search_route.query.clone();
+                state.tags_filter = search_route.tags.clone();
+                state.current_search_page = search_route.page;
+                state_handle.set(state.clone());
+
+                let state_handle = state_handle.clone();
+                let route_handle = route_handle.clone();
+                let token = token.clone();
+                spawn_local(async move {
+                    match search_api::search(&token, state.clone().into()).await {
+                        Ok(result) => {
+                            if *route_handle != AppRoute::Search(search_route.clone()) {
+                                return;
+                            }
+
+                            let mut new_state = (*state_handle).clone();
+                            new_state.items = result.items;
+                            new_state.tags = result.tags;
+                            new_state.total_results = result.total;
+                            state_handle.set(new_state);
+                        }
+                        Err(error) => {
+                            log::warn!("Failed to load search route, error: {error}");
+                        }
                     }
-                    Err(error) => {
-                        log::warn!("Failed to load initial bookmarks, error: {error}");
+                });
+            }
+            AppRoute::Bookmark { bookmark_id } => {
+                bookmark_detail_handle.set(BookmarkDetailState::Loading {
+                    bookmark_id: bookmark_id.clone(),
+                });
+
+                let bookmark_detail_handle = bookmark_detail_handle.clone();
+                let route_handle = route_handle.clone();
+                let token = token.clone();
+                spawn_local(async move {
+                    match bookmarks_api::get_by_id(&token, &bookmark_id).await {
+                        Ok(Some(bookmark)) => {
+                            if *route_handle
+                                != (AppRoute::Bookmark {
+                                    bookmark_id: bookmark_id.clone(),
+                                })
+                            {
+                                return;
+                            }
+                            bookmark_detail_handle.set(BookmarkDetailState::Ready(bookmark));
+                        }
+                        Ok(None) => {
+                            if *route_handle
+                                == (AppRoute::Bookmark {
+                                    bookmark_id: bookmark_id.clone(),
+                                })
+                            {
+                                bookmark_detail_handle
+                                    .set(BookmarkDetailState::NotFound { bookmark_id });
+                            }
+                        }
+                        Err(error) => {
+                            log::error!(
+                                "Failed to fetch bookmark for route, bookmark_id={}, error={error}",
+                                &bookmark_id
+                            );
+                            if *route_handle
+                                == (AppRoute::Bookmark {
+                                    bookmark_id: bookmark_id.clone(),
+                                })
+                            {
+                                bookmark_detail_handle.set(BookmarkDetailState::Error {
+                                    bookmark_id,
+                                    message: "Failed to load bookmark.".to_string(),
+                                });
+                            }
+                        }
                     }
-                }
-            });
+                });
+            }
+            _ => {
+                bookmark_detail_handle.set(BookmarkDetailState::None);
+            }
         });
     }
+
+    let navigate_with_push = {
+        let route_handle = route_handle.clone();
+        Callback::from(move |route: AppRoute| match router::push(&route) {
+            Ok(_) => route_handle.set(route),
+            Err(error) => log::error!("Failed to push route to browser history: {error:?}"),
+        })
+    };
 
     let on_new_bookmark = {
         let token = token.clone();
         Callback::from(move |event: AddBookmarkData| {
             let token = token.clone();
             spawn_local(async move {
-                // FIXME: notify user
                 match bookmarks_api::add_bookmark(&token, event.into()).await {
                     Ok(result) => log::info!(
                         "New bookmark added, response={}",
@@ -133,144 +251,98 @@ pub fn home(props: &Props) -> Html {
 
     let on_search_submit = {
         let state_handle = state_handle.clone();
-        let token = token.clone();
+        let navigate_with_push = navigate_with_push.clone();
         Callback::from(move |event: SearchInputSubmit| {
-            let state_handle = state_handle.clone();
-            let token = token.clone();
-            spawn_local(async move {
-                let mut state = (*state_handle).clone();
-                state.search_input = event.input.clone();
-                state.current_search_page = 1; // Reset to first page on new search
-                match search_api::search(&token, state.clone().into()).await {
-                    Ok(result) => {
-                        log::info!("result={result:?}");
-                        state.items = result.items;
-                        state.tags = result.tags;
-                        state.total_results = result.total;
-                        state_handle.set(state);
-                    }
-                    Err(error) => {
-                        // FIXME: notify user
-                        log::warn!("Fail to search bookmarks, error: {error}");
-                    }
-                }
-            })
+            let route = AppRoute::Search(SearchRouteState::new(
+                event.input,
+                state_handle.tags_filter.clone(),
+                1,
+            ));
+            navigate_with_push.emit(route);
         })
     };
 
     let on_tag_checked = {
         let state_handle = state_handle.clone();
-        let token = token.clone();
+        let navigate_with_push = navigate_with_push.clone();
         Callback::from(move |event: TagCheckedEvent| {
-            let state_handle = state_handle.clone();
-            let token = token.clone();
-            let mut state = (*state_handle).clone();
+            let mut tags = state_handle.tags_filter.clone();
             match event {
                 TagCheckedEvent::Checked(tag) => {
-                    if !state.tags_filter.contains(&tag.tag) {
-                        state.tags_filter.push(tag.tag);
-                        state.current_search_page = 1;
+                    if !tags.contains(&tag.tag) {
+                        tags.push(tag.tag);
                     }
                 }
                 TagCheckedEvent::Unchecked(tag) => {
-                    if let Some(index_of) = state.tags_filter.iter().position(|e| e == &tag.tag) {
-                        state.tags_filter.remove(index_of);
-                        state.current_search_page = 1;
+                    if let Some(index_of) = tags.iter().position(|candidate| candidate == &tag.tag)
+                    {
+                        tags.remove(index_of);
                     }
                 }
             }
-            let updated_state = state.clone();
-            state_handle.set(state);
-            spawn_local(async move {
-                match search_api::search(&token, updated_state.clone().into()).await {
-                    Ok(result) => {
-                        let mut new_state = updated_state;
-                        new_state.items = result.items;
-                        new_state.tags = result.tags;
-                        new_state.total_results = result.total;
-                        state_handle.set(new_state);
-                    }
-                    Err(error) => {
-                        log::warn!("Fail to search bookmarks with new filter, error: {error}");
-                    }
-                }
-            });
+
+            let route = AppRoute::Search(SearchRouteState::new(
+                state_handle.search_input.clone(),
+                tags,
+                1,
+            ));
+            navigate_with_push.emit(route);
         })
     };
 
     let on_clear_filters = {
-        let state_handle = state_handle.clone();
-        let token = token.clone();
+        let navigate_with_push = navigate_with_push.clone();
         Callback::from(move |_: ()| {
-            let state_handle = state_handle.clone();
-            let token = token.clone();
-            spawn_local(async move {
-                let mut state = (*state_handle).clone();
-                state.tags_filter.clear();
-                state.search_input.clear();
-                state.current_search_page = 1;
-                match search_api::search(&token, state.clone().into()).await {
-                    Ok(result) => {
-                        state.items = result.items;
-                        state.tags = result.tags;
-                        state.total_results = result.total;
-                        state_handle.set(state);
-                    }
-                    Err(error) => {
-                        log::warn!("Fail to execute default search on clear, error: {error}");
-                    }
-                }
-            });
+            navigate_with_push.emit(AppRoute::Search(SearchRouteState::default()));
         })
     };
 
     let on_item_selected = {
-        let state_handle = state_handle.clone();
-        let token = token.clone();
-        Callback::from(move |event: SearchResultItem| {
-            let state_handle = state_handle.clone();
-            let token = token.clone();
-            spawn_local(async move {
-                match bookmarks_api::get_by_id(&token, &event.bookmark.bookmark_id).await {
-                    Ok(Some(bookmark)) => {
-                        let mut state = (*state_handle).clone();
-                        state.page = Page::Read { bookmark };
-                        state_handle.set(state);
-                    }
-                    Ok(None) => {
-                        log::warn!("Weird, bookmark not found in backend, item={event:?}");
-                    }
-                    Err(error) => {
-                        log::error!("Fail to fetch bookmark, item={event:?}, error={error}");
-                    }
-                }
-            });
+        let navigate_with_push = navigate_with_push.clone();
+        Callback::from(move |bookmark_id: String| {
+            navigate_with_push.emit(AppRoute::Bookmark { bookmark_id });
         })
     };
 
     let on_goback = {
+        let route_handle = route_handle.clone();
         let state_handle = state_handle.clone();
         Callback::from(move |_| {
-            let mut state = (*state_handle).clone();
-            state.page = Page::Search;
-            state_handle.set(state);
+            if router::current_entry_was_pushed() {
+                if let Err(error) = router::back() {
+                    log::error!("Failed to navigate browser history back: {error:?}");
+                    let fallback = state_handle.current_search_route();
+                    if let Err(replace_error) = router::replace_as_direct(&fallback) {
+                        log::error!(
+                            "Failed to replace route after back fallback: {replace_error:?}"
+                        );
+                    } else {
+                        route_handle.set(fallback);
+                    }
+                }
+            } else {
+                let fallback = state_handle.current_search_route();
+                if let Err(error) = router::replace_as_direct(&fallback) {
+                    log::error!("Failed to replace direct bookmark route: {error:?}");
+                } else {
+                    route_handle.set(fallback);
+                }
+            }
         })
     };
 
     let on_new_tags = {
-        let state_handle = state_handle.clone();
+        let bookmark_detail_handle = bookmark_detail_handle.clone();
         let token = token.clone();
         Callback::from(move |event: Vec<String>| {
             let token = token.clone();
-            let state_handle = state_handle.clone();
-            let page = state_handle.page.clone();
-            if let Page::Read { bookmark } = page {
+            let bookmark_detail_handle = bookmark_detail_handle.clone();
+            let detail_state = (*bookmark_detail_handle).clone();
+            if let BookmarkDetailState::Ready(bookmark) = detail_state {
                 spawn_local(async move {
                     match bookmarks_api::set_tags(&token, &bookmark.bookmark_id, event).await {
                         Ok(bookmark) => {
-                            let mut state = (*state_handle).clone();
-                            state.page = Page::Read { bookmark };
-                            state_handle.set(state);
+                            bookmark_detail_handle.set(BookmarkDetailState::Ready(bookmark));
                         }
                         Err(error) => {
                             log::error!(
@@ -281,44 +353,51 @@ pub fn home(props: &Props) -> Html {
                     }
                 });
             } else {
-                let mut state = (*state_handle).clone();
-                state.page = Page::Search;
-                state_handle.set(state);
-                log::warn!(
-                    "Invalid state, setting bookmark tags but no bookmark is selected, abort"
-                );
+                log::warn!("Invalid state, setting tags without an active bookmark detail");
             }
         })
     };
 
     let on_delete = {
+        let bookmark_detail_handle = bookmark_detail_handle.clone();
+        let route_handle = route_handle.clone();
         let state_handle = state_handle.clone();
         let token = token.clone();
         Callback::from(move |_: ()| {
             let token = token.clone();
+            let bookmark_detail_handle = bookmark_detail_handle.clone();
+            let route_handle = route_handle.clone();
             let state_handle = state_handle.clone();
-            let page = state_handle.page.clone();
-            if let Page::Read { bookmark } = page {
+            let detail_state = (*bookmark_detail_handle).clone();
+            if let BookmarkDetailState::Ready(bookmark) = detail_state {
                 spawn_local(async move {
                     match bookmarks_api::delete_bookmark(&token, &bookmark.bookmark_id).await {
-                        Ok(_) => {
+                        Ok(true) => {
                             log::info!("Bookmark deleted, id={}", &bookmark.bookmark_id);
-                            let mut state = (*state_handle).clone();
-                            state.page = Page::Search;
-                            match search_api::search(&token, state.clone().into()).await {
-                                Ok(result) => {
-                                    state.items = result.items;
-                                    state.tags = result.tags;
-                                    state.total_results = result.total;
-                                    state_handle.set(state);
-                                }
-                                Err(error) => {
-                                    log::warn!(
-                                        "Failed to refresh search after delete, error: {error}"
+                            if router::current_entry_was_pushed() {
+                                if let Err(error) = router::back() {
+                                    log::error!(
+                                        "Failed to go back after delete, bookmark_id={}, error={error:?}",
+                                        &bookmark.bookmark_id
                                     );
-                                    state_handle.set(state);
+                                }
+                            } else {
+                                let fallback = state_handle.current_search_route();
+                                if let Err(error) = router::replace_as_direct(&fallback) {
+                                    log::error!(
+                                        "Failed to replace route after delete, bookmark_id={}, error={error:?}",
+                                        &bookmark.bookmark_id
+                                    );
+                                } else {
+                                    route_handle.set(fallback);
                                 }
                             }
+                        }
+                        Ok(false) => {
+                            log::warn!(
+                                "Bookmark already missing during delete, id={}",
+                                &bookmark.bookmark_id
+                            );
                         }
                         Err(error) => {
                             log::error!(
@@ -334,72 +413,52 @@ pub fn home(props: &Props) -> Html {
 
     let on_page_change = {
         let state_handle = state_handle.clone();
-        Callback::from(move |event: Page| {
-            let mut state = (*state_handle).clone();
-            state.page = event;
-            state_handle.set(state);
+        let navigate_with_push = navigate_with_push.clone();
+        Callback::from(move |event: RouteKind| {
+            let route = match event {
+                RouteKind::Search => state_handle.current_search_route(),
+                RouteKind::Tasks => AppRoute::Tasks,
+                RouteKind::RAG => AppRoute::RAG,
+                RouteKind::RagHistory => AppRoute::RagHistory,
+                RouteKind::Bookmark => return,
+            };
+            navigate_with_push.emit(route);
         })
     };
 
-    // Pagination callbacks for search page
     let on_search_previous_page = {
         let state_handle = state_handle.clone();
-        let token = token.clone();
+        let navigate_with_push = navigate_with_push.clone();
         Callback::from(move |_| {
-            let state_handle = state_handle.clone();
-            let token = token.clone();
             let current_page = state_handle.current_search_page;
             if current_page > 1 {
-                spawn_local(async move {
-                    let mut state = (*state_handle).clone();
-                    state.current_search_page = current_page - 1;
-                    match search_api::search(&token, state.clone().into()).await {
-                        Ok(result) => {
-                            state.items = result.items;
-                            state.tags = result.tags;
-                            state.total_results = result.total;
-                            state_handle.set(state);
-                        }
-                        Err(error) => {
-                            log::error!("Fail to load previous page, error={error}");
-                        }
-                    }
-                });
+                navigate_with_push.emit(AppRoute::Search(SearchRouteState::new(
+                    state_handle.search_input.clone(),
+                    state_handle.tags_filter.clone(),
+                    current_page - 1,
+                )));
             }
         })
     };
 
     let on_search_next_page = {
         let state_handle = state_handle.clone();
-        let token = token.clone();
+        let navigate_with_push = navigate_with_push.clone();
         Callback::from(move |_| {
-            let state_handle = state_handle.clone();
-            let token = token.clone();
-            let state = (*state_handle).clone();
-            let total_pages = (state.total_results as usize).div_ceil(state.page_size);
-            if state.current_search_page < total_pages {
-                spawn_local(async move {
-                    let mut state = (*state_handle).clone();
-                    state.current_search_page += 1;
-                    match search_api::search(&token, state.clone().into()).await {
-                        Ok(result) => {
-                            state.items = result.items;
-                            state.tags = result.tags;
-                            state.total_results = result.total;
-                            state_handle.set(state);
-                        }
-                        Err(error) => {
-                            log::error!("Fail to load next page, error={error}");
-                        }
-                    }
-                });
+            let total_pages =
+                (state_handle.total_results as usize).div_ceil(state_handle.page_size);
+            if state_handle.current_search_page < total_pages {
+                navigate_with_push.emit(AppRoute::Search(SearchRouteState::new(
+                    state_handle.search_input.clone(),
+                    state_handle.tags_filter.clone(),
+                    state_handle.current_search_page + 1,
+                )));
             }
         })
     };
 
-    // Pagination tracking state - keep track of all page cursors
-    let page_cursors_handle = use_state(|| vec![None::<uuid::Uuid>]);
-    let current_page_handle = use_state(|| 1usize);
+    let page_cursors_handle = use_state_eq(|| vec![None::<uuid::Uuid>]);
+    let current_page_handle = use_state_eq(|| 1usize);
 
     let on_task_filter_submit = {
         let state_handle = state_handle.clone();
@@ -412,13 +471,11 @@ pub fn home(props: &Props) -> Html {
             let page_cursors_handle = page_cursors_handle.clone();
             let current_page_handle = current_page_handle.clone();
 
-            // Reset pagination state when new filter is applied
             page_cursors_handle.set(vec![None]);
             current_page_handle.set(1);
 
             spawn_local(async move {
                 let mut state = (*state_handle).clone();
-                // Store the request for pagination
                 state.bookmark_tasks_request = event.clone();
                 match bookmark_tasks_api::search_tasks(&token, event).await {
                     Ok(response) => {
@@ -426,8 +483,7 @@ pub fn home(props: &Props) -> Html {
                         state_handle.set(state);
                     }
                     Err(error) => {
-                        // FIXME: notify user
-                        log::error!("Fail to search tasks error={error}",);
+                        log::error!("Fail to search tasks error={error}");
                         state.bookmark_tasks_response = None;
                         state_handle.set(state);
                     }
@@ -486,7 +542,6 @@ pub fn home(props: &Props) -> Html {
                     let last_task = response.tasks.last().unwrap();
                     let cursor = Some(last_task.task_id);
 
-                    // Add new cursor to the list if needed
                     let mut cursors = (*page_cursors_handle).clone();
                     let current_page = *current_page_handle;
                     if cursors.len() == current_page {
@@ -515,20 +570,18 @@ pub fn home(props: &Props) -> Html {
         })
     };
 
-    let content = match &state_handle.page {
-        Page::Search => {
+    let content = match &*route_handle {
+        AppRoute::Search(_) => {
             let has_more = state_handle.current_search_page * state_handle.page_size
                 < state_handle.total_results as usize;
             html! {
                 <div class="row" style="min-height: calc(100vh - 120px);">
-                    // Left side panel for tags filter
                     <div class="col-12 col-md-4 col-lg-3 mb-3 mb-md-0 d-flex">
                         <TagsFilter
                             tags={state_handle.tags.clone()}
                             selected_tags={state_handle.tags_filter.clone()}
                             on_tag_checked={on_tag_checked} />
                     </div>
-                    // Main content area
                     <div class="col-12 col-md-8 col-lg-9">
                         <SearchBar
                             value={state_handle.search_input.clone()}
@@ -551,18 +604,59 @@ pub fn home(props: &Props) -> Html {
                 </div>
             }
         }
-        Page::Read { bookmark } => {
-            html! {
-                <BookmarkReader
-                    key={bookmark.bookmark_id.clone()}
-                    user_session={props.user_session.to_owned()}
-                    bookmark={bookmark.to_owned()}
-                    on_goback={on_goback}
-                    on_new_tags={on_new_tags}
-                    on_delete={on_delete.clone()} />
+        AppRoute::Bookmark { .. } => match &*bookmark_detail_handle {
+            BookmarkDetailState::Loading { .. } | BookmarkDetailState::None => {
+                html! {
+                    <div class="text-center py-5">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">{"Loading..."}</span>
+                        </div>
+                    </div>
+                }
             }
-        }
-        Page::Tasks => {
+            BookmarkDetailState::Ready(bookmark) => {
+                html! {
+                    <BookmarkReader
+                        key={bookmark.bookmark_id.clone()}
+                        user_session={props.user_session.to_owned()}
+                        bookmark={bookmark.to_owned()}
+                        on_goback={on_goback}
+                        on_new_tags={on_new_tags}
+                        on_delete={on_delete.clone()} />
+                }
+            }
+            BookmarkDetailState::NotFound { .. } => {
+                html! {
+                    <div class="alert alert-warning" role="alert">
+                        <h4 class="alert-heading">{"Bookmark not found"}</h4>
+                        <p>{"The requested bookmark no longer exists or is not available."}</p>
+                        <hr />
+                        <button class="btn btn-outline-secondary" onclick={
+                            let on_goback = on_goback.clone();
+                            Callback::from(move |_| on_goback.emit(()))
+                        }>
+                            {"Back to search"}
+                        </button>
+                    </div>
+                }
+            }
+            BookmarkDetailState::Error { message, .. } => {
+                html! {
+                    <div class="alert alert-danger" role="alert">
+                        <h4 class="alert-heading">{"Unable to load bookmark"}</h4>
+                        <p>{message.clone()}</p>
+                        <hr />
+                        <button class="btn btn-outline-secondary" onclick={
+                            let on_goback = on_goback.clone();
+                            Callback::from(move |_| on_goback.emit(()))
+                        }>
+                            {"Back to search"}
+                        </button>
+                    </div>
+                }
+            }
+        },
+        AppRoute::Tasks => {
             let pagination_controls = if let Some(response) = &state_handle.bookmark_tasks_response
             {
                 let page_size =
@@ -590,12 +684,12 @@ pub fn home(props: &Props) -> Html {
                 </>
             }
         }
-        Page::RAG => {
+        AppRoute::RAG => {
             html! {
                 <crate::pages::rag::RagPage user_session={props.user_session.clone()} />
             }
         }
-        Page::RagHistory => {
+        AppRoute::RagHistory => {
             html! {
                 <crate::pages::rag_history::RagHistoryPage user_session={props.user_session.clone()} />
             }
@@ -605,7 +699,7 @@ pub fn home(props: &Props) -> Html {
     html! {
         <>
             <NavigationBar username={props.user_session.username.clone()}
-                active_page={state_handle.page.clone()}
+                active_page={(*route_handle).kind()}
                 on_page_change={on_page_change}
                 on_logout={props.on_logout.clone()} />
             <div class="container mt-5">
