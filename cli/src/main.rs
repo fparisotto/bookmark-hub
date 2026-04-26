@@ -3,7 +3,8 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
 
-use anyhow::Context;
+use anyhow::{anyhow, bail, Context};
+use chrono::{DateTime, Utc};
 use clap::{Args, Parser, Subcommand};
 use reqwest::Client;
 use scraper::{Html, Selector};
@@ -78,6 +79,11 @@ struct StoredAuth {
     pub response: SignInResponse,
 }
 
+#[derive(Debug, Deserialize)]
+struct JwtClaims {
+    exp: Option<i64>,
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::registry()
@@ -147,7 +153,12 @@ async fn handle_add_batch(args: AddBatchArgs) -> anyhow::Result<()> {
         };
         match add_bookmark(&client, &base_url, &token, request).await {
             Ok(response) => tracing::info!(?response, %url, "Add bookmark"),
-            Err(error) => tracing::error!(?error, %url, "Failed to add bookmark"),
+            Err(error) => {
+                tracing::error!(?error, %url, "Failed to add bookmark");
+                if is_auth_error(&error) {
+                    return Err(error.context("Authentication failed during batch import"));
+                }
+            }
         }
     }
     Ok(())
@@ -184,10 +195,9 @@ async fn add_bookmark(
         .bearer_auth(token)
         .json(&request)
         .send()
-        .await?
-        .error_for_status()?
-        .json::<NewBookmarkResponse>()
         .await?;
+    let response = ensure_success_response(response).await?;
+    let response = response.json::<NewBookmarkResponse>().await?;
     Ok(response)
 }
 
@@ -197,6 +207,14 @@ fn load_token_and_url() -> anyhow::Result<(String, Url)> {
         .join(".config/bookmark-hub/auth.json");
     let content = fs::read_to_string(&config_path).context("Expected auth file")?;
     let stored: StoredAuth = serde_json::from_str(&content)?;
+    if let Some(expiration) = token_expiration_utc(&stored.response.access_token)? {
+        if expiration <= Utc::now() {
+            bail!(
+                "Stored auth token expired at {}. Run the login command again to refresh ~/.config/bookmark-hub/auth.json.",
+                expiration.to_rfc3339()
+            );
+        }
+    }
     Ok((stored.response.access_token, stored.base_url))
 }
 
@@ -274,6 +292,9 @@ async fn handle_import_firefox(args: ImportFirefoxArgs) -> anyhow::Result<()> {
             }
             Err(error) => {
                 tracing::error!(?error, %url, "Failed to add bookmark");
+                if is_auth_error(&error) {
+                    return Err(error.context("Authentication failed during Firefox import"));
+                }
                 failure_count += 1;
             }
         }
@@ -368,4 +389,69 @@ fn save_imported_url(url: &str) -> anyhow::Result<()> {
     let mut file = OpenOptions::new().create(true).append(true).open(&path)?;
     writeln!(file, "{}", url)?;
     Ok(())
+}
+
+async fn ensure_success_response(response: reqwest::Response) -> anyhow::Result<reqwest::Response> {
+    let status = response.status();
+    if status.is_success() {
+        return Ok(response);
+    }
+
+    let body = response.text().await.unwrap_or_default();
+    let body = body.trim();
+
+    if body == "invalid_token" {
+        bail!("Authentication failed: stored auth token is invalid or expired. Run the login command again.");
+    }
+
+    if body.is_empty() {
+        bail!("API request failed with status {}", status);
+    }
+
+    Err(anyhow!(
+        "API request failed with status {}: {}",
+        status,
+        body
+    ))
+}
+
+fn token_expiration_utc(token: &str) -> anyhow::Result<Option<DateTime<Utc>>> {
+    let payload = token
+        .split('.')
+        .nth(1)
+        .context("Malformed auth token payload")?;
+    let decoded = base64_url::decode(payload).map_err(|error| anyhow!(error))?;
+    let claims: JwtClaims = serde_json::from_slice(&decoded)?;
+    let Some(expiration) = claims.exp else {
+        return Ok(None);
+    };
+    let expiration = DateTime::from_timestamp(expiration, 0)
+        .context("Invalid auth token expiration timestamp")?;
+    Ok(Some(expiration))
+}
+
+fn is_auth_error(error: &anyhow::Error) -> bool {
+    error
+        .chain()
+        .any(|cause| cause.to_string().contains("auth token"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::token_expiration_utc;
+
+    #[test]
+    fn extracts_jwt_expiration_timestamp() {
+        let token = "header.eyJleHAiOjE3NzEwMDM2NDl9.signature";
+        let expiration = token_expiration_utc(token)
+            .unwrap()
+            .expect("expiration should be present");
+        assert_eq!(expiration.to_rfc3339(), "2026-02-13T17:27:29+00:00");
+    }
+
+    #[test]
+    fn allows_tokens_without_expiration() {
+        let token = "header.e30.signature";
+        assert!(token_expiration_utc(token).unwrap().is_none());
+    }
 }
