@@ -5,6 +5,7 @@ use rig::client::Nothing;
 use rig::providers::{anthropic, gemini, ollama, openai, openrouter};
 
 use super::{EmbeddingClient, LlmClient, TextClient};
+use crate::llm::embeddings_with_dimensions;
 use crate::LlmParams;
 
 /// Strip trailing slash from URL to avoid double-slash in rig-core's URL
@@ -29,7 +30,7 @@ fn http_client(params: &LlmParams) -> Result<reqwest::Client> {
 
 /// Build an LlmClient from configuration params.
 /// Returns None if no text model is configured (AI features disabled).
-pub fn build_llm_client(params: &LlmParams) -> Result<Option<LlmClient>> {
+pub async fn build_llm_client(params: &LlmParams) -> Result<Option<LlmClient>> {
     let text_model = match &params.llm_text_model {
         Some(m) => m.clone(),
         None => return Ok(None),
@@ -45,16 +46,58 @@ pub fn build_llm_client(params: &LlmParams) -> Result<Option<LlmClient>> {
         .llm_embedding_model
         .clone()
         .unwrap_or_else(|| text_model.clone());
-    let embedding_ndims = params.llm_embedding_dimension.unwrap_or(1024);
     let embedding_client = build_embedding_client(emb_provider, params)?;
+    let embedding_ndims =
+        resolve_embedding_dimensions(params, emb_provider, &embedding_model, &embedding_client)
+            .await?;
 
     Ok(Some(LlmClient {
         text_client,
         text_model,
+        embedding_provider: emb_provider.to_string(),
         embedding_client,
         embedding_model,
         embedding_ndims,
     }))
+}
+
+async fn resolve_embedding_dimensions(
+    params: &LlmParams,
+    provider: &str,
+    model: &str,
+    client: &EmbeddingClient,
+) -> Result<usize> {
+    if let Some(dimensions) = params.llm_embedding_dimension {
+        return Ok(dimensions);
+    }
+
+    if let Some(dimensions) = infer_embedding_dimensions(provider, model) {
+        return Ok(dimensions);
+    }
+
+    let probe = embeddings_with_dimensions(client, model, "dimension probe", None).await?;
+    Ok(probe.len())
+}
+
+fn infer_embedding_dimensions(provider: &str, model: &str) -> Option<usize> {
+    match provider {
+        "openai" => match model {
+            "text-embedding-3-large" => Some(3072),
+            "text-embedding-3-small" | "text-embedding-ada-002" => Some(1536),
+            _ => None,
+        },
+        "gemini" => match model {
+            "gemini-embedding-001" => Some(3072),
+            "text-embedding-004" => Some(768),
+            _ => None,
+        },
+        "ollama" => match model {
+            "all-minilm" => Some(384),
+            "nomic-embed-text" => Some(768),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 fn build_text_client(params: &LlmParams) -> Result<TextClient> {

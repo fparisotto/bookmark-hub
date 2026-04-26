@@ -196,6 +196,7 @@ impl RagEngine {
                 user_id,
                 question,
                 query_embedding,
+                self.client.embedding_ndims,
                 max_chunks * 2,
                 similarity_threshold,
             )
@@ -219,6 +220,7 @@ impl RagEngine {
                 &self.pool,
                 user_id,
                 query_embedding,
+                self.client.embedding_ndims,
                 max_chunks * 2,
                 similarity_threshold,
             )

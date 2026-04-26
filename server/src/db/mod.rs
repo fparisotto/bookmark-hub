@@ -3,7 +3,7 @@ use deadpool_postgres::{
     Config, GenericClient, ManagerConfig, PoolConfig, RecyclingMethod, Runtime,
 };
 use secrecy::ExposeSecret;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::error::{Error, Result};
 use crate::PgParams;
@@ -17,6 +17,8 @@ pub mod user;
 
 pub type PgPool = deadpool_postgres::Pool;
 pub type PgConnection = deadpool_postgres::Object;
+
+const EMBEDDING_INDEX_NAME: &str = "idx_bookmark_chunk_embedding";
 
 const CREATE_GET_SCHEMA_FUNCTION: &str = "
 CREATE OR REPLACE FUNCTION get_schema_version() RETURNS INTEGER AS $$
@@ -38,7 +40,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;";
 
-const SCHEMAS: [(i32, &str); 7] = [
+const SCHEMAS: [(i32, &str); 8] = [
     (
         1,
         include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/schema/1_unified.sql")),
@@ -85,7 +87,21 @@ const SCHEMAS: [(i32, &str); 7] = [
             "/schema/7_bookmark_identity.sql"
         )),
     ),
+    (
+        8,
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/schema/8_flexible_embeddings.sql"
+        )),
+    ),
 ];
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmbeddingProfile {
+    pub provider: String,
+    pub model: String,
+    pub dimensions: usize,
+}
 
 pub async fn get_pool(pg: PgParams) -> anyhow::Result<PgPool> {
     info!(
@@ -167,50 +183,148 @@ pub async fn run_migrations(pool: &PgPool) -> Result<()> {
     Ok(())
 }
 
-/// Check the current embedding vector dimension and adjust if needed.
-/// If the dimension changed, truncates all chunks (they'll be re-embedded by
-/// the daemon).
-pub async fn ensure_embedding_dimension(pool: &PgPool, target_dim: usize) -> anyhow::Result<()> {
+pub async fn reconcile_embedding_profile(
+    pool: &PgPool,
+    target: &EmbeddingProfile,
+) -> anyhow::Result<()> {
     let client = pool.get().await?;
+    let stored = get_embedding_profile(&client).await?;
+    let chunk_count = bookmark_chunk_count(&client).await?;
 
-    // Query current dimension from pg_attribute
+    match stored {
+        Some(current) if current == *target => {
+            info!(
+                provider = %target.provider,
+                model = %target.model,
+                dimensions = target.dimensions,
+                "Embedding profile matches current configuration"
+            );
+        }
+        Some(current) => {
+            warn!(
+                old_provider = %current.provider,
+                old_model = %current.model,
+                old_dimensions = current.dimensions,
+                new_provider = %target.provider,
+                new_model = %target.model,
+                new_dimensions = target.dimensions,
+                "Embedding profile changed, clearing chunk embeddings"
+            );
+            client.execute("TRUNCATE bookmark_chunk", &[]).await?;
+            upsert_embedding_profile(&client, target).await?;
+        }
+        None if chunk_count > 0 => {
+            warn!(
+                chunk_count,
+                provider = %target.provider,
+                model = %target.model,
+                dimensions = target.dimensions,
+                "Embedding profile metadata missing for existing chunks, clearing chunk embeddings"
+            );
+            client.execute("TRUNCATE bookmark_chunk", &[]).await?;
+            upsert_embedding_profile(&client, target).await?;
+        }
+        None => {
+            info!(
+                provider = %target.provider,
+                model = %target.model,
+                dimensions = target.dimensions,
+                "Initializing embedding profile metadata"
+            );
+            upsert_embedding_profile(&client, target).await?;
+        }
+    }
+
+    ensure_embedding_index(&client, target.dimensions).await?;
+    Ok(())
+}
+
+async fn get_embedding_profile(
+    client: &impl GenericClient,
+) -> anyhow::Result<Option<EmbeddingProfile>> {
     let row = client
         .query_opt(
-            "SELECT atttypmod FROM pg_attribute
-             WHERE attrelid = 'bookmark_chunk'::regclass
-             AND attname = 'embedding'",
+            "SELECT provider, model, dimensions
+             FROM embedding_config
+             WHERE embedding_config_id = TRUE",
             &[],
         )
         .await?;
 
-    let current_dim: Option<i32> = row.map(|r| r.get(0));
+    Ok(row.map(|row| EmbeddingProfile {
+        provider: row.get("provider"),
+        model: row.get("model"),
+        dimensions: row.get::<_, i32>("dimensions") as usize,
+    }))
+}
 
-    match current_dim {
-        Some(dim) if dim > 0 && dim as usize == target_dim => {
-            info!(
-                dimension = target_dim,
-                "Embedding dimension matches, no change needed"
-            );
+async fn upsert_embedding_profile(
+    client: &impl GenericClient,
+    profile: &EmbeddingProfile,
+) -> anyhow::Result<()> {
+    client
+        .execute(
+            "INSERT INTO embedding_config (embedding_config_id, provider, model, dimensions)
+             VALUES (TRUE, $1, $2, $3)
+             ON CONFLICT (embedding_config_id)
+             DO UPDATE SET
+                provider = EXCLUDED.provider,
+                model = EXCLUDED.model,
+                dimensions = EXCLUDED.dimensions,
+                updated_at = NOW()",
+            &[
+                &profile.provider,
+                &profile.model,
+                &(profile.dimensions as i32),
+            ],
+        )
+        .await?;
+    Ok(())
+}
+
+async fn bookmark_chunk_count(client: &impl GenericClient) -> anyhow::Result<i64> {
+    Ok(client
+        .query_one("SELECT COUNT(*) FROM bookmark_chunk", &[])
+        .await?
+        .get(0))
+}
+
+async fn ensure_embedding_index(
+    client: &impl GenericClient,
+    dimensions: usize,
+) -> anyhow::Result<()> {
+    let expected_fragment = format!("vector({dimensions})");
+    let existing = client
+        .query_opt(
+            "SELECT indexdef
+             FROM pg_indexes
+             WHERE schemaname = current_schema()
+               AND tablename = 'bookmark_chunk'
+               AND indexname = $1",
+            &[&EMBEDDING_INDEX_NAME],
+        )
+        .await?;
+
+    let needs_rebuild = match existing {
+        Some(row) => {
+            let definition: String = row.get("indexdef");
+            !definition.contains(&expected_fragment)
         }
-        Some(dim) if dim > 0 => {
-            tracing::warn!(
-                current = dim,
-                target = target_dim,
-                "Embedding dimension changed, truncating chunks and altering column"
-            );
-            let stmt = format!(
-                "TRUNCATE bookmark_chunk;
-                 ALTER TABLE bookmark_chunk ALTER COLUMN embedding TYPE VECTOR({target_dim});"
-            );
-            client.batch_execute(&stmt).await?;
-            info!(
-                new_dimension = target_dim,
-                "Embedding dimension updated, all bookmarks will be re-embedded"
-            );
-        }
-        _ => {
-            debug!("No embedding column dimension found (table may not exist yet), skipping check");
-        }
+        None => true,
+    };
+
+    if needs_rebuild {
+        warn!(
+            index = EMBEDDING_INDEX_NAME,
+            dimensions, "Rebuilding embedding ANN index"
+        );
+        let statement = format!(
+            "DROP INDEX IF EXISTS {EMBEDDING_INDEX_NAME};
+             CREATE INDEX {EMBEDDING_INDEX_NAME} ON bookmark_chunk
+             USING hnsw (((embedding)::vector({dimensions})) vector_cosine_ops)
+             WITH (m = 16, ef_construction = 64);"
+        );
+        client.batch_execute(&statement).await?;
     }
 
     Ok(())

@@ -178,28 +178,53 @@ pub async fn consolidate_summary(client: &LlmClient, summaries: &[String]) -> Re
     Ok(resp.summary)
 }
 
-pub async fn embeddings(client: &LlmClient, text: &str) -> Result<Vec<f32>> {
+pub async fn embeddings_with_dimensions(
+    client: &EmbeddingClient,
+    model_name: &str,
+    text: &str,
+    dimensions: Option<usize>,
+) -> Result<Vec<f32>> {
     use rig::embeddings::EmbeddingModel;
 
-    let embedding = match &client.embedding_client {
-        EmbeddingClient::Ollama(c) => {
-            let model =
-                c.embedding_model_with_ndims(&client.embedding_model, client.embedding_ndims);
-            model.embed_text(text).await?
+    let embedding = match (client, dimensions) {
+        (EmbeddingClient::Ollama(c), Some(dimensions)) => {
+            c.embedding_model_with_ndims(model_name, dimensions)
+                .embed_text(text)
+                .await?
         }
-        EmbeddingClient::OpenAI(c) => {
-            let model =
-                c.embedding_model_with_ndims(&client.embedding_model, client.embedding_ndims);
-            model.embed_text(text).await?
+        (EmbeddingClient::Ollama(c), None) => {
+            c.embedding_model(model_name).embed_text(text).await?
         }
-        EmbeddingClient::Gemini(c) => {
-            let model =
-                c.embedding_model_with_ndims(&client.embedding_model, client.embedding_ndims);
-            model.embed_text(text).await?
+        (EmbeddingClient::OpenAI(c), Some(dimensions)) => {
+            c.embedding_model_with_ndims(model_name, dimensions)
+                .embed_text(text)
+                .await?
+        }
+        (EmbeddingClient::OpenAI(c), None) => {
+            c.embedding_model(model_name).embed_text(text).await?
+        }
+        (EmbeddingClient::Gemini(c), Some(dimensions)) => {
+            c.embedding_model_with_ndims(model_name, dimensions)
+                .embed_text(text)
+                .await?
+        }
+        (EmbeddingClient::Gemini(c), None) => {
+            c.embedding_model(model_name).embed_text(text).await?
         }
     };
+
     // rig returns Vec<f64>, pgvector expects Vec<f32>
     Ok(embedding.vec.into_iter().map(|v| v as f32).collect())
+}
+
+pub async fn embeddings(client: &LlmClient, text: &str) -> Result<Vec<f32>> {
+    embeddings_with_dimensions(
+        &client.embedding_client,
+        &client.embedding_model,
+        text,
+        Some(client.embedding_ndims),
+    )
+    .await
 }
 
 pub async fn generate_similar_questions(client: &LlmClient, question: &str) -> Result<Vec<String>> {

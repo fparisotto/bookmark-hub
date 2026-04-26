@@ -110,6 +110,7 @@ export LLM_PROVIDER=ollama
 export OLLAMA_URL=http://localhost:11434
 export LLM_TEXT_MODEL=qwen3.5:4b
 export LLM_EMBEDDING_MODEL=qwen3-embedding:0.6b
+# Optional override; auto-detected when omitted
 export LLM_EMBEDDING_DIMENSION=1024
 ```
 
@@ -139,7 +140,7 @@ export LLM_PROVIDER=gemini
 export GEMINI_API_KEY=AIza...
 export LLM_TEXT_MODEL=gemini-2.5-flash
 export LLM_EMBEDDING_MODEL=gemini-embedding-001
-export LLM_EMBEDDING_DIMENSION=768
+export LLM_EMBEDDING_DIMENSION=1536
 ```
 
 **OpenRouter:**
@@ -161,7 +162,7 @@ You can mix providers — for example, use Anthropic for text and OpenAI for emb
 | `LLM_TEXT_MODEL` | _(none, disables AI)_ | Model for text tasks |
 | `LLM_EMBEDDING_PROVIDER` | _(falls back to LLM_PROVIDER)_ | Embedding provider |
 | `LLM_EMBEDDING_MODEL` | _(falls back to LLM_TEXT_MODEL)_ | Model for embeddings |
-| `LLM_EMBEDDING_DIMENSION` | `1024` | Embedding vector dimension |
+| `LLM_EMBEDDING_DIMENSION` | _(auto-detected)_ | Optional embedding vector dimension override |
 | `LLM_EMBEDDING_API_KEY` | _(none)_ | API key for embedding provider if different |
 | `LLM_REQUEST_TIMEOUT_SECS` | `120` | HTTP request timeout for LLM calls |
 | `OLLAMA_URL` | `http://localhost:11434` | Ollama base URL |

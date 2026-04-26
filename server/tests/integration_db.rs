@@ -5,8 +5,10 @@ mod common;
 use std::collections::BTreeSet;
 
 use anyhow::Context;
-use common::test_db::TestDatabase;
-use server::db;
+use common::test_db::{create_test_bookmark, TestDatabase};
+use server::db::{self, bookmark, chunks, EmbeddingProfile};
+
+const TEST_EMBEDDING_DIMENSIONS: usize = 16;
 
 #[tokio::test]
 async fn test_db_database_migrations() -> anyhow::Result<()> {
@@ -20,7 +22,13 @@ async fn test_db_database_migrations() -> anyhow::Result<()> {
         .context("Failed to run database migrations on the newly created database")?;
 
     // Verify that essential tables exist
-    let tables = vec!["user", "bookmark", "bookmark_task", "schema_version"];
+    let tables = vec![
+        "user",
+        "bookmark",
+        "bookmark_task",
+        "schema_version",
+        "embedding_config",
+    ];
 
     for table in tables {
         let sql = format!(
@@ -72,6 +80,19 @@ async fn test_db_database_migrations() -> anyhow::Result<()> {
         canonical_url_constraint_exists,
         "bookmark canonical URL uniqueness constraint should exist after migrations"
     );
+
+    let embedding_type: String = client
+        .query_one(
+            "SELECT format_type(a.atttypid, a.atttypmod)
+             FROM pg_attribute a
+             WHERE a.attrelid = 'bookmark_chunk'::regclass
+               AND a.attname = 'embedding'",
+            &[],
+        )
+        .await
+        .context("Failed to query bookmark_chunk.embedding type")?
+        .get(0);
+    assert_eq!(embedding_type, "vector");
 
     // Verify schema_version table is populated
     let schema_version: i32 = client
@@ -238,7 +259,86 @@ async fn test_db_migration_4_backfills_existing_version_3_data() -> anyhow::Resu
         task_tags.into_iter().collect::<BTreeSet<_>>(),
         BTreeSet::from(["ops".to_string()])
     );
-    assert_eq!(schema_version, 7);
+    assert_eq!(schema_version, 8);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_db_embedding_profile_reconcile_clears_legacy_chunks() -> anyhow::Result<()> {
+    let db = TestDatabase::new().await?;
+    let user_id = db.create_user().await?;
+    let bookmark = create_test_bookmark(
+        user_id,
+        "https://example.com/legacy-embedding",
+        "Legacy Embedding",
+        "example.com",
+        None,
+    );
+    let bookmark_id = bookmark.bookmark_id.clone();
+    let text_content = "A".repeat(400);
+    bookmark::save(&db.pool, &bookmark, &text_content).await?;
+
+    chunks::store_chunks_with_embeddings(
+        &db.pool,
+        &bookmark_id,
+        user_id,
+        vec!["legacy chunk".to_string()],
+        vec![vec![0.1; TEST_EMBEDDING_DIMENSIONS]],
+    )
+    .await?;
+
+    let before_count: i64 = db
+        .pool
+        .get()
+        .await?
+        .query_one("SELECT COUNT(*) FROM bookmark_chunk", &[])
+        .await?
+        .get(0);
+    assert_eq!(before_count, 1);
+
+    db::reconcile_embedding_profile(
+        &db.pool,
+        &EmbeddingProfile {
+            provider: "ollama".to_string(),
+            model: "qwen3-embedding:0.6b".to_string(),
+            dimensions: TEST_EMBEDDING_DIMENSIONS,
+        },
+    )
+    .await?;
+
+    let client = db.pool.get().await?;
+    let after_count: i64 = client
+        .query_one("SELECT COUNT(*) FROM bookmark_chunk", &[])
+        .await?
+        .get(0);
+    assert_eq!(after_count, 0);
+
+    let stored_profile = client
+        .query_one(
+            "SELECT provider, model, dimensions FROM embedding_config WHERE embedding_config_id = TRUE",
+            &[],
+        )
+        .await?;
+    let stored_dimensions: i32 = stored_profile.get("dimensions");
+    assert_eq!(stored_profile.get::<_, String>("provider"), "ollama");
+    assert_eq!(
+        stored_profile.get::<_, String>("model"),
+        "qwen3-embedding:0.6b"
+    );
+    assert_eq!(stored_dimensions as usize, TEST_EMBEDDING_DIMENSIONS);
+
+    let index_definition: String = client
+        .query_one(
+            "SELECT indexdef
+             FROM pg_indexes
+             WHERE tablename = 'bookmark_chunk'
+               AND indexname = 'idx_bookmark_chunk_embedding'",
+            &[],
+        )
+        .await?
+        .get(0);
+    assert!(index_definition.contains("vector(16)"));
 
     Ok(())
 }

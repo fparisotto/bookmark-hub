@@ -20,9 +20,9 @@ services:
       PG_MAX_CONNECTIONS: 5
       LLM_PROVIDER: gemini
       GEMINI_API_KEY: ${GEMINI_API_KEY:?set GEMINI_API_KEY}
-      LLM_TEXT_MODEL: gemini-2.5-flash
+      LLM_TEXT_MODEL: gemini-flash-latest
       LLM_EMBEDDING_MODEL: gemini-embedding-001
-      LLM_EMBEDDING_DIMENSION: "768"
+      LLM_EMBEDDING_DIMENSION: "1536"
       CHROME_HOST: chrome
       CHROME_PORT: 3001
     volumes:
