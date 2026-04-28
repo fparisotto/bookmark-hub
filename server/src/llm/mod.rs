@@ -28,6 +28,7 @@ pub enum EmbeddingClient {
 pub struct LlmClient {
     pub text_client: TextClient,
     pub text_model: String,
+    pub embedding_provider: String,
     pub embedding_client: EmbeddingClient,
     pub embedding_model: String,
     pub embedding_ndims: usize,

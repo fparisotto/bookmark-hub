@@ -59,6 +59,17 @@ pub async fn store_chunks_with_embeddings(
         )]));
     }
 
+    let expected_dimensions = embeddings.first().map(Vec::len);
+    if embeddings
+        .iter()
+        .any(|embedding| Some(embedding.len()) != expected_dimensions)
+    {
+        return Err(Error::bad_request([(
+            "embeddings",
+            "Embeddings must all use the same dimension",
+        )]));
+    }
+
     let client = pool.get().await?;
 
     // Delete existing chunks for this bookmark
@@ -108,27 +119,31 @@ pub async fn search_similar_chunks(
     pool: &PgPool,
     user_id: Uuid,
     query_embedding: Vec<f32>,
+    embedding_dimensions: usize,
     limit: usize,
     similarity_threshold: f64,
 ) -> Result<Vec<RagChunkMatch>> {
     let client = pool.get().await?;
-
-    let rows = client
-        .query(
-            r#"
+    let statement = format!(
+        r#"
             SELECT 
                 c.chunk_id, c.bookmark_id, c.user_id, c.chunk_text, 
                 c.chunk_index, c.created_at, c.updated_at,
                 b.url, b.domain, b.title, b.tags, b.summary, 
                 b.created_at as bookmark_created_at, b.updated_at as bookmark_updated_at,
-                1 - (c.embedding <=> $2) as similarity_score
+                1 - ((c.embedding::vector({embedding_dimensions})) <=> $2) as similarity_score
             FROM bookmark_chunk c
             INNER JOIN bookmark b ON c.bookmark_id = b.bookmark_id AND c.user_id = b.user_id
             WHERE c.user_id = $1 
-            AND 1 - (c.embedding <=> $2) >= $3
-            ORDER BY c.embedding <=> $2
+            AND 1 - ((c.embedding::vector({embedding_dimensions})) <=> $2) >= $3
+            ORDER BY (c.embedding::vector({embedding_dimensions})) <=> $2
             LIMIT $4
-            "#,
+        "#
+    );
+
+    let rows = client
+        .query(
+            &statement,
             &[
                 &user_id,
                 &Vector::from(query_embedding),
@@ -342,26 +357,23 @@ pub async fn search_chunks_hybrid(
     user_id: Uuid,
     query_text: &str,
     query_embedding: Vec<f32>,
+    embedding_dimensions: usize,
     limit: usize,
     similarity_threshold: f64,
 ) -> Result<Vec<HybridChunkMatch>> {
     let client = pool.get().await?;
-
-    // Use CTE to get vector matches with ranks, then join with FTS scores from
-    // bookmarks
-    let rows = client
-        .query(
-            r#"
+    let statement = format!(
+        r#"
             WITH vector_matches AS (
                 SELECT
                     c.chunk_id, c.bookmark_id, c.user_id, c.chunk_text,
                     c.chunk_index, c.created_at, c.updated_at,
-                    1 - (c.embedding <=> $2) as vector_score,
-                    ROW_NUMBER() OVER (ORDER BY c.embedding <=> $2) as vector_rank
+                    1 - ((c.embedding::vector({embedding_dimensions})) <=> $2) as vector_score,
+                    ROW_NUMBER() OVER (ORDER BY (c.embedding::vector({embedding_dimensions})) <=> $2) as vector_rank
                 FROM bookmark_chunk c
                 WHERE c.user_id = $1
-                AND 1 - (c.embedding <=> $2) >= $3
-                ORDER BY c.embedding <=> $2
+                AND 1 - ((c.embedding::vector({embedding_dimensions})) <=> $2) >= $3
+                ORDER BY (c.embedding::vector({embedding_dimensions})) <=> $2
                 LIMIT $4
             ),
             fts_scores AS (
@@ -386,7 +398,14 @@ pub async fn search_chunks_hybrid(
             FROM vector_matches vm
             INNER JOIN bookmark b ON vm.bookmark_id = b.bookmark_id AND vm.user_id = b.user_id
             LEFT JOIN fts_scores fs ON vm.bookmark_id = fs.bookmark_id
-            "#,
+        "#
+    );
+
+    // Use CTE to get vector matches with ranks, then join with FTS scores from
+    // bookmarks
+    let rows = client
+        .query(
+            &statement,
             &[
                 &user_id,
                 &Vector::from(query_embedding),

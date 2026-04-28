@@ -36,12 +36,13 @@ async fn main() -> anyhow::Result<()> {
 
     info!(?config, "Starting Bookmark Hub Server");
 
-    let llm_client = server::llm::build_llm_client(&config.llm)?;
+    let llm_client = server::llm::build_llm_client(&config.llm).await?;
     let llm_enabled = llm_client.is_some();
     info!(llm_enabled = %llm_enabled, provider = %config.llm.llm_provider, "LLM AI features configuration");
     if let Some(ref client) = llm_client {
         debug!(
             text_model = %client.text_model,
+            embedding_provider = %client.embedding_provider,
             embedding_model = %client.embedding_model,
             embedding_ndims = %client.embedding_ndims,
             "LLM client configured"
@@ -53,9 +54,13 @@ async fn main() -> anyhow::Result<()> {
     info!("Running database migrations");
     db::run_migrations(&pool).await?;
 
-    // Ensure embedding dimension matches configuration
     if let Some(ref client) = llm_client {
-        db::ensure_embedding_dimension(&pool, client.embedding_ndims).await?;
+        let profile = db::EmbeddingProfile {
+            provider: client.embedding_provider.clone(),
+            model: client.embedding_model.clone(),
+            dimensions: client.embedding_ndims,
+        };
+        db::reconcile_embedding_profile(&pool, &profile).await?;
     }
 
     info!("Database initialization complete");

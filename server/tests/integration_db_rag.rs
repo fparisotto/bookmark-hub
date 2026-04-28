@@ -3,9 +3,11 @@
 mod common;
 
 use common::test_db::{create_test_bookmark, TestDatabase};
-use server::db::{bookmark, chunks, rag};
+use server::db::{bookmark, chunks, rag, EmbeddingProfile};
 use shared::RagHistoryRequest;
 use uuid::Uuid;
+
+const TEST_EMBEDDING_DIMENSIONS: usize = 16;
 
 #[tokio::test]
 async fn test_rag_session_create_and_retrieve() -> anyhow::Result<()> {
@@ -280,10 +282,14 @@ async fn test_bookmark_chunks_storage_and_retrieval() -> anyhow::Result<()> {
         "Memory safety is guaranteed by Rust's ownership system.".to_string(),
     ];
 
-    // Generate mock embeddings (1024-dimensional for nomic-embed-text:v1.5)
+    // Generate mock embeddings with a test-sized dimension.
     let embeddings: Vec<Vec<f32>> = test_chunks
         .iter()
-        .map(|_| (0..1024).map(|i| (i as f32) / 1024.0).collect())
+        .map(|_| {
+            (0..TEST_EMBEDDING_DIMENSIONS)
+                .map(|i| (i as f32) / TEST_EMBEDDING_DIMENSIONS as f32)
+                .collect()
+        })
         .collect();
 
     let stored_chunks = chunks::store_chunks_with_embeddings(
@@ -343,8 +349,10 @@ async fn test_chunks_storage_overwrite() -> anyhow::Result<()> {
 
     // Store initial chunks
     let initial_chunks = vec!["First chunk".to_string(), "Second chunk".to_string()];
-    let initial_embeddings: Vec<Vec<f32>> =
-        initial_chunks.iter().map(|_| vec![0.1; 1024]).collect();
+    let initial_embeddings: Vec<Vec<f32>> = initial_chunks
+        .iter()
+        .map(|_| vec![0.1; TEST_EMBEDDING_DIMENSIONS])
+        .collect();
 
     let initial_stored = chunks::store_chunks_with_embeddings(
         &db.pool,
@@ -362,7 +370,10 @@ async fn test_chunks_storage_overwrite() -> anyhow::Result<()> {
         "New second chunk".to_string(),
         "New third chunk".to_string(),
     ];
-    let new_embeddings: Vec<Vec<f32>> = new_chunks.iter().map(|_| vec![0.2; 1024]).collect();
+    let new_embeddings: Vec<Vec<f32>> = new_chunks
+        .iter()
+        .map(|_| vec![0.2; TEST_EMBEDDING_DIMENSIONS])
+        .collect();
 
     let new_stored = chunks::store_chunks_with_embeddings(
         &db.pool,
@@ -414,7 +425,7 @@ async fn test_chunks_user_isolation() -> anyhow::Result<()> {
 
     // Store chunks for user1
     let user1_chunks = vec!["User1 chunk".to_string()];
-    let user1_embeddings = vec![vec![0.1; 1024]];
+    let user1_embeddings = vec![vec![0.1; TEST_EMBEDDING_DIMENSIONS]];
 
     let user1_stored = chunks::store_chunks_with_embeddings(
         &db.pool,
@@ -427,7 +438,7 @@ async fn test_chunks_user_isolation() -> anyhow::Result<()> {
 
     // Store chunks for user2
     let user2_chunks = vec!["User2 chunk".to_string()];
-    let user2_embeddings = vec![vec![0.2; 1024]];
+    let user2_embeddings = vec![vec![0.2; TEST_EMBEDDING_DIMENSIONS]];
 
     let user2_stored = chunks::store_chunks_with_embeddings(
         &db.pool,
@@ -464,7 +475,7 @@ async fn test_chunks_length_mismatch_error() -> anyhow::Result<()> {
     let user_id = db.create_user().await?;
 
     let chunks = vec!["Chunk 1".to_string(), "Chunk 2".to_string()];
-    let embeddings = vec![vec![0.1; 1024]]; // Only one embedding for two chunks
+    let embeddings = vec![vec![0.1; TEST_EMBEDDING_DIMENSIONS]]; // Only one embedding for two chunks
 
     let result = chunks::store_chunks_with_embeddings(
         &db.pool,
@@ -478,6 +489,77 @@ async fn test_chunks_length_mismatch_error() -> anyhow::Result<()> {
     assert!(result.is_err());
     let error_msg = format!("{:?}", result.unwrap_err());
     assert!(error_msg.contains("mismatch") || error_msg.contains("chunks"));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_chunks_dimension_mismatch_error() -> anyhow::Result<()> {
+    let db = TestDatabase::new().await?;
+    let user_id = db.create_user().await?;
+
+    let result = chunks::store_chunks_with_embeddings(
+        &db.pool,
+        "test_bookmark",
+        user_id,
+        vec!["Chunk 1".to_string(), "Chunk 2".to_string()],
+        vec![vec![0.1; TEST_EMBEDDING_DIMENSIONS], vec![0.2; 8]],
+    )
+    .await;
+
+    assert!(result.is_err());
+    let error_msg = format!("{:?}", result.unwrap_err());
+    assert!(error_msg.contains("same dimension") || error_msg.contains("embeddings"));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_search_similar_chunks_with_dynamic_dimensions() -> anyhow::Result<()> {
+    let db = TestDatabase::new().await?;
+    let user_id = db.create_user().await?;
+    let bookmark = create_test_bookmark(
+        user_id,
+        "https://example.com/vector-search",
+        "Vector Search",
+        "example.com",
+        None,
+    );
+    let bookmark_id = bookmark.bookmark_id.clone();
+    let text_content = "A".repeat(400);
+    bookmark::save(&db.pool, &bookmark, &text_content).await?;
+
+    server::db::reconcile_embedding_profile(
+        &db.pool,
+        &EmbeddingProfile {
+            provider: "gemini".to_string(),
+            model: "gemini-embedding-001".to_string(),
+            dimensions: TEST_EMBEDDING_DIMENSIONS,
+        },
+    )
+    .await?;
+
+    chunks::store_chunks_with_embeddings(
+        &db.pool,
+        &bookmark_id,
+        user_id,
+        vec!["Vector search chunk".to_string()],
+        vec![vec![0.5; TEST_EMBEDDING_DIMENSIONS]],
+    )
+    .await?;
+
+    let results = chunks::search_similar_chunks(
+        &db.pool,
+        user_id,
+        vec![0.5; TEST_EMBEDDING_DIMENSIONS],
+        TEST_EMBEDDING_DIMENSIONS,
+        5,
+        0.99,
+    )
+    .await?;
+
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].chunk.chunk_text, "Vector search chunk");
 
     Ok(())
 }
