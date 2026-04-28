@@ -4,24 +4,18 @@ mod common;
 
 use chrono::{Duration, Utc};
 use common::test_db::{create_test_bookmark, create_test_user, TestDatabase};
+use server::db::ai;
 use server::db::bookmark::{self, AiGenerationStatus};
 use shared::TagOperation;
 
 async fn get_processing_state(
     db: &TestDatabase,
     bookmark_id: &str,
-) -> anyhow::Result<(
-    AiGenerationStatus,
-    i16,
-    Option<String>,
-    AiGenerationStatus,
-    i16,
-    Option<String>,
-)> {
+) -> anyhow::Result<(AiGenerationStatus, i16, Option<String>, AiGenerationStatus)> {
     let client = db.pool.get().await?;
     let row = client
         .query_one(
-            "SELECT summary_status, summary_attempts, summary_fail_reason, tag_status, tag_attempts, tag_fail_reason
+            "SELECT summary_status, text_ai_attempts, text_ai_fail_reason, tag_status
              FROM bookmark
              WHERE bookmark_id = $1",
             &[&bookmark_id],
@@ -30,11 +24,9 @@ async fn get_processing_state(
 
     Ok((
         row.get("summary_status"),
-        row.get("summary_attempts"),
-        row.get("summary_fail_reason"),
+        row.get("text_ai_attempts"),
+        row.get("text_ai_fail_reason"),
         row.get("tag_status"),
-        row.get("tag_attempts"),
-        row.get("tag_fail_reason"),
     ))
 }
 
@@ -336,11 +328,11 @@ async fn test_update_tags_set() -> anyhow::Result<()> {
         Some(vec!["rust".to_string(), "programming".to_string()])
     );
 
-    let (_, _, _, tag_status, tag_attempts, tag_fail_reason) =
+    let (_, text_ai_attempts, text_ai_fail_reason, tag_status) =
         get_processing_state(&db, &saved.bookmark_id).await?;
     assert_eq!(tag_status, AiGenerationStatus::Done);
-    assert_eq!(tag_attempts, 0);
-    assert!(tag_fail_reason.is_none());
+    assert_eq!(text_ai_attempts, 0);
+    assert!(text_ai_fail_reason.is_none());
 
     Ok(())
 }
@@ -416,11 +408,11 @@ async fn test_update_summary() -> anyhow::Result<()> {
     assert!(retrieved.is_some());
     assert_eq!(retrieved.unwrap().summary, Some(summary_text.to_string()));
 
-    let (summary_status, summary_attempts, summary_fail_reason, _, _, _) =
+    let (summary_status, text_ai_attempts, text_ai_fail_reason, _) =
         get_processing_state(&db, &saved.bookmark_id).await?;
     assert_eq!(summary_status, AiGenerationStatus::Done);
-    assert_eq!(summary_attempts, 0);
-    assert!(summary_fail_reason.is_none());
+    assert_eq!(text_ai_attempts, 0);
+    assert!(text_ai_fail_reason.is_none());
 
     Ok(())
 }
@@ -518,11 +510,10 @@ async fn test_get_tag_count_by_user() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
-async fn test_get_bookmarks_pending_tag_generation_respects_backoff() -> anyhow::Result<()> {
+async fn test_text_ai_claim_and_backoff() -> anyhow::Result<()> {
     let db = TestDatabase::new().await?;
     let user_id = create_test_user(&db).await?;
 
-    // Create bookmark with tags
     let tagged_bookmark = create_test_bookmark(
         user_id,
         "https://example.com/tagged",
@@ -532,7 +523,6 @@ async fn test_get_bookmarks_pending_tag_generation_respects_backoff() -> anyhow:
     );
     bookmark::save(&db.pool, &tagged_bookmark, "content1").await?;
 
-    // Create bookmark with empty tags array
     let empty_tags_bookmark = create_test_bookmark(
         user_id,
         "https://example.com/empty",
@@ -542,7 +532,6 @@ async fn test_get_bookmarks_pending_tag_generation_respects_backoff() -> anyhow:
     );
     let empty_saved = bookmark::save(&db.pool, &empty_tags_bookmark, "content2").await?;
 
-    // Create bookmark with null tags
     let null_tags_bookmark = create_test_bookmark(
         user_id,
         "https://example.com/null",
@@ -550,21 +539,28 @@ async fn test_get_bookmarks_pending_tag_generation_respects_backoff() -> anyhow:
         "example.com",
         None,
     );
-    let null_saved = bookmark::save(&db.pool, &null_tags_bookmark, "content3").await?;
+    let _null_saved = bookmark::save(&db.pool, &null_tags_bookmark, "content3").await?;
 
     let now = Utc::now() + Duration::seconds(1);
-    let pending = bookmark::get_bookmarks_pending_tag_generation(&db.pool, 10, now).await?;
-    assert_eq!(pending.len(), 2);
+    let claim_window = Duration::seconds(1);
+    let pending = ai::claim_bookmarks_pending_text_ai(&db.pool, 10, now, claim_window).await?;
+    assert_eq!(pending.len(), 3);
     let urls: Vec<&str> = pending
         .iter()
         .map(|candidate| candidate.bookmark.url.as_str())
         .collect();
     assert!(urls.contains(&"https://example.com/empty"));
     assert!(urls.contains(&"https://example.com/null"));
-    assert!(!urls.contains(&"https://example.com/tagged"));
+    assert!(urls.contains(&"https://example.com/tagged"));
+    let tagged_candidate = pending
+        .iter()
+        .find(|candidate| candidate.bookmark.bookmark_id == tagged_bookmark.bookmark_id)
+        .expect("tagged bookmark should still need a generated summary");
+    assert!(tagged_candidate.needs_summary);
+    assert!(!tagged_candidate.needs_tags);
 
     let retry_at = now + Duration::minutes(5);
-    bookmark::mark_tag_generation_failure(
+    ai::mark_text_ai_failure(
         &db.pool,
         user_id,
         &empty_saved.bookmark_id,
@@ -576,17 +572,18 @@ async fn test_get_bookmarks_pending_tag_generation_respects_backoff() -> anyhow:
     .await?;
 
     let pending_before_retry =
-        bookmark::get_bookmarks_pending_tag_generation(&db.pool, 10, now).await?;
-    assert_eq!(pending_before_retry.len(), 1);
-    assert_eq!(
-        pending_before_retry[0].bookmark.bookmark_id,
-        null_saved.bookmark_id
-    );
+        ai::claim_bookmarks_pending_text_ai(&db.pool, 10, now + Duration::seconds(2), claim_window)
+            .await?;
+    assert_eq!(pending_before_retry.len(), 2);
+    assert!(pending_before_retry
+        .iter()
+        .all(|candidate| candidate.bookmark.bookmark_id != empty_saved.bookmark_id));
 
-    let pending_after_retry = bookmark::get_bookmarks_pending_tag_generation(
+    let pending_after_retry = ai::claim_bookmarks_pending_text_ai(
         &db.pool,
         10,
         retry_at + Duration::seconds(1),
+        claim_window,
     )
     .await?;
     let retried = pending_after_retry
@@ -595,7 +592,7 @@ async fn test_get_bookmarks_pending_tag_generation_respects_backoff() -> anyhow:
         .expect("bookmark should be retried after backoff");
     assert_eq!(retried.attempts, 1);
 
-    bookmark::mark_tag_generation_failure(
+    ai::mark_text_ai_failure(
         &db.pool,
         user_id,
         &empty_saved.bookmark_id,
@@ -606,9 +603,13 @@ async fn test_get_bookmarks_pending_tag_generation_respects_backoff() -> anyhow:
     )
     .await?;
 
-    let after_terminal_failure =
-        bookmark::get_bookmarks_pending_tag_generation(&db.pool, 10, retry_at + Duration::hours(1))
-            .await?;
+    let after_terminal_failure = ai::claim_bookmarks_pending_text_ai(
+        &db.pool,
+        10,
+        retry_at + Duration::hours(1),
+        claim_window,
+    )
+    .await?;
     assert!(after_terminal_failure
         .iter()
         .all(|candidate| candidate.bookmark.bookmark_id != empty_saved.bookmark_id));
@@ -617,11 +618,10 @@ async fn test_get_bookmarks_pending_tag_generation_respects_backoff() -> anyhow:
 }
 
 #[tokio::test]
-async fn test_get_bookmarks_pending_summary_generation_respects_backoff() -> anyhow::Result<()> {
+async fn test_embedding_claim_and_backoff() -> anyhow::Result<()> {
     let db = TestDatabase::new().await?;
     let user_id = create_test_user(&db).await?;
 
-    // Create bookmark with summary
     let with_summary = create_test_bookmark(
         user_id,
         "https://example.com/summary",
@@ -629,36 +629,32 @@ async fn test_get_bookmarks_pending_summary_generation_respects_backoff() -> any
         "example.com",
         None,
     );
-    let saved_with_summary = bookmark::save(&db.pool, &with_summary, "content1").await?;
-    let _saved_with_summary = bookmark::update_summary(
-        &db.pool,
-        user_id,
-        &saved_with_summary.bookmark_id,
-        "This has a summary",
-    )
-    .await?;
+    let _saved_with_summary = bookmark::save(&db.pool, &with_summary, &"A".repeat(250)).await?;
 
-    // Create bookmark without summary
-    let without_summary = create_test_bookmark(
+    let short_bookmark = create_test_bookmark(
         user_id,
-        "https://example.com/no-summary",
-        "No Summary",
+        "https://example.com/no-embedding",
+        "No Embedding",
         "example.com",
         None,
     );
-    let pending_summary = bookmark::save(&db.pool, &without_summary, "content2").await?;
+    let short_saved = bookmark::save(&db.pool, &short_bookmark, "short").await?;
 
     let now = Utc::now() + Duration::seconds(1);
-    let pending = bookmark::get_bookmarks_pending_summary_generation_at(&db.pool, 10, now).await?;
+    let pending =
+        ai::claim_bookmarks_pending_embeddings(&db.pool, 10, now, Duration::minutes(15)).await?;
     assert_eq!(pending.len(), 1);
-    assert_eq!(pending[0].bookmark.bookmark_id, pending_summary.bookmark_id);
+    assert_eq!(pending[0].bookmark_id, with_summary.bookmark_id);
     assert_eq!(pending[0].attempts, 0);
+    assert!(pending
+        .iter()
+        .all(|candidate| candidate.bookmark_id != short_saved.bookmark_id));
 
     let retry_at = now + Duration::minutes(15);
-    bookmark::mark_summary_generation_failure(
+    ai::mark_embedding_failure(
         &db.pool,
         user_id,
-        &pending_summary.bookmark_id,
+        &with_summary.bookmark_id,
         AiGenerationStatus::Pending,
         1,
         retry_at,
@@ -667,22 +663,23 @@ async fn test_get_bookmarks_pending_summary_generation_respects_backoff() -> any
     .await?;
 
     let before_retry =
-        bookmark::get_bookmarks_pending_summary_generation_at(&db.pool, 10, now).await?;
+        ai::claim_bookmarks_pending_embeddings(&db.pool, 10, now, Duration::minutes(15)).await?;
     assert!(before_retry.is_empty());
 
-    let after_retry = bookmark::get_bookmarks_pending_summary_generation_at(
+    let after_retry = ai::claim_bookmarks_pending_embeddings(
         &db.pool,
         10,
         retry_at + Duration::seconds(1),
+        Duration::minutes(15),
     )
     .await?;
     assert_eq!(after_retry.len(), 1);
     assert_eq!(after_retry[0].attempts, 1);
 
-    bookmark::mark_summary_generation_failure(
+    ai::mark_embedding_failure(
         &db.pool,
         user_id,
-        &pending_summary.bookmark_id,
+        &with_summary.bookmark_id,
         AiGenerationStatus::Fail,
         5,
         retry_at,
@@ -690,10 +687,11 @@ async fn test_get_bookmarks_pending_summary_generation_respects_backoff() -> any
     )
     .await?;
 
-    let after_terminal_failure = bookmark::get_bookmarks_pending_summary_generation_at(
+    let after_terminal_failure = ai::claim_bookmarks_pending_embeddings(
         &db.pool,
         10,
         retry_at + Duration::hours(1),
+        Duration::minutes(15),
     )
     .await?;
     assert!(after_terminal_failure.is_empty());

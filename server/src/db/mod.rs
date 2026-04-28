@@ -6,8 +6,9 @@ use secrecy::ExposeSecret;
 use tracing::{debug, info, warn};
 
 use crate::error::{Error, Result};
-use crate::PgParams;
+use crate::{PgParams, EMBEDDING_PIPELINE_VERSION};
 
+pub mod ai;
 pub mod bookmark;
 pub mod bookmark_task;
 pub mod chunks;
@@ -40,7 +41,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;";
 
-const SCHEMAS: [(i32, &str); 8] = [
+const SCHEMAS: [(i32, &str); 9] = [
     (
         1,
         include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/schema/1_unified.sql")),
@@ -92,6 +93,13 @@ const SCHEMAS: [(i32, &str); 8] = [
         include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/schema/8_flexible_embeddings.sql"
+        )),
+    ),
+    (
+        9,
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/schema/9_unified_ai_pipeline.sql"
         )),
     ),
 ];
@@ -212,6 +220,11 @@ pub async fn reconcile_embedding_profile(
             );
             client.execute("TRUNCATE bookmark_chunk", &[]).await?;
             upsert_embedding_profile(&client, target).await?;
+            drop(client);
+            ai::reset_embedding_generation_state(pool, EMBEDDING_PIPELINE_VERSION).await?;
+            let client = pool.get().await?;
+            ensure_embedding_index(&client, target.dimensions).await?;
+            return Ok(());
         }
         None if chunk_count > 0 => {
             warn!(
@@ -223,6 +236,11 @@ pub async fn reconcile_embedding_profile(
             );
             client.execute("TRUNCATE bookmark_chunk", &[]).await?;
             upsert_embedding_profile(&client, target).await?;
+            drop(client);
+            ai::reset_embedding_generation_state(pool, EMBEDDING_PIPELINE_VERSION).await?;
+            let client = pool.get().await?;
+            ensure_embedding_index(&client, target.dimensions).await?;
+            return Ok(());
         }
         None => {
             info!(

@@ -174,7 +174,6 @@ pub struct BookmarkTask {
     pub url: String,
     pub status: BookmarkTaskStatus,
     pub tags: Option<Vec<String>>,
-    pub summary: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub next_delivery: DateTime<Utc>,

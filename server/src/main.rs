@@ -34,7 +34,19 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    info!(?config, "Starting Bookmark Hub Server");
+    config.llm.validate_runtime_settings()?;
+    let ai_settings = daemon::AiDaemonSettings::from_llm_params(&config.llm)?;
+
+    info!(
+        bind_address = %config.bind,
+        data_dir = ?config.data_dir,
+        llm_provider = %config.llm.llm_provider,
+        text_chunk_size = ai_settings.text_chunk_size,
+        text_chunk_overlap = ai_settings.text_chunk_overlap,
+        embed_chunk_size = ai_settings.embed_chunk_size,
+        embed_chunk_overlap = ai_settings.embed_chunk_overlap,
+        "Starting Bookmark Hub Server"
+    );
 
     let llm_client = server::llm::build_llm_client(&config.llm).await?;
     let llm_enabled = llm_client.is_some();
@@ -76,20 +88,17 @@ async fn main() -> anyhow::Result<()> {
         new_task_rx,
         new_bookmark_tx,
     ));
-    let tags_daemon = tokio::spawn(setup_tags_daemon(
+    let text_ai_daemon = tokio::spawn(setup_text_ai_daemon(
         llm_client.clone(),
         pool.clone(),
         new_bookmark_rx.clone(),
-    ));
-    let summary_daemon = tokio::spawn(setup_summary_daemon(
-        llm_client.clone(),
-        pool.clone(),
-        new_bookmark_rx.clone(),
+        ai_settings.clone(),
     ));
     let embeddings_daemon = tokio::spawn(setup_embeddings_daemon(
         llm_client.clone(),
         pool.clone(),
         new_bookmark_rx.clone(),
+        ai_settings,
     ));
 
     info!("Setting up HTTP server");
@@ -119,33 +128,18 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
         },
-        result = tags_daemon => {
+        result = text_ai_daemon => {
             match result {
                 Ok(Err(error)) => {
-                    error!(?error, "Tags daemon error");
+                    error!(?error, "Unified text AI daemon error");
                     std::process::exit(1);
                 },
                 Err(error) => {
-                    error!(?error, "Join error in tags daemon");
+                    error!(?error, "Join error in unified text AI daemon");
                     std::process::exit(1);
                 },
                 Ok(Ok(_)) => {
-                    info!("Tags daemon stopped");
-                }
-            }
-        }
-        result = summary_daemon => {
-            match result {
-                Ok(Err(error)) => {
-                    error!(?error, "Summary daemon error");
-                    std::process::exit(1);
-                },
-                Err(error) => {
-                    error!(?error, "Join error in summary daemon");
-                    std::process::exit(1);
-                },
-                Ok(Ok(_)) => {
-                    info!("Summary daemon stopped");
+                    info!("Unified text AI daemon stopped");
                 }
             }
         }
@@ -266,35 +260,19 @@ async fn setup_add_bookmark_daemon(
     daemon::add_bookmark::run(&pool, &config, new_task_rx, new_bookmark_tx).await
 }
 
-async fn setup_tags_daemon(
+async fn setup_text_ai_daemon(
     llm_client: Option<LlmClient>,
     pool: PgPool,
     new_bookmark_rx: tokio::sync::watch::Receiver<()>,
+    settings: daemon::AiDaemonSettings,
 ) -> anyhow::Result<()> {
     match llm_client {
         Some(client) => {
-            info!(model = %client.text_model, "Starting tags daemon");
-            daemon::tag::run(&pool, new_bookmark_rx, &client).await
+            info!(model = %client.text_model, "Starting unified text AI daemon");
+            daemon::text_ai::run(&pool, new_bookmark_rx, &client, &settings).await
         }
         None => {
-            warn!("No LLM configured, disabling tags daemon");
-            pending::<anyhow::Result<()>>().await
-        }
-    }
-}
-
-async fn setup_summary_daemon(
-    llm_client: Option<LlmClient>,
-    pool: PgPool,
-    new_bookmark_rx: tokio::sync::watch::Receiver<()>,
-) -> anyhow::Result<()> {
-    match llm_client {
-        Some(client) => {
-            info!(model = %client.text_model, "Starting summary daemon");
-            daemon::summary::run(&pool, new_bookmark_rx, &client).await
-        }
-        None => {
-            warn!("No LLM configured, disabling summary daemon");
+            warn!("No LLM configured, disabling unified text AI daemon");
             pending::<anyhow::Result<()>>().await
         }
     }
@@ -304,6 +282,7 @@ async fn setup_embeddings_daemon(
     llm_client: Option<LlmClient>,
     pool: PgPool,
     new_bookmark_rx: tokio::sync::watch::Receiver<()>,
+    settings: daemon::AiDaemonSettings,
 ) -> anyhow::Result<()> {
     match llm_client {
         Some(client) => {
@@ -311,7 +290,7 @@ async fn setup_embeddings_daemon(
                 embedding_model = %client.embedding_model,
                 "Starting embeddings daemon"
             );
-            daemon::embeddings::run(&pool, new_bookmark_rx, &client).await
+            daemon::embeddings::run(&pool, new_bookmark_rx, &client, &settings).await
         }
         None => {
             warn!("No LLM configured, disabling embeddings daemon");

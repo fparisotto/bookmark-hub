@@ -112,6 +112,9 @@ export LLM_TEXT_MODEL=qwen3.5:4b
 export LLM_EMBEDDING_MODEL=qwen3-embedding:0.6b
 # Optional override; auto-detected when omitted
 export LLM_EMBEDDING_DIMENSION=1024
+# Optional text chunk overrides; defaults stay conservative for local models
+# export AI_TEXT_CHUNK_SIZE=1000
+# export AI_TEXT_CHUNK_OVERLAP=100
 ```
 
 **OpenAI:**
@@ -141,6 +144,9 @@ export GEMINI_API_KEY=AIza...
 export LLM_TEXT_MODEL=gemini-2.5-flash
 export LLM_EMBEDDING_MODEL=gemini-embedding-001
 export LLM_EMBEDDING_DIMENSION=1536
+# Default text chunking is larger for non-Ollama providers to reduce request count
+# export AI_TEXT_CHUNK_SIZE=2000
+# export AI_TEXT_CHUNK_OVERLAP=200
 ```
 
 **OpenRouter:**
@@ -156,6 +162,13 @@ export LLM_EMBEDDING_DIMENSION=1536
 
 You can mix providers — for example, use Anthropic for text and OpenAI for embeddings via `LLM_EMBEDDING_PROVIDER` and `LLM_EMBEDDING_API_KEY`.
 
+Text chunk defaults are provider-aware when `AI_TEXT_CHUNK_*` is unset:
+
+- `ollama` uses `1000` size and `100` overlap
+- other text providers use `2000` size and `200` overlap
+
+Embeddings use `AI_EMBED_CHUNK_SIZE=2000` and `AI_EMBED_CHUNK_OVERLAP=200` by default.
+
 | Variable | Default | Description |
 |---|---|---|
 | `LLM_PROVIDER` | `ollama` | Text completion provider |
@@ -165,6 +178,20 @@ You can mix providers — for example, use Anthropic for text and OpenAI for emb
 | `LLM_EMBEDDING_DIMENSION` | _(auto-detected)_ | Optional embedding vector dimension override |
 | `LLM_EMBEDDING_API_KEY` | _(none)_ | API key for embedding provider if different |
 | `LLM_REQUEST_TIMEOUT_SECS` | `120` | HTTP request timeout for LLM calls |
+| `AI_TEXT_CHUNK_SIZE` | provider-aware | Text chunk size. Defaults to `1000` for `ollama`, `2000` otherwise |
+| `AI_TEXT_CHUNK_OVERLAP` | provider-aware | Text chunk overlap. Defaults to `100` for `ollama`, `200` otherwise |
+| `AI_EMBED_CHUNK_SIZE` | `2000` | Embedding chunk size |
+| `AI_EMBED_CHUNK_OVERLAP` | `200` | Embedding chunk overlap |
+| `AI_TEXT_CLAIM_WINDOW_SECS` | `1800` | Lease window for claimed text-AI work |
+| `AI_EMBED_CLAIM_WINDOW_SECS` | `900` | Lease window for claimed embedding work |
+| `LLM_MAX_IN_FLIGHT_TOTAL` | `4` | Shared concurrency cap across all LLM requests |
+| `LLM_MAX_IN_FLIGHT_BACKGROUND` | `2` | Background concurrency cap reserved below the total cap |
+| `LLM_TEXT_RPM_INTERACTIVE` | _(unset)_ | Optional interactive text request pacing |
+| `LLM_TEXT_RPM_BACKGROUND` | _(unset)_ | Optional background text request pacing |
+| `LLM_EMBED_RPM_INTERACTIVE` | _(unset)_ | Optional interactive embedding pacing |
+| `LLM_EMBED_RPM_BACKGROUND` | _(unset)_ | Optional background embedding pacing |
+| `LLM_RETRY_BASE_DELAY_MS` | `1000` | Base delay for transient LLM retries |
+| `LLM_RETRY_MAX_DELAY_MS` | `30000` | Maximum delay for transient LLM retries |
 | `OLLAMA_URL` | `http://localhost:11434` | Ollama base URL |
 | `OPENAI_API_KEY` | _(none)_ | OpenAI API key |
 | `ANTHROPIC_API_KEY` | _(none)_ | Anthropic API key |

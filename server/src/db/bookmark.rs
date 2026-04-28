@@ -13,8 +13,7 @@ use uuid::Uuid;
 use super::{PgPool, ResultExt};
 use crate::bookmark_identity::canonicalize_url_str;
 use crate::error::{Error, Result};
-
-const MAX_FAILURE_REASON_LEN: usize = 2048;
+use crate::{EMBEDDING_PIPELINE_VERSION, TEXT_AI_PIPELINE_VERSION};
 
 fn normalize_tags(tags: &[String]) -> Vec<String> {
     let mut seen = HashSet::new();
@@ -22,6 +21,15 @@ fn normalize_tags(tags: &[String]) -> Vec<String> {
         .map(|t| t.trim().to_lowercase())
         .filter(|t| !t.is_empty() && seen.insert(t.clone()))
         .collect()
+}
+
+fn normalized_tag_option(tags: &[String]) -> Option<Vec<String>> {
+    let tags = normalize_tags(tags);
+    if tags.is_empty() {
+        None
+    } else {
+        Some(tags)
+    }
 }
 
 fn status_for_initial_tags(tags: Option<&[String]>) -> AiGenerationStatus {
@@ -38,12 +46,23 @@ fn status_for_initial_summary(summary: Option<&str>) -> AiGenerationStatus {
     }
 }
 
-fn truncate_fail_reason(fail_reason: &str) -> String {
-    if fail_reason.chars().count() <= MAX_FAILURE_REASON_LEN {
-        return fail_reason.to_string();
+fn status_for_initial_text_ai(
+    summary_status: AiGenerationStatus,
+    tag_status: AiGenerationStatus,
+) -> AiGenerationStatus {
+    if summary_status == AiGenerationStatus::Done && tag_status == AiGenerationStatus::Done {
+        AiGenerationStatus::Done
+    } else {
+        AiGenerationStatus::Pending
     }
+}
 
-    fail_reason.chars().take(MAX_FAILURE_REASON_LEN).collect()
+fn status_for_initial_embeddings(text_content: &str) -> AiGenerationStatus {
+    if text_content.len() >= 200 {
+        AiGenerationStatus::Pending
+    } else {
+        AiGenerationStatus::Done
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, FromSql, ToSql)]
@@ -58,6 +77,8 @@ pub enum AiGenerationStatus {
 pub struct BookmarkGenerationCandidate {
     pub bookmark: Bookmark,
     pub attempts: i16,
+    pub needs_summary: bool,
+    pub needs_tags: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -147,7 +168,12 @@ pub async fn get_by_tag(pool: &PgPool, user_id: Uuid, tag: &str) -> Result<Vec<B
                 .map_err(Error::from)
         })
         .collect::<Result<Vec<_>>>()?;
-    info!(user_id = %user_id, tag = %tag, bookmark_count = %results.len(), "Found bookmarks with tag");
+    info!(
+        user_id = %user_id,
+        tag = %tag,
+        bookmark_count = %results.len(),
+        "Found bookmarks with tag"
+    );
     Ok(results)
 }
 
@@ -158,7 +184,12 @@ pub async fn get_by_canonical_url_and_user_id(
 ) -> Result<Option<Bookmark>> {
     const SQL: &str = "SELECT * FROM bookmark WHERE canonical_url = $1 AND user_id = $2;";
     let canonical_url = canonicalize_url_str(url)?;
-    debug!(url = %url, canonical_url = %canonical_url, user_id = %user_id, "Checking for existing bookmark");
+    debug!(
+        url = %url,
+        canonical_url = %canonical_url,
+        user_id = %user_id,
+        "Checking for existing bookmark"
+    );
     let client = pool.get().await?;
     let result = client
         .query_opt(SQL, &[&canonical_url, &user_id])
@@ -213,14 +244,28 @@ pub async fn update_tags(
     operation: &TagOperation,
 ) -> Result<Bookmark> {
     let (update_tag_sql, tags) = match operation {
-        TagOperation::Set(tags) => ("tags=$1", normalize_tags(tags)),
+        TagOperation::Set(tags) => ("tags=$1", normalized_tag_option(tags)),
         TagOperation::Append(tags) => (
-            "tags=(SELECT ARRAY(SELECT DISTINCT unnest(array_cat(COALESCE(tags, ARRAY[]::text[]), $1))))",
-            normalize_tags(tags),
+            "tags=(SELECT NULLIF(ARRAY(
+                SELECT DISTINCT unnest(array_cat(COALESCE(tags, ARRAY[]::text[]), COALESCE($1, ARRAY[]::text[])))
+            ), ARRAY[]::text[]))",
+            normalized_tag_option(tags),
         ),
     };
     let sql = format!(
-        "UPDATE bookmark SET {update_tag_sql}, tag_status='done', tag_attempts=0, tag_next_attempt_at=now(), tag_fail_reason=NULL, updated_at=now() WHERE bookmark_id=$2 AND user_id=$3 RETURNING *;"
+        "UPDATE bookmark
+         SET {update_tag_sql},
+             tag_status='done',
+             text_ai_status=CASE
+                 WHEN summary_status='done' THEN 'done'::task_status
+                 ELSE 'pending'::task_status
+             END,
+             text_ai_attempts=0,
+             text_ai_next_attempt_at=now(),
+             text_ai_fail_reason=NULL,
+             updated_at=now()
+         WHERE bookmark_id=$2 AND user_id=$3
+         RETURNING *;"
     );
     let client = pool.get().await?;
     let row = client
@@ -241,13 +286,31 @@ pub async fn update_tags(
 
 pub async fn save(pool: &PgPool, bookmark: &Bookmark, text_content: &str) -> Result<Bookmark> {
     let canonical_url = canonicalize_url_str(&bookmark.url)?;
+    let normalized_tags: Option<Vec<String>> = bookmark
+        .tags
+        .as_ref()
+        .and_then(|tags| normalized_tag_option(tags));
+    let summary = bookmark
+        .summary
+        .as_ref()
+        .map(|summary| summary.trim().to_string())
+        .filter(|summary| !summary.is_empty());
+    let summary_status = status_for_initial_summary(summary.as_deref());
+    let tag_status = status_for_initial_tags(normalized_tags.as_deref());
+    let text_ai_status = status_for_initial_text_ai(summary_status, tag_status);
+    let embedding_status = status_for_initial_embeddings(text_content);
+
     const SQL: &str = r#"
     INSERT INTO bookmark
-    (bookmark_id, user_id, url, canonical_url, domain, title, text_content, tags, summary, summary_status, tag_status, created_at, updated_at)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now(), now()) RETURNING *;"#;
-    let normalized_tags: Option<Vec<String>> = bookmark.tags.as_ref().map(|t| normalize_tags(t));
-    let summary_status = status_for_initial_summary(bookmark.summary.as_deref());
-    let tag_status = status_for_initial_tags(normalized_tags.as_deref());
+        (bookmark_id, user_id, url, canonical_url, domain, title, text_content, tags, summary,
+         summary_status, tag_status, text_ai_status, text_ai_attempts, text_ai_next_attempt_at,
+         text_ai_fail_reason, text_ai_pipeline_version, embedding_status, embedding_attempts,
+         embedding_next_attempt_at, embedding_fail_reason, embedding_pipeline_version, created_at, updated_at)
+    VALUES
+        ($1, $2, $3, $4, $5, $6, $7, $8, $9,
+         $10, $11, $12, 0, now(), NULL, $13, $14, 0, now(), NULL, $15, now(), now())
+    RETURNING *;"#;
+
     let client = pool.get().await?;
     let row = client
         .query_one(
@@ -261,9 +324,13 @@ pub async fn save(pool: &PgPool, bookmark: &Bookmark, text_content: &str) -> Res
                 &bookmark.title,
                 &text_content,
                 &normalized_tags,
-                &bookmark.summary,
+                &summary,
                 &summary_status,
                 &tag_status,
+                &text_ai_status,
+                &TEXT_AI_PIPELINE_VERSION,
+                &embedding_status,
+                &EMBEDDING_PIPELINE_VERSION,
             ],
         )
         .await
@@ -383,10 +450,30 @@ pub async fn update_summary(
     bookmark_id: &str,
     summary: &str,
 ) -> Result<Bookmark> {
-    const SQL: &str = "UPDATE bookmark SET summary = $1, summary_status='done', summary_attempts=0, summary_next_attempt_at=now(), summary_fail_reason=NULL, updated_at=now() WHERE bookmark_id=$2 AND user_id=$3 RETURNING *;";
+    let summary = summary.trim();
+    let summary = if summary.is_empty() {
+        None
+    } else {
+        Some(summary)
+    };
     let client = pool.get().await?;
     let row = client
-        .query_one(SQL, &[&summary, &bookmark_id, &user_id])
+        .query_one(
+            "UPDATE bookmark
+             SET summary = $1,
+                 summary_status='done',
+                 text_ai_status=CASE
+                     WHEN tag_status='done' THEN 'done'::task_status
+                     ELSE 'pending'::task_status
+                 END,
+                 text_ai_attempts=0,
+                 text_ai_next_attempt_at=now(),
+                 text_ai_fail_reason=NULL,
+                 updated_at=now()
+             WHERE bookmark_id=$2 AND user_id=$3
+             RETURNING *;",
+            &[&summary, &bookmark_id, &user_id],
+        )
         .await?;
     let result = RowBookmark::try_from_row(&row)
         .map(Bookmark::from)
@@ -394,7 +481,7 @@ pub async fn update_summary(
     info!(
         bookmark_id = %bookmark_id,
         user_id = %user_id,
-        summary_length = %summary.len(),
+        summary_length = %result.summary.as_ref().map(|s| s.len()).unwrap_or(0),
         "Updated summary for bookmark"
     );
     Ok(result)
@@ -415,48 +502,15 @@ pub async fn get_text_content(
         .transpose()?;
     match &result {
         Some(content) => {
-            debug!(bookmark_id = %bookmark_id, content_length = %content.len(), "Found text content")
+            debug!(
+                bookmark_id = %bookmark_id,
+                content_length = %content.len(),
+                "Found text content"
+            )
         }
         None => debug!(bookmark_id = %bookmark_id, "No text content found"),
     }
     Ok(result)
-}
-
-pub async fn get_bookmarks_pending_tag_generation(
-    pool: &PgPool,
-    limit: usize,
-    now: DateTime<Utc>,
-) -> Result<Vec<BookmarkGenerationCandidate>> {
-    const SQL: &str = r#"
-        SELECT *
-        FROM bookmark
-        WHERE tag_status = $1
-          AND tag_next_attempt_at <= $2
-          AND (tags IS NULL OR coalesce(array_length(tags, 1), 0) = 0)
-        ORDER BY tag_next_attempt_at ASC, created_at ASC
-        LIMIT $3;
-    "#;
-    debug!(limit = %limit, current_time = %now, "Fetching bookmarks pending tag generation");
-    let client = pool.get().await?;
-    let status = AiGenerationStatus::Pending;
-    let results = client
-        .query(SQL, &[&status, &now, &(limit as i64)])
-        .await?
-        .iter()
-        .map(|row| {
-            let bookmark = RowBookmark::try_from_row(row)
-                .map(Bookmark::from)
-                .map_err(Error::from)?;
-            let attempts: i16 = row.try_get("tag_attempts").map_err(Error::from)?;
-            Ok(BookmarkGenerationCandidate { bookmark, attempts })
-        })
-        .collect::<Result<Vec<_>>>()?;
-    info!(
-        found_count = %results.len(),
-        limit = %limit,
-        "Found bookmarks pending tag generation"
-    );
-    Ok(results)
 }
 
 pub async fn delete(pool: &PgPool, user_id: Uuid, bookmark_id: &str) -> Result<bool> {
@@ -468,140 +522,11 @@ pub async fn delete(pool: &PgPool, user_id: Uuid, bookmark_id: &str) -> Result<b
         info!(bookmark_id = %bookmark_id, user_id = %user_id, "Bookmark deleted");
         Ok(true)
     } else {
-        debug!(bookmark_id = %bookmark_id, user_id = %user_id, "Bookmark not found for deletion");
+        debug!(
+            bookmark_id = %bookmark_id,
+            user_id = %user_id,
+            "Bookmark not found for deletion"
+        );
         Ok(false)
     }
-}
-
-pub async fn get_bookmarks_pending_summary_generation(
-    pool: &PgPool,
-    limit: usize,
-) -> Result<Vec<BookmarkGenerationCandidate>> {
-    let now = Utc::now();
-    get_bookmarks_pending_summary_generation_at(pool, limit, now).await
-}
-
-pub async fn get_bookmarks_pending_summary_generation_at(
-    pool: &PgPool,
-    limit: usize,
-    now: DateTime<Utc>,
-) -> Result<Vec<BookmarkGenerationCandidate>> {
-    const SQL: &str = r#"
-        SELECT *
-        FROM bookmark
-        WHERE summary_status = $1
-          AND summary_next_attempt_at <= $2
-          AND summary IS NULL
-        ORDER BY summary_next_attempt_at ASC, created_at ASC
-        LIMIT $3;
-    "#;
-    debug!(limit = %limit, current_time = %now, "Fetching bookmarks pending summary generation");
-    let client = pool.get().await?;
-    let status = AiGenerationStatus::Pending;
-    let results = client
-        .query(SQL, &[&status, &now, &(limit as i64)])
-        .await?
-        .iter()
-        .map(|row| {
-            let bookmark = RowBookmark::try_from_row(row)
-                .map(Bookmark::from)
-                .map_err(Error::from)?;
-            let attempts: i16 = row.try_get("summary_attempts").map_err(Error::from)?;
-            Ok(BookmarkGenerationCandidate { bookmark, attempts })
-        })
-        .collect::<Result<Vec<_>>>()?;
-    info!(
-        found_count = %results.len(),
-        limit = %limit,
-        "Found bookmarks pending summary generation"
-    );
-    Ok(results)
-}
-
-pub async fn mark_summary_generation_failure(
-    pool: &PgPool,
-    user_id: Uuid,
-    bookmark_id: &str,
-    status: AiGenerationStatus,
-    attempts: i16,
-    next_attempt_at: DateTime<Utc>,
-    fail_reason: &str,
-) -> Result<()> {
-    const SQL: &str = r#"
-        UPDATE bookmark
-        SET summary_status = $1,
-            summary_attempts = $2,
-            summary_next_attempt_at = $3,
-            summary_fail_reason = $4,
-            updated_at = now()
-        WHERE bookmark_id = $5 AND user_id = $6;
-    "#;
-    let client = pool.get().await?;
-    let fail_reason = truncate_fail_reason(fail_reason);
-    let rows_affected = client
-        .execute(
-            SQL,
-            &[
-                &status,
-                &attempts,
-                &next_attempt_at,
-                &fail_reason,
-                &bookmark_id,
-                &user_id,
-            ],
-        )
-        .await?;
-    info!(
-        bookmark_id = %bookmark_id,
-        user_id = %user_id,
-        attempts = %attempts,
-        status = ?status,
-        rows_affected = %rows_affected,
-        "Recorded summary generation failure"
-    );
-    Ok(())
-}
-
-pub async fn mark_tag_generation_failure(
-    pool: &PgPool,
-    user_id: Uuid,
-    bookmark_id: &str,
-    status: AiGenerationStatus,
-    attempts: i16,
-    next_attempt_at: DateTime<Utc>,
-    fail_reason: &str,
-) -> Result<()> {
-    const SQL: &str = r#"
-        UPDATE bookmark
-        SET tag_status = $1,
-            tag_attempts = $2,
-            tag_next_attempt_at = $3,
-            tag_fail_reason = $4,
-            updated_at = now()
-        WHERE bookmark_id = $5 AND user_id = $6;
-    "#;
-    let client = pool.get().await?;
-    let fail_reason = truncate_fail_reason(fail_reason);
-    let rows_affected = client
-        .execute(
-            SQL,
-            &[
-                &status,
-                &attempts,
-                &next_attempt_at,
-                &fail_reason,
-                &bookmark_id,
-                &user_id,
-            ],
-        )
-        .await?;
-    info!(
-        bookmark_id = %bookmark_id,
-        user_id = %user_id,
-        attempts = %attempts,
-        status = ?status,
-        rows_affected = %rows_affected,
-        "Recorded tag generation failure"
-    );
-    Ok(())
 }

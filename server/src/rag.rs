@@ -173,7 +173,7 @@ impl RagEngine {
         request: &RagQueryRequest,
     ) -> Result<Vec<RagChunkMatch>> {
         // Generate embedding for the question
-        let query_embedding = llm::embeddings(&self.client, question)
+        let query_embedding = llm::embeddings_interactive(&self.client, question)
             .await
             .context("Failed to generate embedding for question")?;
 

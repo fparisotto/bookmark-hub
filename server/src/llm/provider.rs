@@ -1,11 +1,11 @@
 use std::time::Duration;
 
 use anyhow::{bail, Result};
-use rig::client::Nothing;
+use rig::client::{EmbeddingsClient, Nothing};
 use rig::providers::{anthropic, gemini, ollama, openai, openrouter};
+use secrecy::ExposeSecret;
 
-use super::{EmbeddingClient, LlmClient, TextClient};
-use crate::llm::embeddings_with_dimensions;
+use super::{EmbeddingClient, LlmClient, RetrySettings, TextClient};
 use crate::LlmParams;
 
 /// Strip trailing slash from URL to avoid double-slash in rig-core's URL
@@ -37,6 +37,7 @@ pub async fn build_llm_client(params: &LlmParams) -> Result<Option<LlmClient>> {
     };
 
     let text_client = build_text_client(params)?;
+    let limiter = std::sync::Arc::new(super::LlmLimiter::new(params));
 
     let emb_provider = params
         .llm_embedding_provider
@@ -52,12 +53,19 @@ pub async fn build_llm_client(params: &LlmParams) -> Result<Option<LlmClient>> {
             .await?;
 
     Ok(Some(LlmClient {
+        text_provider: params.llm_provider.clone(),
         text_client,
         text_model,
         embedding_provider: emb_provider.to_string(),
         embedding_client,
         embedding_model,
         embedding_ndims,
+        limiter,
+        retry: RetrySettings {
+            base_delay: Duration::from_millis(params.llm_retry_base_delay_ms),
+            max_delay: Duration::from_millis(params.llm_retry_max_delay_ms),
+            max_attempts: 2,
+        },
     }))
 }
 
@@ -75,8 +83,35 @@ async fn resolve_embedding_dimensions(
         return Ok(dimensions);
     }
 
-    let probe = embeddings_with_dimensions(client, model, "dimension probe", None).await?;
+    let probe = probe_embedding_dimensions(client, model).await?;
     Ok(probe.len())
+}
+
+async fn probe_embedding_dimensions(client: &EmbeddingClient, model: &str) -> Result<Vec<f32>> {
+    use rig::embeddings::EmbeddingModel;
+
+    let embedding = match client {
+        EmbeddingClient::Ollama(c) => {
+            c.embedding_model(model)
+                .embed_text("dimension probe")
+                .await?
+        }
+        EmbeddingClient::OpenAI(c) => {
+            c.embedding_model(model)
+                .embed_text("dimension probe")
+                .await?
+        }
+        EmbeddingClient::Gemini(c) => {
+            c.embedding_model(model)
+                .embed_text("dimension probe")
+                .await?
+        }
+    };
+    Ok(embedding
+        .vec
+        .into_iter()
+        .map(|value| value as f32)
+        .collect())
 }
 
 fn infer_embedding_dimensions(provider: &str, model: &str) -> Option<usize> {
@@ -114,7 +149,8 @@ fn build_text_client(params: &LlmParams) -> Result<TextClient> {
         "openai" => {
             let key = params
                 .openai_api_key
-                .as_deref()
+                .as_ref()
+                .map(ExposeSecret::expose_secret)
                 .ok_or_else(|| anyhow::anyhow!("OPENAI_API_KEY required for openai provider"))?;
             let client = openai::Client::builder()
                 .api_key(key)
@@ -123,9 +159,13 @@ fn build_text_client(params: &LlmParams) -> Result<TextClient> {
             Ok(TextClient::OpenAI(client))
         }
         "anthropic" => {
-            let key = params.anthropic_api_key.as_deref().ok_or_else(|| {
-                anyhow::anyhow!("ANTHROPIC_API_KEY required for anthropic provider")
-            })?;
+            let key = params
+                .anthropic_api_key
+                .as_ref()
+                .map(ExposeSecret::expose_secret)
+                .ok_or_else(|| {
+                    anyhow::anyhow!("ANTHROPIC_API_KEY required for anthropic provider")
+                })?;
             let client = anthropic::Client::builder()
                 .api_key(key)
                 .http_client(http_client(params)?)
@@ -135,7 +175,8 @@ fn build_text_client(params: &LlmParams) -> Result<TextClient> {
         "gemini" => {
             let key = params
                 .gemini_api_key
-                .as_deref()
+                .as_ref()
+                .map(ExposeSecret::expose_secret)
                 .ok_or_else(|| anyhow::anyhow!("GEMINI_API_KEY required for gemini provider"))?;
             let client = gemini::Client::builder()
                 .api_key(key)
@@ -144,9 +185,13 @@ fn build_text_client(params: &LlmParams) -> Result<TextClient> {
             Ok(TextClient::Gemini(client))
         }
         "openrouter" => {
-            let key = params.openrouter_api_key.as_deref().ok_or_else(|| {
-                anyhow::anyhow!("OPENROUTER_API_KEY required for openrouter provider")
-            })?;
+            let key = params
+                .openrouter_api_key
+                .as_ref()
+                .map(ExposeSecret::expose_secret)
+                .ok_or_else(|| {
+                    anyhow::anyhow!("OPENROUTER_API_KEY required for openrouter provider")
+                })?;
             let client = openrouter::Client::builder()
                 .api_key(key)
                 .http_client(http_client(params)?)
@@ -173,8 +218,9 @@ fn build_embedding_client(provider: &str, params: &LlmParams) -> Result<Embeddin
         "openai" => {
             let key = params
                 .llm_embedding_api_key
-                .as_deref()
-                .or(params.openai_api_key.as_deref())
+                .as_ref()
+                .map(ExposeSecret::expose_secret)
+                .or(params.openai_api_key.as_ref().map(ExposeSecret::expose_secret))
                 .ok_or_else(|| {
                     anyhow::anyhow!(
                         "OPENAI_API_KEY or LLM_EMBEDDING_API_KEY required for openai embeddings"
@@ -189,8 +235,9 @@ fn build_embedding_client(provider: &str, params: &LlmParams) -> Result<Embeddin
         "gemini" => {
             let key = params
                 .llm_embedding_api_key
-                .as_deref()
-                .or(params.gemini_api_key.as_deref())
+                .as_ref()
+                .map(ExposeSecret::expose_secret)
+                .or(params.gemini_api_key.as_ref().map(ExposeSecret::expose_secret))
                 .ok_or_else(|| {
                     anyhow::anyhow!(
                         "GEMINI_API_KEY or LLM_EMBEDDING_API_KEY required for gemini embeddings"
