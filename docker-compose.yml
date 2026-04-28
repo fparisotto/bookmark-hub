@@ -25,6 +25,8 @@ services:
       LLM_TEXT_MODEL: qwen3.5:4b
       LLM_EMBEDDING_MODEL: qwen3-embedding:0.6b
       LLM_EMBEDDING_DIMENSION: "1024"
+      AI_TEXT_CHUNK_SIZE: "1000"
+      AI_TEXT_CHUNK_OVERLAP: "100"
       CHROME_HOST: chrome
       CHROME_PORT: 3001
     volumes:

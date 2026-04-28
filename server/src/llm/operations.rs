@@ -1,9 +1,16 @@
 use anyhow::Result;
 use rig::client::{CompletionClient, EmbeddingsClient};
 use rig::completion::Prompt;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use super::{EmbeddingClient, LlmClient, TextClient};
+use super::{EmbeddingClient, LlmClient, LlmRequestKind, LlmWorkClass, TextClient};
+
+#[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema)]
+pub struct CombinedChunkAnalysis {
+    pub summary: String,
+    pub tags: Vec<String>,
+}
 
 #[derive(Deserialize, Serialize, schemars::JsonSchema)]
 struct TagsModelResponse {
@@ -34,148 +41,181 @@ const SYSTEM_PROMPT: &str = r#"You are an expert researcher. Follow these instru
   - Be succinct and cohesive.
 "#;
 
-/// Dispatch a structured extraction call across all text provider variants.
-/// Each arm builds an Extractor<ProviderModel, T> and calls .extract().
-macro_rules! extract {
-    ($client:expr, $model:expr, $preamble:expr, $prompt:expr, $T:ty) => {{
-        let preamble = $preamble;
-        let model = $model;
-        let prompt = $prompt;
-        let result: Result<$T> = match $client {
-            TextClient::Ollama(c) => {
-                let e = c.extractor::<$T>(model).preamble(preamble).build();
-                e.extract(prompt).await.map_err(anyhow::Error::from)
-            }
-            TextClient::OpenAI(c) => {
-                let e = c.extractor::<$T>(model).preamble(preamble).build();
-                e.extract(prompt).await.map_err(anyhow::Error::from)
-            }
-            TextClient::Anthropic(c) => {
-                let e = c.extractor::<$T>(model).preamble(preamble).build();
-                e.extract(prompt).await.map_err(anyhow::Error::from)
-            }
-            TextClient::Gemini(c) => {
-                let e = c.extractor::<$T>(model).preamble(preamble).build();
-                e.extract(prompt).await.map_err(anyhow::Error::from)
-            }
-            TextClient::OpenRouter(c) => {
-                let e = c.extractor::<$T>(model).preamble(preamble).build();
-                e.extract(prompt).await.map_err(anyhow::Error::from)
-            }
-        };
-        result
-    }};
+async fn extract_structured<T>(
+    client: &LlmClient,
+    class: LlmWorkClass,
+    preamble: &str,
+    prompt: &str,
+    operation_name: &str,
+) -> Result<T>
+where
+    T: DeserializeOwned + Serialize + schemars::JsonSchema + Send + Sync + 'static,
+{
+    client
+        .run_with_retry(class, LlmRequestKind::Text, operation_name, || async {
+            let result: Result<T> = match &client.text_client {
+                TextClient::Ollama(c) => {
+                    let e = c
+                        .extractor::<T>(&client.text_model)
+                        .preamble(preamble)
+                        .build();
+                    e.extract(prompt).await.map_err(anyhow::Error::from)
+                }
+                TextClient::OpenAI(c) => {
+                    let e = c
+                        .extractor::<T>(&client.text_model)
+                        .preamble(preamble)
+                        .build();
+                    e.extract(prompt).await.map_err(anyhow::Error::from)
+                }
+                TextClient::Anthropic(c) => {
+                    let e = c
+                        .extractor::<T>(&client.text_model)
+                        .preamble(preamble)
+                        .build();
+                    e.extract(prompt).await.map_err(anyhow::Error::from)
+                }
+                TextClient::Gemini(c) => {
+                    let e = c
+                        .extractor::<T>(&client.text_model)
+                        .preamble(preamble)
+                        .build();
+                    e.extract(prompt).await.map_err(anyhow::Error::from)
+                }
+                TextClient::OpenRouter(c) => {
+                    let e = c
+                        .extractor::<T>(&client.text_model)
+                        .preamble(preamble)
+                        .build();
+                    e.extract(prompt).await.map_err(anyhow::Error::from)
+                }
+            };
+            result
+        })
+        .await
 }
 
-/// Dispatch a plain text prompt across all text provider variants.
-macro_rules! prompt {
-    ($client:expr, $model:expr, $preamble:expr, $prompt:expr) => {{
-        let preamble = $preamble;
-        let model = $model;
-        let prompt = $prompt;
-        let result: Result<String> = match $client {
-            TextClient::Ollama(c) => {
-                let a = c.agent(model).preamble(preamble).build();
-                a.prompt(prompt).await.map_err(anyhow::Error::from)
+async fn prompt_text(
+    client: &LlmClient,
+    class: LlmWorkClass,
+    preamble: &str,
+    prompt: &str,
+    operation_name: &str,
+) -> Result<String> {
+    client
+        .run_with_retry(class, LlmRequestKind::Text, operation_name, || async {
+            match &client.text_client {
+                TextClient::Ollama(c) => {
+                    let a = c.agent(&client.text_model).preamble(preamble).build();
+                    a.prompt(prompt).await.map_err(anyhow::Error::from)
+                }
+                TextClient::OpenAI(c) => {
+                    let a = c.agent(&client.text_model).preamble(preamble).build();
+                    a.prompt(prompt).await.map_err(anyhow::Error::from)
+                }
+                TextClient::Anthropic(c) => {
+                    let a = c.agent(&client.text_model).preamble(preamble).build();
+                    a.prompt(prompt).await.map_err(anyhow::Error::from)
+                }
+                TextClient::Gemini(c) => {
+                    let a = c.agent(&client.text_model).preamble(preamble).build();
+                    a.prompt(prompt).await.map_err(anyhow::Error::from)
+                }
+                TextClient::OpenRouter(c) => {
+                    let a = c.agent(&client.text_model).preamble(preamble).build();
+                    a.prompt(prompt).await.map_err(anyhow::Error::from)
+                }
             }
-            TextClient::OpenAI(c) => {
-                let a = c.agent(model).preamble(preamble).build();
-                a.prompt(prompt).await.map_err(anyhow::Error::from)
-            }
-            TextClient::Anthropic(c) => {
-                let a = c.agent(model).preamble(preamble).build();
-                a.prompt(prompt).await.map_err(anyhow::Error::from)
-            }
-            TextClient::Gemini(c) => {
-                let a = c.agent(model).preamble(preamble).build();
-                a.prompt(prompt).await.map_err(anyhow::Error::from)
-            }
-            TextClient::OpenRouter(c) => {
-                let a = c.agent(model).preamble(preamble).build();
-                a.prompt(prompt).await.map_err(anyhow::Error::from)
-            }
-        };
-        result
-    }};
+        })
+        .await
 }
 
-pub async fn tags(client: &LlmClient, text: &str) -> Result<Vec<String>> {
-    const PROMPT_PREFIX: &str = r#"Extract up to 5 tags from this text slice.
-    Each tag must be 1-2 words maximum (e.g., "rust", "async runtime", "postgresql").
-    Focus on programming and technology topics.
-    Avoid generic terms like "programming", "technology", "software", or "code".
-    Only include tags that are specific and meaningful to this content.
-    It's ok to return fewer tags or none if nothing specific stands out.
-    Here's the text: "#;
+pub async fn analyze_chunk(client: &LlmClient, text: &str) -> Result<CombinedChunkAnalysis> {
+    const PROMPT_PREFIX: &str = r#"The following text is a slice of a larger article.
+Return:
+- a short summary that captures what is distinctive in this slice
+- up to 5 specific tags
 
-    let prompt = format!("{PROMPT_PREFIX}\n{text}");
-    let resp: TagsModelResponse = extract!(
-        &client.text_client,
-        &client.text_model,
+Rules:
+- focus on programming and technology topics
+- avoid generic tags like "software", "programming", or "technology"
+- tags must be 1-2 words
+- the summary should be concise, ideally one sentence
+- it is acceptable to return an empty summary or no tags if nothing specific stands out
+
+Text:"#;
+
+    extract_structured(
+        client,
+        LlmWorkClass::Background,
         SYSTEM_PROMPT,
-        &prompt,
-        TagsModelResponse
-    )?;
-    Ok(resp.tags)
+        &format!("{PROMPT_PREFIX}\n{text}"),
+        "analyze_chunk",
+    )
+    .await
 }
 
 pub async fn consolidate_tags(client: &LlmClient, tags: Vec<String>) -> Result<Vec<String>> {
     const PROMPT_PREFIX: &str = r#"Consolidate these tags into a final list of maximum 7 tags.
-    Merge synonyms and related concepts into the most specific term.
-    Each tag must be 1-2 words maximum. Remove anything generic or redundant.
-    Prefer specific terms over broad ones (e.g., "tokio" over "async", "react hooks" over "frontend").
-    Here are the tags: "#;
+Merge synonyms and related concepts into the most specific term.
+Each tag must be 1-2 words maximum. Remove anything generic or redundant.
+Prefer specific terms over broad ones (e.g., "tokio" over "async", "react hooks" over "frontend").
+Here are the tags: "#;
 
     let text = tags.join(", ");
-    let prompt = format!("{PROMPT_PREFIX}\n{text}");
-    let resp: TagsModelResponse = extract!(
-        &client.text_client,
-        &client.text_model,
+    let resp: TagsModelResponse = extract_structured(
+        client,
+        LlmWorkClass::Background,
         SYSTEM_PROMPT,
-        &prompt,
-        TagsModelResponse
-    )?;
+        &format!("{PROMPT_PREFIX}\n{text}"),
+        "consolidate_tags",
+    )
+    .await?;
     Ok(resp.tags)
-}
-
-pub async fn summary(client: &LlmClient, text: &str) -> Result<String> {
-    const PROMPT_PREFIX: &str = r#"The following text is a slice of a bigger article.
-    I'm asking you to produce a short summary of it that better describes this slice of text.
-    Most of the text will be related to programming and technology, so focus on that.
-    Avoid topics that are too broad or generic, try to focus on what will make this piece distinct.
-    It's ok to not provide any summary if you think there's nothing relevant to point out.
-    Try to be very succinct, one sentence would be the ideal.
-    Here's the text: "#;
-
-    let prompt = format!("{PROMPT_PREFIX}\n{text}");
-    let resp: SummaryModelResponse = extract!(
-        &client.text_client,
-        &client.text_model,
-        SYSTEM_PROMPT,
-        &prompt,
-        SummaryModelResponse
-    )?;
-    Ok(resp.summary)
 }
 
 pub async fn consolidate_summary(client: &LlmClient, summaries: &[String]) -> Result<String> {
     const PROMPT_PREFIX: &str = r#"I'll give you a list of summaries, they come from slices of an article.
-    Most of the summaries are related to programming and technology.
-    Most of the summaries look like duplicated, redundant or ambiguous.
-    Try to produce a new consolidated summary of them all, that is more clear and succinct.
-    Less is better, give me maximum of 3 sentences.
-    Here are the summaries, separated by new lines: "#;
+Most of the summaries are related to programming and technology.
+Most of the summaries look duplicated, redundant or ambiguous.
+Try to produce a new consolidated summary that is clearer and more succinct.
+Less is better, give me a maximum of 3 sentences.
+Here are the summaries, separated by new lines: "#;
 
     let text = summaries.join("\n");
-    let prompt = format!("{PROMPT_PREFIX}\n{text}");
-    let resp: SummaryModelResponse = extract!(
-        &client.text_client,
-        &client.text_model,
+    let resp: SummaryModelResponse = extract_structured(
+        client,
+        LlmWorkClass::Background,
         SYSTEM_PROMPT,
-        &prompt,
-        SummaryModelResponse
-    )?;
+        &format!("{PROMPT_PREFIX}\n{text}"),
+        "consolidate_summary",
+    )
+    .await?;
     Ok(resp.summary)
+}
+
+pub async fn embeddings_background(client: &LlmClient, text: &str) -> Result<Vec<f32>> {
+    embeddings_with_dimensions(
+        &client.embedding_client,
+        &client.embedding_model,
+        text,
+        Some(client.embedding_ndims),
+        client,
+        LlmWorkClass::Background,
+    )
+    .await
+}
+
+pub async fn embeddings_interactive(client: &LlmClient, text: &str) -> Result<Vec<f32>> {
+    embeddings_with_dimensions(
+        &client.embedding_client,
+        &client.embedding_model,
+        text,
+        Some(client.embedding_ndims),
+        client,
+        LlmWorkClass::Interactive,
+    )
+    .await
 }
 
 pub async fn embeddings_with_dimensions(
@@ -183,48 +223,49 @@ pub async fn embeddings_with_dimensions(
     model_name: &str,
     text: &str,
     dimensions: Option<usize>,
+    owner: &LlmClient,
+    class: LlmWorkClass,
 ) -> Result<Vec<f32>> {
     use rig::embeddings::EmbeddingModel;
 
-    let embedding = match (client, dimensions) {
-        (EmbeddingClient::Ollama(c), Some(dimensions)) => {
-            c.embedding_model_with_ndims(model_name, dimensions)
-                .embed_text(text)
-                .await?
-        }
-        (EmbeddingClient::Ollama(c), None) => {
-            c.embedding_model(model_name).embed_text(text).await?
-        }
-        (EmbeddingClient::OpenAI(c), Some(dimensions)) => {
-            c.embedding_model_with_ndims(model_name, dimensions)
-                .embed_text(text)
-                .await?
-        }
-        (EmbeddingClient::OpenAI(c), None) => {
-            c.embedding_model(model_name).embed_text(text).await?
-        }
-        (EmbeddingClient::Gemini(c), Some(dimensions)) => {
-            c.embedding_model_with_ndims(model_name, dimensions)
-                .embed_text(text)
-                .await?
-        }
-        (EmbeddingClient::Gemini(c), None) => {
-            c.embedding_model(model_name).embed_text(text).await?
-        }
-    };
+    let embedding = owner
+        .run_with_retry(class, LlmRequestKind::Embedding, "embeddings", || async {
+            match (client, dimensions) {
+                (EmbeddingClient::Ollama(c), Some(dimensions)) => c
+                    .embedding_model_with_ndims(model_name, dimensions)
+                    .embed_text(text)
+                    .await
+                    .map_err(anyhow::Error::from),
+                (EmbeddingClient::Ollama(c), None) => c
+                    .embedding_model(model_name)
+                    .embed_text(text)
+                    .await
+                    .map_err(anyhow::Error::from),
+                (EmbeddingClient::OpenAI(c), Some(dimensions)) => c
+                    .embedding_model_with_ndims(model_name, dimensions)
+                    .embed_text(text)
+                    .await
+                    .map_err(anyhow::Error::from),
+                (EmbeddingClient::OpenAI(c), None) => c
+                    .embedding_model(model_name)
+                    .embed_text(text)
+                    .await
+                    .map_err(anyhow::Error::from),
+                (EmbeddingClient::Gemini(c), Some(dimensions)) => c
+                    .embedding_model_with_ndims(model_name, dimensions)
+                    .embed_text(text)
+                    .await
+                    .map_err(anyhow::Error::from),
+                (EmbeddingClient::Gemini(c), None) => c
+                    .embedding_model(model_name)
+                    .embed_text(text)
+                    .await
+                    .map_err(anyhow::Error::from),
+            }
+        })
+        .await?;
 
-    // rig returns Vec<f64>, pgvector expects Vec<f32>
     Ok(embedding.vec.into_iter().map(|v| v as f32).collect())
-}
-
-pub async fn embeddings(client: &LlmClient, text: &str) -> Result<Vec<f32>> {
-    embeddings_with_dimensions(
-        &client.embedding_client,
-        &client.embedding_model,
-        text,
-        Some(client.embedding_ndims),
-    )
-    .await
 }
 
 pub async fn generate_similar_questions(client: &LlmClient, question: &str) -> Result<Vec<String>> {
@@ -232,14 +273,14 @@ pub async fn generate_similar_questions(client: &LlmClient, question: &str) -> R
 
 Original question: "#;
 
-    let prompt = format!("{PROMPT_PREFIX}\n{question}");
-    let resp: QuestionsResponse = extract!(
-        &client.text_client,
-        &client.text_model,
+    let resp: QuestionsResponse = extract_structured(
+        client,
+        LlmWorkClass::Interactive,
         SYSTEM_PROMPT,
-        &prompt,
-        QuestionsResponse
-    )?;
+        &format!("{PROMPT_PREFIX}\n{question}"),
+        "generate_similar_questions",
+    )
+    .await?;
     Ok(resp.questions)
 }
 
@@ -261,13 +302,14 @@ Evaluate if this chunk contains information that would help answer the question.
     let prompt = PROMPT_TEMPLATE
         .replace("{question}", question)
         .replace("{chunk}", chunk_text);
-    let resp: RelevanceResponse = extract!(
-        &client.text_client,
-        &client.text_model,
+    let resp: RelevanceResponse = extract_structured(
+        client,
+        LlmWorkClass::Interactive,
         SYSTEM_PROMPT,
         &prompt,
-        RelevanceResponse
-    )?;
+        "assess_chunk_relevance",
+    )
+    .await?;
     Ok((resp.relevant, resp.explanation))
 }
 
@@ -289,10 +331,12 @@ Provide a clear, accurate answer based on the context provided. If you cannot an
         context, question
     );
 
-    prompt!(
-        &client.text_client,
-        &client.text_model,
+    prompt_text(
+        client,
+        LlmWorkClass::Interactive,
         SYSTEM_PROMPT,
-        &user_prompt
+        &user_prompt,
+        "answer_with_context",
     )
+    .await
 }

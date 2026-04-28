@@ -24,7 +24,6 @@ async fn test_task_create_and_retrieve() -> anyhow::Result<()> {
     assert_eq!(task.url, url.to_string());
     assert_eq!(task.status, BookmarkTaskStatus::Pending);
     assert_eq!(task.tags, Some(tags));
-    assert!(task.summary.is_none());
     assert!(task.retries.is_none());
     assert!(task.fail_reason.is_none());
     assert!(!task.task_id.is_nil());

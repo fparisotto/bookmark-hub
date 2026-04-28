@@ -23,6 +23,8 @@ services:
       LLM_TEXT_MODEL: gemini-flash-latest
       LLM_EMBEDDING_MODEL: gemini-embedding-001
       LLM_EMBEDDING_DIMENSION: "1536"
+      AI_TEXT_CHUNK_SIZE: "2000"
+      AI_TEXT_CHUNK_OVERLAP: "200"
       CHROME_HOST: chrome
       CHROME_PORT: 3001
     volumes:

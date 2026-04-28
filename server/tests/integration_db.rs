@@ -26,6 +26,7 @@ async fn test_db_database_migrations() -> anyhow::Result<()> {
         "user",
         "bookmark",
         "bookmark_task",
+        "bookmark_ai_chunk",
         "schema_version",
         "embedding_config",
     ];
@@ -229,13 +230,13 @@ async fn test_db_migration_4_backfills_existing_version_3_data() -> anyhow::Resu
         .context("Failed to apply pending migrations after schema version 3")?;
 
     let client = db.pool.get().await?;
-    let bookmark_tags: Vec<String> = client
+    let bookmark_tags: Option<Vec<String>> = client
         .query_one(
             "SELECT tags FROM bookmark WHERE bookmark_id = $1 AND user_id = $2",
             &[&"bookmark-migration-4", &user_id],
         )
         .await
-        .context("Failed to query normalized bookmark tags")?
+        .context("Failed to query bookmark tags after unified AI reset")?
         .get(0);
     let task_tags: Vec<String> = client
         .query_one(
@@ -251,15 +252,12 @@ async fn test_db_migration_4_backfills_existing_version_3_data() -> anyhow::Resu
         .context("Failed to query schema version after backfill migration")?
         .get(0);
 
-    assert_eq!(
-        bookmark_tags.into_iter().collect::<BTreeSet<_>>(),
-        BTreeSet::from(["rust".to_string(), "sql".to_string()])
-    );
+    assert_eq!(bookmark_tags, None);
     assert_eq!(
         task_tags.into_iter().collect::<BTreeSet<_>>(),
         BTreeSet::from(["ops".to_string()])
     );
-    assert_eq!(schema_version, 8);
+    assert_eq!(schema_version, 9);
 
     Ok(())
 }

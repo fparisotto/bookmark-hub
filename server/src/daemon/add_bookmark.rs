@@ -191,7 +191,7 @@ async fn handle_task(
         domain: output.domain,
         title: output.title,
         tags: task.tags.to_owned(),
-        summary: task.summary.to_owned(),
+        summary: None,
         created_at: Utc::now(),
         updated_at: None,
     };

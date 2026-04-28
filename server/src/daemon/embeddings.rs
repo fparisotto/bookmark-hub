@@ -1,22 +1,24 @@
 use anyhow::{Context, Result};
+use chrono::Utc;
 use tracing::{debug, error, info, warn};
 
-use super::DAEMON_IDLE_SLEEP;
-use crate::db::chunks::{get_bookmarks_without_chunks, store_chunks_with_embeddings};
+use super::{
+    ai_generation_backoff, AiDaemonSettings, AI_GENERATION_MAX_RETRIES, DAEMON_IDLE_SLEEP,
+};
+use crate::db::ai::{self, EmbeddingGenerationCandidate};
+use crate::db::bookmark::AiGenerationStatus;
+use crate::db::chunks::store_chunks_with_embeddings;
 use crate::db::PgPool;
 use crate::llm::{self, LlmClient};
-use crate::tokenizer;
+use crate::{tokenizer, EMBEDDING_PIPELINE_VERSION};
 
-// Process fewer items at once to avoid overwhelming the LLM provider
 const QUERY_LIMIT: usize = 5;
-
-const EMBEDDING_WINDOW_SIZE: usize = 2000;
-const EMBEDDING_WINDOW_OVERLAP: usize = 200;
 
 pub async fn run(
     pool: &PgPool,
     mut new_bookmark_rx: tokio::sync::watch::Receiver<()>,
     client: &LlmClient,
+    settings: &AiDaemonSettings,
 ) -> Result<()> {
     info!(
         model = %client.embedding_model,
@@ -26,28 +28,23 @@ pub async fn run(
 
     let mut interval = tokio::time::interval(DAEMON_IDLE_SLEEP);
     loop {
-        // Process all available tasks continuously
         loop {
-            match execute_step(pool, client).await {
+            match execute_step(pool, client, settings).await {
                 Ok(has_tasks) => {
                     if !has_tasks {
-                        // No more tasks, exit inner loop
                         break;
                     }
-                    // Continue processing if there were tasks
                 }
                 Err(error) => {
                     error!(?error, "Failed to process embedding tasks");
-                    break; // Exit on error to avoid infinite loop
+                    break;
                 }
             }
         }
 
-        // Wait for notification or timeout when no tasks remain
         tokio::select! {
             _ = new_bookmark_rx.changed() => {
                 info!("Notification received, checking for embedding tasks...");
-                // Reset interval to avoid immediate timeout after notification
                 interval.reset();
             }
             _ = interval.tick() => {
@@ -57,124 +54,156 @@ pub async fn run(
     }
 }
 
-async fn execute_step(pool: &PgPool, client: &LlmClient) -> Result<bool> {
-    let bookmarks = get_bookmarks_without_chunks(pool, QUERY_LIMIT).await?;
+async fn execute_step(
+    pool: &PgPool,
+    client: &LlmClient,
+    settings: &AiDaemonSettings,
+) -> Result<bool> {
+    let bookmarks: Vec<EmbeddingGenerationCandidate> = ai::claim_bookmarks_pending_embeddings(
+        pool,
+        QUERY_LIMIT,
+        Utc::now(),
+        settings.embed_claim_window,
+    )
+    .await?;
 
     if bookmarks.is_empty() {
-        debug!("No bookmarks without chunks found");
+        debug!("No bookmarks pending embeddings");
         return Ok(false);
     }
 
-    info!(
-        bookmark_count = bookmarks.len(),
-        "Found bookmarks without chunks, processing..."
-    );
+    info!(bookmark_count = bookmarks.len(), "Claimed embedding tasks");
 
-    let mut total_chunks_produced = 0usize;
-
-    for (bookmark_id, user_id, text_content) in bookmarks {
-        match process_bookmark_chunks(&bookmark_id, user_id, &text_content, pool, client).await {
+    for candidate in bookmarks {
+        match process_bookmark_chunks(&candidate, pool, client, settings).await {
             Ok(chunk_count) => {
-                total_chunks_produced += chunk_count;
                 info!(
-                    bookmark_id,
-                    user_id = %user_id,
+                    bookmark_id = %candidate.bookmark_id,
+                    user_id = %candidate.user_id,
                     chunk_count,
-                    "Successfully processed bookmark chunks"
+                    "Successfully processed embeddings"
                 );
             }
             Err(error) => {
-                warn!(
-                    bookmark_id,
-                    user_id = %user_id,
-                    ?error,
-                    "Failed to process bookmark chunks, will retry later"
-                );
+                let attempts = candidate.attempts + 1;
+                let is_terminal = attempts >= AI_GENERATION_MAX_RETRIES;
+                let status = if is_terminal {
+                    AiGenerationStatus::Fail
+                } else {
+                    AiGenerationStatus::Pending
+                };
+                let next_attempt_at = if is_terminal {
+                    Utc::now()
+                } else {
+                    Utc::now() + ai_generation_backoff(attempts)
+                };
+                ai::mark_embedding_failure(
+                    pool,
+                    candidate.user_id,
+                    &candidate.bookmark_id,
+                    status,
+                    attempts,
+                    next_attempt_at,
+                    &format!("{error:#}"),
+                )
+                .await?;
+                if is_terminal {
+                    warn!(
+                        bookmark_id = %candidate.bookmark_id,
+                        ?error,
+                        attempts,
+                        "Embedding task failed permanently"
+                    );
+                } else {
+                    warn!(
+                        bookmark_id = %candidate.bookmark_id,
+                        ?error,
+                        attempts,
+                        next_attempt_at = %next_attempt_at,
+                        "Embedding task failed, scheduled retry"
+                    );
+                }
             }
         }
     }
 
-    if total_chunks_produced == 0 {
-        debug!("No chunks produced in this batch, backing off");
-        return Ok(false);
-    }
-
-    Ok(true) // There were tasks that made progress
+    Ok(true)
 }
 
 async fn process_bookmark_chunks(
-    bookmark_id: &str,
-    user_id: uuid::Uuid,
-    text_content: &str,
+    candidate: &EmbeddingGenerationCandidate,
     pool: &PgPool,
     client: &LlmClient,
+    settings: &AiDaemonSettings,
 ) -> Result<usize> {
-    // Skip bookmarks with very little content
-    if text_content.len() < 200 {
-        debug!(
-            bookmark_id,
-            content_length = text_content.len(),
-            "Skipping bookmark with insufficient content"
-        );
+    if candidate.text_content.len() < 200 {
+        ai::mark_embedding_done_without_chunks(
+            pool,
+            candidate.user_id,
+            &candidate.bookmark_id,
+            EMBEDDING_PIPELINE_VERSION,
+        )
+        .await?;
         return Ok(0);
     }
 
-    // Generate chunks using the existing tokenizer
     let chunks = tokenizer::windowed_chunks(
-        EMBEDDING_WINDOW_SIZE,
-        EMBEDDING_WINDOW_OVERLAP,
-        text_content,
+        settings.embed_chunk_size,
+        settings.embed_chunk_overlap,
+        &candidate.text_content,
     )
-    .context("Failed to create text chunks")?;
+    .context("Failed to create embedding text chunks")?;
 
     if chunks.is_empty() {
-        warn!(bookmark_id, "No chunks generated from text content");
+        ai::mark_embedding_done_without_chunks(
+            pool,
+            candidate.user_id,
+            &candidate.bookmark_id,
+            EMBEDDING_PIPELINE_VERSION,
+        )
+        .await?;
         return Ok(0);
     }
 
-    debug!(
-        bookmark_id,
-        chunk_count = chunks.len(),
-        "Generated text chunks"
-    );
-
-    // Generate embeddings for each chunk
-    let mut embeddings = Vec::new();
+    let mut embeddings = Vec::with_capacity(chunks.len());
     for (index, chunk) in chunks.iter().enumerate() {
-        match llm::embeddings(client, chunk).await {
-            Ok(embedding) => {
-                debug!(
-                    bookmark_id,
-                    chunk_index = index,
-                    embedding_dimensions = embedding.len(),
-                    "Generated embedding for chunk"
-                );
-                embeddings.push(embedding);
-            }
-            Err(error) => {
-                error!(
-                    bookmark_id,
-                    chunk_index = index,
-                    ?error,
-                    "Failed to generate embedding for chunk"
-                );
-                return Err(error);
-            }
-        }
+        let embedding = llm::embeddings_background(client, chunk)
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to generate embedding for chunk {}/{} of bookmark_id={}",
+                    index + 1,
+                    chunks.len(),
+                    candidate.bookmark_id
+                )
+            })?;
+        embeddings.push(embedding);
+        ai::refresh_embedding_claim(
+            pool,
+            candidate.user_id,
+            &candidate.bookmark_id,
+            Utc::now() + settings.embed_claim_window,
+        )
+        .await?;
     }
 
-    // Store chunks with embeddings in database
-    let stored_chunks =
-        store_chunks_with_embeddings(pool, bookmark_id, user_id, chunks, embeddings)
-            .await
-            .context("Failed to store chunks with embeddings")?;
+    let stored_chunks = store_chunks_with_embeddings(
+        pool,
+        &candidate.bookmark_id,
+        candidate.user_id,
+        chunks,
+        embeddings,
+    )
+    .await
+    .context("Failed to store chunks with embeddings")?;
 
-    info!(
-        bookmark_id,
-        user_id = %user_id,
-        stored_chunk_count = stored_chunks.len(),
-        "Successfully stored chunks with embeddings"
-    );
+    ai::mark_embedding_success(
+        pool,
+        candidate.user_id,
+        &candidate.bookmark_id,
+        EMBEDDING_PIPELINE_VERSION,
+    )
+    .await?;
 
     Ok(stored_chunks.len())
 }
