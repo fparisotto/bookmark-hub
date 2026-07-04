@@ -8,7 +8,7 @@ use std::time::Duration;
 use anyhow::Result;
 pub use operations::*;
 pub use provider::build_llm_client;
-use rand::Rng;
+use rand::RngExt;
 use reqwest::StatusCode;
 use rig::providers::{anthropic, gemini, ollama, openai, openrouter};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
@@ -205,7 +205,7 @@ fn retry_delay(base: Duration, max: Duration, attempt: u32) -> Duration {
     let delay_ms = if upper_ms <= lower_ms {
         upper_ms
     } else {
-        rand::thread_rng().gen_range(lower_ms..=upper_ms)
+        rand::rng().random_range(lower_ms..=upper_ms)
     };
     Duration::from_millis(delay_ms)
 }

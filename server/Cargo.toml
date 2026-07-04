@@ -11,28 +11,28 @@ async-trait = "0.1"
 axum = { version = "0.8" }
 axum-extra = { version = "0.12", features = ["typed-header"] }
 axum-macros = "0.5"
-axum-otel-metrics = "0.12"
+axum-otel-metrics = "0.13"
 base64-url = { workspace = true }
 cantrip = "0.5"
 chrono = { workspace = true }
 clap = { version = "4.5", features = ["derive", "env"] }
 deadpool-postgres = "0.14"
-dom_smoothie = "0.15"
+dom_smoothie = "0.18"
 flate2 = "1.0"
 futures = "0.3"
 headless_chrome = "1.0"
 hex = { workspace = true }
-hmac = "0.12"
+hmac = "0.13"
 jsonwebtoken = { version = "10", features = ["rust_crypto"] }
-lol_html = "2.2"
+lol_html = "3.0"
 metrics = "0.24"
 metrics-exporter-prometheus = "0.18"
 murmur3 = "0.5"
 rig-core = { version = "0.33", features = ["derive"] }
-opentelemetry_sdk = "0.31"
+opentelemetry_sdk = "0.32"
 postgres-from-row = "0.5.2"
 postgres-types = { version = "0.2.9", features = ["derive"] }
-rand = "0.8"
+rand = "0.10"
 reqwest = { version = "0.13", features = ["json"] }
 schemars = "1.0.4"
 secrecy = { workspace = true }
@@ -43,7 +43,7 @@ shared = { path = "../shared/" }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 thiserror = { workspace = true }
-tokenizers = { version = "0.22", features = ["http"] }
+tokenizers = { version = "0.23", features = ["http"] }
 tokio = { version = "1", features = ["full"] }
 tokio-postgres = { version = "0.7", features = [
   "array-impls",
@@ -53,14 +53,14 @@ tokio-postgres = { version = "0.7", features = [
 ] }
 pgvector = { version = "0.4", features = ["postgres"] }
 tower = { version = "0.5", features = ["util"] }
-tower-http = { version = "0.6", features = ["trace", "cors", "fs", "compression-gzip"] }
+tower-http = { version = "0.7", features = ["trace", "cors", "fs", "compression-gzip"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
-testcontainers = { version = "0.26" }
+testcontainers = { version = "0.27" }
 
 [features]
 integration-tests = []

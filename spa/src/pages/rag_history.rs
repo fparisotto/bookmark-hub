@@ -9,7 +9,6 @@ use crate::user_session::UserSession;
 
 #[derive(Clone, PartialEq, Default, Debug)]
 pub struct RagHistoryState {
-    pub user_session: UserSession,
     pub history: Vec<RagSessionWithSources>,
     pub is_loading: bool,
     pub error_message: Option<String>,
@@ -17,21 +16,18 @@ pub struct RagHistoryState {
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum RagHistoryMessage {
-    SetUserSession(UserSession),
-    LoadHistory,
     HistoryLoaded(Result<Vec<RagSessionWithSources>, String>),
     ClearError,
 }
 
 #[derive(Properties, PartialEq)]
-pub struct RagHistoryPageProps {
+pub struct RagHistoryTabProps {
     pub user_session: UserSession,
 }
 
-#[function_component(RagHistoryPage)]
-pub fn rag_history_page(props: &RagHistoryPageProps) -> Html {
+#[function_component(RagHistoryTab)]
+pub fn rag_history_tab(props: &RagHistoryTabProps) -> Html {
     let state = use_reducer(|| RagHistoryState {
-        user_session: props.user_session.clone(),
         is_loading: true,
         ..Default::default()
     });
@@ -70,13 +66,7 @@ pub fn rag_history_page(props: &RagHistoryPageProps) -> Html {
     };
 
     html! {
-        <div class="container mt-5">
-            <div class="mb-4">
-                <h1>{"AI Search History"}</h1>
-                <p class="text-muted">{"View your previous AI-powered questions and answers."}</p>
-            </div>
-
-            // Error Display
+        <div>
             if let Some(error) = &state.error_message {
                 <div class="alert alert-danger alert-dismissible" role="alert">
                     {error}
@@ -84,7 +74,6 @@ pub fn rag_history_page(props: &RagHistoryPageProps) -> Html {
                 </div>
             }
 
-            // Loading State
             if state.is_loading {
                 <div class="text-center">
                     <div class="spinner-border" role="status">
@@ -94,7 +83,7 @@ pub fn rag_history_page(props: &RagHistoryPageProps) -> Html {
             } else if state.history.is_empty() {
                 <div class="text-center py-5">
                     <h5>{"No questions asked yet"}</h5>
-                    <p class="text-muted">{"Go to AI Search to start asking questions about your bookmarks."}</p>
+                    <p class="text-muted">{"Switch to the Search tab to start asking questions about your bookmarks."}</p>
                 </div>
             } else {
                 <div>
@@ -166,7 +155,6 @@ fn render_session(session: &RagSessionWithSources, index: usize) -> Html {
                         </div>
                     }
 
-                    // Display sources
                     if !session.sources.is_empty() {
                         <div class="mt-3">
                             <h6 class="text-muted mb-2">{"Sources"}</h6>
@@ -235,13 +223,6 @@ impl Reducible for RagHistoryState {
         let mut state = (*self).clone();
 
         match action {
-            RagHistoryMessage::SetUserSession(user_session) => {
-                state.user_session = user_session;
-            }
-            RagHistoryMessage::LoadHistory => {
-                state.is_loading = true;
-                state.error_message = None;
-            }
             RagHistoryMessage::HistoryLoaded(result) => {
                 state.is_loading = false;
                 match result {

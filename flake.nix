@@ -2,7 +2,7 @@
   description = "bookmark-hub";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     crane.url = "github:ipetkov/crane";
     flake-utils.url = "github:numtide/flake-utils";
     rust-overlay = {
@@ -22,12 +22,20 @@
         inherit (pkgs) lib;
 
         rustToolchainFor = p: p.rust-bin.stable.latest.default.override {
+          extensions = [ "rust-src" "rust-analyzer" ];
           targets = [ "wasm32-unknown-unknown" ];
         };
         craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchainFor;
 
         # Add nightly rustfmt for formatting with unstable features
         nightlyRustfmt = pkgs.rust-bin.nightly.latest.rustfmt;
+
+        # Separate crane instance using the nightly toolchain so that the
+        # formatting check actually enforces unstable rustfmt features (e.g.
+        # imports_granularity) declared in .rustfmt.toml. The stable craneLib
+        # silently ignores those.
+        nightlyCraneLib = (crane.mkLib pkgs).overrideToolchain
+          (p: p.rust-bin.nightly.latest.default);
 
         unfilteredRoot = ./.;
 
@@ -73,6 +81,7 @@
 
         cliPackage = craneLib.buildPackage (nativeArgs // {
           pname = "bookmark-hub-cli";
+          cargoExtraArgs = "--package=cli";
           inherit cargoArtifacts;
         });
 
@@ -85,14 +94,23 @@
           in
           pkgs.dockerTools.buildLayeredImage {
             name = "bookmark-hub";
+            tag = "latest";
+            created = "now";
             contents = [ serverPackage spaDistLayer pkgs.coreutils pkgs.bash pkgs.cacert pkgs.chromium pkgs.curl ];
             config = {
               Env = [
                 "SPA_DIST=/data"
+                "RUST_LOG=info"
               ];
+              ExposedPorts = { "3000/tcp" = { }; };
               Cmd = [
                 "${serverPackage}/bin/server"
               ];
+              Labels = {
+                "org.opencontainers.image.title" = "bookmark-hub";
+                "org.opencontainers.image.description" = "Self-hosted bookmark manager with AI-powered tagging and search.";
+                "org.opencontainers.image.version" = "0.1.0";
+              };
             };
           };
 
@@ -119,14 +137,14 @@
           wasm-bindgen-cli = pkgs.buildWasmBindgenCli rec {
             src = pkgs.fetchCrate {
               pname = "wasm-bindgen-cli";
-              version = "0.2.108";
-              hash = "sha256-UsuxILm1G6PkmVw0I/JF12CRltAfCJQFOaT4hFwvR8E=";
+              version = "0.2.126";
+              hash = "sha256-H6Is3fiZVxZCfOMWK5dWMSrtn50VGv0sfdnsT+cTtyk=";
             };
 
             cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
               inherit src;
               inherit (src) pname version;
-              hash = "sha256-iqQiWbsKlLBiJFeqIYiXo3cqxGLSjNM8SOWXGM9u43E=";
+              hash = "sha256-VucqkXbCi4qtQzY/HrXiDnbSURsagPsdNVMn1Tw3UiY=";
             };
           };
         });
@@ -140,7 +158,7 @@
             SPA_DIST = "";
           });
 
-          bookmark-hub-fmt = craneLib.cargoFmt commonArgs;
+          bookmark-hub-fmt = nightlyCraneLib.cargoFmt commonArgs;
         };
 
         packages = {
@@ -173,6 +191,7 @@
             pkgs.hurl
             pkgs.just
             pkgs.trunk
+            pkgs.cargo-audit
             nightlyRustfmt
           ];
         };

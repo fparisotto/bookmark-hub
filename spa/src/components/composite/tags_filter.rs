@@ -30,7 +30,7 @@ fn render_tag(on_tag_checked: Callback<TagCheckedEvent>, tag: TagCount, is_check
     };
 
     html! {
-        <div key={tag.tag.clone()} class="form-check d-flex align-items-center py-1" style="min-height: 1.75rem;">
+        <div key={tag.tag.clone()} class="form-check d-flex align-items-center py-1">
             <InputCheckbox
                 id={tag.tag.clone()}
                 name={tag.tag.clone()}
@@ -48,12 +48,26 @@ fn render_tag(on_tag_checked: Callback<TagCheckedEvent>, tag: TagCount, is_check
 
 #[function_component(TagsFilter)]
 pub fn tags_filter(props: &Props) -> Html {
-    let mut sorted_tags = props.tags.clone();
-    sorted_tags.sort_by(|a, b| b.count.cmp(&a.count));
+    let filter_text = use_state(String::new);
 
+    let on_filter_input = {
+        let filter_text = filter_text.clone();
+        Callback::from(move |event: InputEvent| {
+            let input = event.target_dyn_into::<web_sys::HtmlInputElement>();
+            if let Some(input) = input {
+                filter_text.set(input.value());
+            }
+        })
+    };
+
+    let mut sorted_tags = props.tags.clone();
+    sorted_tags.sort_by_key(|tag| std::cmp::Reverse(tag.count));
+
+    let needle = filter_text.trim().to_lowercase();
     let selected_tags = &props.selected_tags;
     let tags = sorted_tags
         .into_iter()
+        .filter(|tag| needle.is_empty() || tag.tag.to_lowercase().contains(&needle))
         .map(|tag| {
             let is_checked = selected_tags.contains(&tag.tag);
             render_tag(props.on_tag_checked.clone(), tag, is_checked)
@@ -61,9 +75,14 @@ pub fn tags_filter(props: &Props) -> Html {
         .collect::<Html>();
 
     html! {
-        <div class="tags-filter-panel bg-body-secondary border-end p-3 h-100 d-flex flex-column" style="min-width: 200px;">
-            <h6 class="text-muted fw-bold mb-3 flex-shrink-0">{"Filter by Tags"}</h6>
-            <div class="d-flex flex-column gap-2 flex-grow-1" style="overflow-y: auto;">
+        <div class="tags-filter-panel bg-body-secondary border-end p-3 h-100 w-100 d-flex flex-column">
+            <input
+                type="search"
+                class="form-control form-control-sm mb-3 flex-shrink-0"
+                placeholder="Filter tags..."
+                value={(*filter_text).clone()}
+                oninput={on_filter_input} />
+            <div class="d-flex flex-column gap-2 flex-grow-1 overflow-auto">
                 {tags}
             </div>
         </div>

@@ -117,8 +117,8 @@ pub fn bookmark_page(props: &Props) -> Html {
     let back_href = router::href(&AppRoute::Search(Default::default()));
 
     html! {
-      <div class="container mt-5">
-          <div class="mb-3">
+      <>
+      <div class="mb-3">
               <a href={back_href.clone()} class="btn btn-secondary" onclick={on_goback.clone()}>{"< Back to Home"}</a>
           </div>
           <div class="card">
@@ -167,6 +167,6 @@ pub fn bookmark_page(props: &Props) -> Html {
           <div class="mb-3">
               <a href={back_href} class="btn btn-secondary" onclick={on_goback.clone()}>{"< Back to Home"}</a>
           </div>
-      </div>
+      </>
     }
 }

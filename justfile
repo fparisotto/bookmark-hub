@@ -37,7 +37,8 @@ run-spa:
   popd
 
 run-server:
-  #!/usr/bin/env sh
+  #!/usr/bin/env bash
+  set -euo pipefail
   DATA_DIR="/tmp/bookmark-hub-datadir"
   if [[ ! -d "$DATA_DIR" ]]; then
     mkdir -p "$DATA_DIR"
@@ -50,10 +51,13 @@ run-server:
     --pg-password main \
     --pg-database main \
     --pg-max-connections 5 \
-    --readability-url "http://localhost:3001" \
+    --chrome-host localhost \
+    --chrome-port 3001 \
     --data-dir "$DATA_DIR" \
+    --spa-dir-dir spa/dist \
     --ollama-url "http://localhost:11434" \
-    --ollama-text-model "qwen3:8b"
+    --llm-text-model "qwen3.5:4b" \
+    --llm-embedding-model "qwen3-embedding:0.6b"
 
 run-cli *ARGS:
   #!/usr/bin/env bash

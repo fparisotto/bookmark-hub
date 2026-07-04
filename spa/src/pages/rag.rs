@@ -1,35 +1,91 @@
-use shared::{RagQueryRequest, RagQueryResponse};
+use shared::RagQueryRequest;
 use yew::platform::spawn_local;
 use yew::prelude::*;
 
 use crate::api::rag_api;
 use crate::components::composite::rag_query::RagQuery;
+use crate::pages::rag_history::RagHistoryTab;
+use crate::router::RagTab;
 use crate::user_session::UserSession;
 
 #[derive(Clone, PartialEq, Default, Debug)]
 pub struct RagState {
-    pub user_session: UserSession,
     pub current_question: String,
-    pub current_response: Option<RagQueryResponse>,
+    pub current_response: Option<shared::RagQueryResponse>,
     pub is_loading: bool,
     pub error_message: Option<String>,
 }
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum RagMessage {
-    SetUserSession(UserSession),
     SetQuestion(String),
     SubmitQuery,
-    QueryComplete(Result<RagQueryResponse, String>),
+    QueryComplete(Result<shared::RagQueryResponse, String>),
     ClearError,
+}
+
+#[derive(Properties, PartialEq)]
+pub struct RagPageProps {
+    pub user_session: UserSession,
+    pub tab: Option<RagTab>,
+    pub on_tab_change: Callback<Option<RagTab>>,
 }
 
 #[function_component(RagPage)]
 pub fn rag_page(props: &RagPageProps) -> Html {
-    let state = use_reducer(|| RagState {
-        user_session: props.user_session.clone(),
-        ..Default::default()
-    });
+    let active_tab = props.tab.unwrap_or(RagTab::Search);
+
+    let render_tab_link = |label: &'static str, tab: RagTab, active: RagTab| {
+        let href = crate::router::href(&crate::router::AppRoute::RAG { tab: Some(tab) });
+        let classes = if active == tab {
+            classes!("nav-link", "active")
+        } else {
+            classes!("nav-link")
+        };
+        let on_tab_change = props.on_tab_change.clone();
+        let onclick = Callback::from(move |event: MouseEvent| {
+            if crate::router::should_handle_spa_navigation(&event) {
+                event.prevent_default();
+                on_tab_change.emit(Some(tab));
+            }
+        });
+
+        html! {
+            <li class="nav-item" role="presentation">
+                <a href={href} onclick={onclick} class={classes}>{label}</a>
+            </li>
+        }
+    };
+
+    html! {
+        <div>
+            <div class="mb-4">
+                <h1>{"RAG"}</h1>
+            </div>
+
+            <ul class="nav nav-tabs mb-4">
+                {render_tab_link("Search", RagTab::Search, active_tab)}
+                {render_tab_link("History", RagTab::History, active_tab)}
+            </ul>
+
+            {
+                match active_tab {
+                    RagTab::Search => html! { <RagSearchTab user_session={props.user_session.clone()} /> },
+                    RagTab::History => html! { <RagHistoryTab user_session={props.user_session.clone()} /> },
+                }
+            }
+        </div>
+    }
+}
+
+#[derive(Properties, PartialEq)]
+pub struct RagSearchTabProps {
+    pub user_session: UserSession,
+}
+
+#[function_component(RagSearchTab)]
+pub fn rag_search_tab(props: &RagSearchTabProps) -> Html {
+    let state = use_reducer(RagState::default);
 
     let on_question_change = {
         let state = state.clone();
@@ -76,13 +132,7 @@ pub fn rag_page(props: &RagPageProps) -> Html {
     };
 
     html! {
-        <div class="container mt-5">
-            <div class="mb-4">
-                <h1>{"AI Search & Question Answering"}</h1>
-                <p class="text-muted">{"Ask questions about your bookmarks and get AI-powered answers with source citations."}</p>
-            </div>
-
-            // Error Display
+        <div>
             if let Some(error) = &state.error_message {
                 <div class="alert alert-danger alert-dismissible" role="alert">
                     {error}
@@ -90,7 +140,6 @@ pub fn rag_page(props: &RagPageProps) -> Html {
                 </div>
             }
 
-            // Main RAG Query Component
             <RagQuery
                 question={state.current_question.clone()}
                 response={state.current_response.clone()}
@@ -102,11 +151,6 @@ pub fn rag_page(props: &RagPageProps) -> Html {
     }
 }
 
-#[derive(Properties, PartialEq)]
-pub struct RagPageProps {
-    pub user_session: UserSession,
-}
-
 impl Reducible for RagState {
     type Action = RagMessage;
 
@@ -114,9 +158,6 @@ impl Reducible for RagState {
         let mut state = (*self).clone();
 
         match action {
-            RagMessage::SetUserSession(user_session) => {
-                state.user_session = user_session;
-            }
             RagMessage::SetQuestion(question) => {
                 state.current_question = question;
                 state.error_message = None;

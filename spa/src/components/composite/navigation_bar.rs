@@ -61,8 +61,7 @@ pub fn navigation_bar(props: &Props) -> Html {
                     <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                         {render_nav_link("Search", RouteKind::Search, AppRoute::Search(Default::default()), props.active_page)}
                         {render_nav_link("Tasks", RouteKind::Tasks, AppRoute::Tasks, props.active_page)}
-                        {render_nav_link("AI Search", RouteKind::RAG, AppRoute::RAG, props.active_page)}
-                        {render_nav_link("AI History", RouteKind::RagHistory, AppRoute::RagHistory, props.active_page)}
+                        {render_nav_link("RAG", RouteKind::RAG, AppRoute::RAG { tab: None }, props.active_page)}
                     </ul>
                     <button class="btn btn-sm me-2 btn-outline-primary" data-bs-toggle="modal" data-bs-target="#add-bookmark-modal">
                         {"+ Bookmark"}

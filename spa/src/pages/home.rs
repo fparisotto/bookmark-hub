@@ -418,11 +418,17 @@ pub fn home(props: &Props) -> Html {
             let route = match event {
                 RouteKind::Search => state_handle.current_search_route(),
                 RouteKind::Tasks => AppRoute::Tasks,
-                RouteKind::RAG => AppRoute::RAG,
-                RouteKind::RagHistory => AppRoute::RagHistory,
+                RouteKind::RAG => AppRoute::RAG { tab: None },
                 RouteKind::Bookmark => return,
             };
             navigate_with_push.emit(route);
+        })
+    };
+
+    let on_rag_tab_change = {
+        let navigate_with_push = navigate_with_push.clone();
+        Callback::from(move |tab: Option<crate::router::RagTab>| {
+            navigate_with_push.emit(AppRoute::RAG { tab });
         })
     };
 
@@ -575,14 +581,14 @@ pub fn home(props: &Props) -> Html {
             let has_more = state_handle.current_search_page * state_handle.page_size
                 < state_handle.total_results as usize;
             html! {
-                <div class="row" style="min-height: calc(100vh - 120px);">
-                    <div class="col-12 col-md-4 col-lg-3 mb-3 mb-md-0 d-flex">
+                <div class="row">
+                    <div class="col-12 col-md-2 mb-3 mb-md-0">
                         <TagsFilter
                             tags={state_handle.tags.clone()}
                             selected_tags={state_handle.tags_filter.clone()}
                             on_tag_checked={on_tag_checked} />
                     </div>
-                    <div class="col-12 col-md-8 col-lg-9">
+                    <div class="col-12 col-md">
                         <SearchBar
                             value={state_handle.search_input.clone()}
                             on_submit={on_search_submit}
@@ -684,14 +690,12 @@ pub fn home(props: &Props) -> Html {
                 </>
             }
         }
-        AppRoute::RAG => {
+        AppRoute::RAG { tab } => {
             html! {
-                <crate::pages::rag::RagPage user_session={props.user_session.clone()} />
-            }
-        }
-        AppRoute::RagHistory => {
-            html! {
-                <crate::pages::rag_history::RagHistoryPage user_session={props.user_session.clone()} />
+                <crate::pages::rag::RagPage
+                    user_session={props.user_session.clone()}
+                    tab={*tab}
+                    on_tab_change={on_rag_tab_change.clone()} />
             }
         }
     };
@@ -702,7 +706,7 @@ pub fn home(props: &Props) -> Html {
                 active_page={(*route_handle).kind()}
                 on_page_change={on_page_change}
                 on_logout={props.on_logout.clone()} />
-            <div class="container mt-5">
+            <div class="container-fluid mt-4 px-3 px-md-4 px-lg-5">
                 {content}
             </div>
             <AddBookmarkModal on_submit={on_new_bookmark} />
