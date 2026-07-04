@@ -61,7 +61,7 @@ pub fn tags_filter(props: &Props) -> Html {
     };
 
     let mut sorted_tags = props.tags.clone();
-    sorted_tags.sort_by(|a, b| b.count.cmp(&a.count));
+    sorted_tags.sort_by_key(|tag| std::cmp::Reverse(tag.count));
 
     let needle = filter_text.trim().to_lowercase();
     let selected_tags = &props.selected_tags;
