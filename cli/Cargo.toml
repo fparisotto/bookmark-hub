@@ -18,4 +18,4 @@ tracing = { version = "0.1", features = ["log"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = { workspace = true }
 uuid = { workspace = true }
-scraper = "0.25"
+scraper = "0.27"

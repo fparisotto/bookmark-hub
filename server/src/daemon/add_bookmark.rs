@@ -401,32 +401,27 @@ async fn rewrite_images(
     content: &str,
     images_found: HashMap<String, Image>,
 ) -> Result<(String, Vec<Image>)> {
-    let element_content_handlers = vec![element!("img[src]", |el| {
-        let img_src = el.get_attribute("src").expect("img[src] was required");
-        let new_src = match &images_found.get(&img_src) {
-            Some(image_found) => {
-                let src = format!(
-                    "/static/{user_id}/{bookmark_id}/{image_found_id}",
-                    image_found_id = image_found.id
-                );
-                info!("Rewriting image from={img_src}, to={src}");
-                src
-            }
-            None => {
-                warn!("Something weird happened, processed image not found, img_src={img_src}");
-                img_src
-            }
-        };
-        el.set_attribute("src", &new_src)?;
-        Ok(())
-    })];
-
     let new_content = rewrite_str(
         content,
-        RewriteStrSettings {
-            element_content_handlers,
-            ..RewriteStrSettings::default()
-        },
+        RewriteStrSettings::new().append_element_content_handler(element!("img[src]", |el| {
+            let img_src = el.get_attribute("src").expect("img[src] was required");
+            let new_src = match &images_found.get(&img_src) {
+                Some(image_found) => {
+                    let src = format!(
+                        "/static/{user_id}/{bookmark_id}/{image_found_id}",
+                        image_found_id = image_found.id
+                    );
+                    info!("Rewriting image from={img_src}, to={src}");
+                    src
+                }
+                None => {
+                    warn!("Something weird happened, processed image not found, img_src={img_src}");
+                    img_src
+                }
+            };
+            el.set_attribute("src", &new_src)?;
+            Ok(())
+        })),
     )?;
 
     let images: Vec<Image> = images_found.into_values().collect();
@@ -473,42 +468,37 @@ async fn process_image_found(http: &Client, image_found: &ImageFound) -> Result<
 fn find_images(base_url: &Url, content: &str) -> Result<Vec<ImageFound>> {
     let mut images_found: Vec<ImageFound> = Vec::new();
 
-    let element_content_handlers = vec![element!("img[src]", |el| {
-        let img_src = el.get_attribute("src").expect("img[src] was required");
-        let parsed_img_src = match Url::parse(&img_src) {
-            Ok(parsed) => Ok(parsed),
-            Err(url::ParseError::RelativeUrlWithoutBase) => {
-                info!("Found relative URL, img_src={img_src}");
-                base_url.join(&img_src)
-            }
-            Err(error) => Err(error),
-        };
-        match parsed_img_src {
-            Ok(parsed) => {
-                let image_id: String = make_bookmark_id(&parsed)?;
-                info!("Image found, original_url={parsed}");
-                images_found.push(ImageFound {
-                    id: image_id,
-                    url: parsed,
-                    src: img_src,
-                });
-            }
-            Err(error) => {
-                warn!(
-                    img_src = img_src,
-                    "Fail to parse URL from img_src, skipping this image, error={error}"
-                );
-            }
-        };
-        Ok(())
-    })];
-
     let _ = rewrite_str(
         content,
-        RewriteStrSettings {
-            element_content_handlers,
-            ..RewriteStrSettings::default()
-        },
+        RewriteStrSettings::new().append_element_content_handler(element!("img[src]", |el| {
+            let img_src = el.get_attribute("src").expect("img[src] was required");
+            let parsed_img_src = match Url::parse(&img_src) {
+                Ok(parsed) => Ok(parsed),
+                Err(url::ParseError::RelativeUrlWithoutBase) => {
+                    info!("Found relative URL, img_src={img_src}");
+                    base_url.join(&img_src)
+                }
+                Err(error) => Err(error),
+            };
+            match parsed_img_src {
+                Ok(parsed) => {
+                    let image_id: String = make_bookmark_id(&parsed)?;
+                    info!("Image found, original_url={parsed}");
+                    images_found.push(ImageFound {
+                        id: image_id,
+                        url: parsed,
+                        src: img_src,
+                    });
+                }
+                Err(error) => {
+                    warn!(
+                        img_src = img_src,
+                        "Fail to parse URL from img_src, skipping this image, error={error}"
+                    );
+                }
+            };
+            Ok(())
+        })),
     )?;
 
     Ok(images_found)

@@ -86,8 +86,7 @@ fn encode_token(config: &Config, claims: &Claim) -> Result<String> {
 
 async fn hash_password(password: SecretString) -> Result<String> {
     tokio::task::spawn_blocking(move || {
-        let rng = rand::thread_rng();
-        let salt = SaltString::generate(rng);
+        let salt = SaltString::generate(argon2::password_hash::rand_core::OsRng);
         match PasswordHash::generate(Argon2::default(), password.expose_secret(), salt.as_salt()) {
             Ok(hash) => Ok(hash.to_string()),
             Err(error) => Err(Error::argon2(error.to_string())),

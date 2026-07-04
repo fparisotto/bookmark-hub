@@ -6,13 +6,19 @@ use yew::MouseEvent;
 const HISTORY_STATE_DIRECT: &str = "bookmark-hub:direct";
 const HISTORY_STATE_PUSHED: &str = "bookmark-hub:pushed";
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum RagTab {
+    #[allow(dead_code)]
+    Search,
+    History,
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum AppRoute {
     Search(SearchRouteState),
     Bookmark { bookmark_id: String },
     Tasks,
-    RAG,
-    RagHistory,
+    RAG { tab: Option<RagTab> },
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -21,7 +27,6 @@ pub enum RouteKind {
     Bookmark,
     Tasks,
     RAG,
-    RagHistory,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -77,8 +82,7 @@ impl AppRoute {
             Self::Search(_) => RouteKind::Search,
             Self::Bookmark { .. } => RouteKind::Bookmark,
             Self::Tasks => RouteKind::Tasks,
-            Self::RAG => RouteKind::RAG,
-            Self::RagHistory => RouteKind::RagHistory,
+            Self::RAG { .. } => RouteKind::RAG,
         }
     }
 }
@@ -106,8 +110,11 @@ pub fn href(route: &AppRoute) -> String {
         }
         AppRoute::Bookmark { bookmark_id } => format!("/bookmarks/{bookmark_id}"),
         AppRoute::Tasks => "/tasks".to_string(),
-        AppRoute::RAG => "/rag".to_string(),
-        AppRoute::RagHistory => "/rag/history".to_string(),
+        AppRoute::RAG { tab } => match tab {
+            Some(RagTab::History) => "/rag?tab=history".to_string(),
+            Some(RagTab::Search) => "/rag?tab=search".to_string(),
+            None => "/rag".to_string(),
+        },
     }
 }
 
@@ -206,8 +213,12 @@ fn parse_path_and_search(pathname: &str, search: &str) -> ParsedRoute {
     let route = match path.as_str() {
         "/" => AppRoute::Search(parse_search_state(search)),
         "/tasks" => AppRoute::Tasks,
-        "/rag" => AppRoute::RAG,
-        "/rag/history" => AppRoute::RagHistory,
+        "/rag" => AppRoute::RAG {
+            tab: parse_rag_tab(search),
+        },
+        "/rag/history" => AppRoute::RAG {
+            tab: Some(RagTab::History),
+        },
         _ if path.starts_with("/bookmarks/") => {
             let bookmark_id = path.trim_start_matches("/bookmarks/").to_string();
             if bookmark_id.is_empty() || bookmark_id.contains('/') {
@@ -253,6 +264,19 @@ fn parse_search_state(search: &str) -> SearchRouteState {
     }
 
     SearchRouteState::new(query, tags, page)
+}
+
+fn parse_rag_tab(search: &str) -> Option<RagTab> {
+    for (key, value) in form_urlencoded::parse(search.trim_start_matches('?').as_bytes()) {
+        if key.as_ref() == "tab" {
+            return match value.as_ref() {
+                "history" => Some(RagTab::History),
+                "search" => Some(RagTab::Search),
+                _ => None,
+            };
+        }
+    }
+    None
 }
 
 fn normalize_path(pathname: &str) -> String {

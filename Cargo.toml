@@ -16,9 +16,9 @@ chrono = { version = "0.4", features = ["serde"] }
 hex = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sha2 = "0.10"
-strum = "0.27"
-strum_macros = "0.27"
+sha2 = "0.11"
+strum = "0.28"
+strum_macros = "0.28"
 thiserror = "2"
 url = { version = "2.5", features = ["serde"] }
 uuid = { version = "1.10", features = ["serde", "v4", "js"] }

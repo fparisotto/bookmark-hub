@@ -48,7 +48,7 @@ pub fn login_form(props: &Props) -> Html {
     };
 
     html! {
-        <div class="container mt-5">
+        <div class="container-fluid mt-5 px-3 px-md-4">
             <div class="row justify-content-center">
                 <div class="col-md-4">
                     <h2 class="text-center mb-4">{ "Login" }</h2>
