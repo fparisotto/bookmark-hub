@@ -583,10 +583,12 @@ pub fn home(props: &Props) -> Html {
             html! {
                 <div class="row">
                     <div class="col-12 col-md-2 mb-3 mb-md-0">
-                        <TagsFilter
-                            tags={state_handle.tags.clone()}
-                            selected_tags={state_handle.tags_filter.clone()}
-                            on_tag_checked={on_tag_checked} />
+                        <div class="position-md-sticky top-0 bh-tags-sticky">
+                            <TagsFilter
+                                tags={state_handle.tags.clone()}
+                                selected_tags={state_handle.tags_filter.clone()}
+                                on_tag_checked={on_tag_checked} />
+                        </div>
                     </div>
                     <div class="col-12 col-md">
                         <SearchBar
@@ -706,7 +708,7 @@ pub fn home(props: &Props) -> Html {
                 active_page={(*route_handle).kind()}
                 on_page_change={on_page_change}
                 on_logout={props.on_logout.clone()} />
-            <div class="container-fluid mt-4 px-3 px-md-4 px-lg-5">
+            <div class="container-fluid mt-4 px-3 px-md-4 px-lg-5 pb-4">
                 {content}
             </div>
             <AddBookmarkModal on_submit={on_new_bookmark} />
