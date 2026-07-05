@@ -17,12 +17,21 @@ Rust workspace (`server`, `cli`, `spa`, `shared`). Nix flake provides the toolch
 - `test.hurl` / `bootstrap.hurl` are Hurl smoke tests against a **running** server. `hurl --verbose --test test.hurl`.
 - CI: `nix flake check -L .#` (build + clippy + fmt) plus a separate `integration-tests` job running the gated cargo test command.
 
+## MCP server
+- Mounted at `POST /mcp`; Streamable HTTP transport, protocol version `2025-11-25`.
+- Auth is the same `Bearer <jwt>` used by the REST API (decoded with `AppContext.config.hmac_key`); the resulting `Claim` and `AppContext` are read from request extensions in each tool handler via `auth_ctx`.
+- Tools (see `server/src/mcp/server.rs`): `list_bookmarks`, `get_bookmark`, `create_bookmark`, `delete_bookmark`, `list_tags`, `get_bookmarks_by_tag`, `set_tags`, `append_tags`, `search_bookmarks`, `list_tasks`, `rag_query`, `rag_history`.
+- `rag_query` / `rag_history` require an LLM provider; the others work without AI configured.
+- `Claim` was made `Clone` so it can be stashed in request extensions by the auth middleware.
+- Session management is `LocalSessionManager` (per-request); stateful sessions are intentionally disabled.
+
 ## Architecture notes
 - `server`: Axum API + background daemons. DB layer in `server/src/db/`, handlers in `server/src/endpoints/`. Uses `deadpool-postgres`, `pgvector`, `rig-core` for LLM providers, `headless_chrome`/Browserless for content extraction.
 - `spa`: Yew WASM app built with Trunk; output goes to `spa/dist`, which the server serves when `SPA_DIST` is set (flake sets it at build time).
 - `shared`: types shared between crates; depend on it via `path = "../shared"`.
 - SQL migrations are numbered files in `server/schema/` (currently `1_*` through `9_*`). Add new ones with the next sequential prefix; do not edit applied migrations.
 - AI features (tagging, summarization, embeddings, RAG) are **disabled unless `LLM_TEXT_MODEL` is set**. Provider is `ollama` by default; cloud providers need their respective `*_API_KEY`. See README for the full env matrix.
+- `mcp`: optional MCP server (`server/src/mcp/`) exposed at `POST /mcp` via the rmcp Streamable HTTP transport (`rmcp` crate). Reuses the REST `Claim` JWT for bearer auth (`mcp::mcp_bearer_auth`) and the same `AppContext` for DB access. Tools live in `server/src/mcp/server.rs` (`#[tool_router]` impl) and `tools.rs` (JsonSchema params). Mounted in `main.rs` via `.merge(mcp::router())`.
 
 ## Conventions
 - Conventional Commit prefixes (`fix:`, `chore:`, `feat:` …) with imperative summaries.

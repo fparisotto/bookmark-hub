@@ -10,7 +10,7 @@ use axum_otel_metrics::HttpMetricsLayerBuilder;
 use clap::Parser;
 use server::db::PgPool;
 use server::llm::LlmClient;
-use server::{daemon, db, endpoints, AppContext, Config};
+use server::{daemon, db, endpoints, mcp, AppContext, Config};
 use tokio::signal::unix::SignalKind;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::ServeDir;
@@ -198,6 +198,7 @@ async fn setup_app(
         .nest("/api/v1", endpoints::routers_v1())
         .merge(endpoints::health_check())
         .merge(endpoints::static_content(config))
+        .merge(mcp::router())
         .fallback_service(ServeDir::new(env!("SPA_DIST")))
         .layer(metrics)
         .layer(Extension(app_state))

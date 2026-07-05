@@ -82,7 +82,7 @@ pub fn tags_filter(props: &Props) -> Html {
                 placeholder="Filter tags..."
                 value={(*filter_text).clone()}
                 oninput={on_filter_input} />
-            <div class="d-flex flex-column gap-2 flex-grow-1 overflow-auto">
+            <div class="d-flex flex-column gap-2 flex-grow-1 overflow-auto bh-min-0 bh-tag-list pe-3">
                 {tags}
             </div>
         </div>

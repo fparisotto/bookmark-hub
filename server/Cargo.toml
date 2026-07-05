@@ -34,6 +34,13 @@ postgres-from-row = "0.5.2"
 postgres-types = { version = "0.2.9", features = ["derive"] }
 rand = "0.10"
 reqwest = { version = "0.13", features = ["json"] }
+rmcp = { version = "2.1", features = [
+  "server",
+  "macros",
+  "schemars",
+  "transport-streamable-http-server",
+  "transport-streamable-http-server-session",
+] }
 schemars = "1.0.4"
 secrecy = { workspace = true }
 serde = { workspace = true }

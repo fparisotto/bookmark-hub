@@ -12,6 +12,7 @@ A self-hosted bookmark management application that helps you organize, search, a
 - **Content Extraction**: Automatically extract and store readable content from web pages
 - **Modern Web Interface**: Responsive WebAssembly-based frontend built with Yew
 - **REST API**: Complete API for programmatic access and integrations
+- **MCP Server**: Expose bookmarks, search, tagging, and RAG to AI clients over the Model Context Protocol (Streamable HTTP transport, bearer-token auth)
 - **CLI Tools**: Command-line interface for batch operations and automation
 
 ## How to Run
@@ -228,3 +229,42 @@ $ hurl --verbose --test test.hurl
 - **RAG System**: Vector similarity search using embeddings for intelligent bookmark discovery
 - **Content Processing**: dom_smoothie for web page content extraction
 - **Browser Automation**: Browserless Chrome for reliable web page rendering and content extraction
+
+## Model Context Protocol (MCP)
+
+The server exposes an [MCP](https://modelcontextprotocol.io/) endpoint at `POST /mcp` so AI clients (editors, assistants, agents) can manage bookmarks and query saved content directly. It speaks the Streamable HTTP transport (protocol version `2025-11-25`) and reuses the REST API's JWT auth — every request must carry:
+
+```
+Authorization: Bearer <jwt>
+```
+
+The token is the same one returned by `POST /api/v1/login` (or `just run-cli login`). No separate MCP credentials are needed; each tool call is scoped to the authenticated user.
+
+Available tools:
+
+| Tool | Description |
+|---|---|
+| `list_bookmarks` | List all bookmarks for the user, newest first |
+| `get_bookmark` | Fetch a single bookmark by id |
+| `create_bookmark` | Queue a URL for ingestion; optional initial tags |
+| `delete_bookmark` | Delete a bookmark by id (and its static files) |
+| `list_tags` | List the user's tags with usage counts |
+| `get_bookmarks_by_tag` | List bookmarks carrying a tag (case-insensitive) |
+| `set_tags` | Replace a bookmark's tags |
+| `append_tags` | Add tags to a bookmark, preserving existing ones |
+| `search_bookmarks` | Full-text + tag-filter search |
+| `list_tasks` | Paginated list of ingestion tasks (pending/done/fail) |
+| `rag_query` | Ask a question answered from your bookmark content (requires an LLM provider) |
+| `rag_history` | List past RAG question/answer sessions |
+
+RAG tools (`rag_query`, `rag_history`) are only useful when an LLM provider is configured (see [LLM Provider Configuration](#llm-provider-configuration)).
+
+### Connecting a client
+
+Most MCP clients accept an HTTP URL + bearer header. For example, with `mcp-cli`:
+
+```bash
+mcp-cli --url http://localhost:3000/mcp --header "Authorization: Bearer $TOKEN"
+```
+
+With Claude Desktop / Cline / Cursor-style configs that take a `url`-based streamable HTTP server, set the endpoint to `http://localhost:3000/mcp` and add the `Authorization` header with the JWT obtained from the CLI login.
