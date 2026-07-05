@@ -23,7 +23,7 @@ mod static_content;
 
 pub use static_content::routes as static_content;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Claim {
     pub sub: String,
     pub exp: i64,

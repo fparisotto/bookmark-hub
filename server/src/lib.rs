@@ -17,6 +17,7 @@ pub mod db;
 pub mod endpoints;
 pub mod error;
 pub mod llm;
+pub mod mcp;
 pub mod rag;
 pub mod readability;
 pub mod tokenizer;
