@@ -55,6 +55,13 @@ pub struct Config {
     #[arg(long, env = "APP_CORS_ALLOW_ORIGIN")]
     pub cors_allow_origin: Option<String>,
 
+    /// Comma-separated list of allowed Host header values for the MCP
+    /// Streamable HTTP endpoint. Defaults to localhost, 127.0.0.1, ::1
+    /// (rmcp built-in defaults). Set to the external hostname(s) when
+    /// deploying behind a reverse proxy or ingress.
+    #[arg(long, env = "APP_MCP_ALLOWED_HOSTS")]
+    pub mcp_allowed_hosts: Option<String>,
+
     #[arg(long, env = "APP_DATA_DIR")]
     pub data_dir: PathBuf,
 
