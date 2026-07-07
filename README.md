@@ -268,3 +268,15 @@ mcp-cli --url http://localhost:3000/mcp --header "Authorization: Bearer $TOKEN"
 ```
 
 With Claude Desktop / Cline / Cursor-style configs that take a `url`-based streamable HTTP server, set the endpoint to `http://localhost:3000/mcp` and add the `Authorization` header with the JWT obtained from the CLI login.
+
+### Allowed Hosts
+
+The MCP endpoint validates the `Host` header against an allowlist (DNS-rebinding protection from the rmcp crate). By default only `localhost`, `127.0.0.1`, and `::1` are accepted.
+
+When deploying behind a reverse proxy or Kubernetes ingress, set `APP_MCP_ALLOWED_HOSTS` to a comma-separated list of allowed hostnames:
+
+```
+APP_MCP_ALLOWED_HOSTS=bookmark-hub.k8s.dpleb.in,localhost,127.0.0.1
+```
+
+When unset, the rmcp defaults (`localhost`, `127.0.0.1`, `::1`) are used. When set, the configured list **replaces** the defaults — include loopback addresses explicitly if you still need local access.

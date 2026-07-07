@@ -198,7 +198,7 @@ async fn setup_app(
         .nest("/api/v1", endpoints::routers_v1())
         .merge(endpoints::health_check())
         .merge(endpoints::static_content(config))
-        .merge(mcp::router())
+        .merge(mcp::router(config.mcp_allowed_hosts.as_deref()))
         .fallback_service(ServeDir::new(env!("SPA_DIST")))
         .layer(metrics)
         .layer(Extension(app_state))

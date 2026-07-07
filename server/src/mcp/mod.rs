@@ -68,12 +68,30 @@ async fn mcp_bearer_auth(
 /// the outer application (see `main.rs`); the auth middleware reads it from
 /// request extensions and the MCP tools read it from the per-request
 /// `Parts.extensions`.
-pub fn router() -> Router {
+///
+/// `mcp_allowed_hosts` is an optional comma-separated list of hostnames
+/// (from `APP_MCP_ALLOWED_HOSTS`). When `None`, the rmcp defaults
+/// (`localhost`, `127.0.0.1`, `::1`) are used. When set, the configured
+/// hosts replace the defaults — include loopback addresses explicitly if
+/// local access is still needed.
+pub fn router(mcp_allowed_hosts: Option<&str>) -> Router {
+    let mut config = StreamableHttpServerConfig::default();
+    if let Some(list) = mcp_allowed_hosts {
+        let hosts: Vec<String> = list
+            .split(',')
+            .map(|s| s.trim().to_owned())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if !hosts.is_empty() {
+            config = config.with_allowed_hosts(hosts);
+        }
+    }
+
     let service: TowerStreamableHttpService<BookmarkMcpServer, LocalSessionManager> =
         StreamableHttpService::new(
             || Ok(BookmarkMcpServer::new()),
             LocalSessionManager::default().into(),
-            StreamableHttpServerConfig::default(),
+            config,
         );
 
     Router::new()

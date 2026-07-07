@@ -29,6 +29,8 @@ services:
       AI_TEXT_CHUNK_OVERLAP: "100"
       CHROME_HOST: chrome
       CHROME_PORT: 3001
+      # MCP allowed hosts — set to external hostname(s) when behind a proxy/ingress
+      # APP_MCP_ALLOWED_HOSTS: localhost,127.0.0.1
     volumes:
       - bookmark-hub-data:/data
     healthcheck:
